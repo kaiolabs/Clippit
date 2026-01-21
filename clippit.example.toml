@@ -1,0 +1,98 @@
+# Clippit - Arquivo de Configuração
+# Copie para ~/.config/clippit/config.toml
+
+[general]
+# Limite máximo de itens no histórico
+max_history_items = 100
+
+# Intervalo de polling do clipboard (em milissegundos)
+poll_interval_ms = 200
+
+# Tamanho máximo de texto (em bytes)
+max_text_size = 10485760  # 10MB
+
+# Tamanho máximo de imagem (em bytes)
+max_image_size = 52428800  # 50MB
+
+[hotkeys]
+# Atalho para abrir histórico
+# Modificadores: super, ctrl, alt, shift
+# Teclas: a-z, 0-9, f1-f12, etc.
+show_history_modifier = "super"
+show_history_key = "v"
+
+# Atalho alternativo (opcional)
+# show_history_alt_modifier = "ctrl+shift"
+# show_history_alt_key = "v"
+
+[ui]
+# Tema da interface: "dark" ou "light"
+theme = "dark"
+
+# Fonte principal
+font_family = "Nunito"
+font_size = 14
+
+# Cores do tema escuro
+[ui.colors.dark]
+background = "#1e1e1e"
+foreground = "#ffffff"
+selection = "#264f78"
+border = "#454545"
+
+# Cores do tema claro
+[ui.colors.light]
+background = "#ffffff"
+foreground = "#000000"
+selection = "#0078d4"
+border = "#cccccc"
+
+[ui.window]
+# Largura da janela popup (em pixels)
+width = 600
+
+# Altura máxima (em pixels)
+max_height = 400
+
+# Posição: "center", "cursor", "top-right", "bottom-right"
+position = "center"
+
+# Opacidade da janela (0.0 a 1.0)
+opacity = 0.95
+
+[features]
+# Capturar texto automaticamente
+capture_text = true
+
+# Capturar imagens automaticamente
+capture_images = true
+
+# Capturar arquivos automaticamente
+capture_files = false
+
+# Sincronização com cloud (requer configuração adicional)
+sync_enabled = false
+
+[privacy]
+# Ignorar aplicativos sensíveis (gerenciadores de senha, etc)
+ignore_sensitive_apps = true
+
+# Lista de aplicativos a ignorar (por window class)
+ignored_apps = [
+    "keepassxc",
+    "bitwarden",
+    "1password",
+]
+
+# Limpar histórico ao fechar
+clear_on_exit = false
+
+[advanced]
+# Nível de log: "error", "warn", "info", "debug", "trace"
+log_level = "info"
+
+# Localização do banco de dados (deixe vazio para padrão)
+# database_path = "/custom/path/history.db"
+
+# Socket IPC customizado (deixe vazio para padrão)
+# ipc_socket = "/tmp/clippit-custom.sock"

@@ -1,0 +1,26 @@
+[package]
+name = "clippit-daemon"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "clippit-daemon"
+path = "src/main.rs"
+
+[dependencies]
+clippit-core = { path = "../clippit-core" }
+clippit-ipc = { path = "../clippit-ipc" }
+
+tokio.workspace = true
+x11-clipboard.workspace = true
+x11rb.workspace = true
+global-hotkey.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+sha2.workspace = true
+dirs = "5.0"
+image.workspace = true

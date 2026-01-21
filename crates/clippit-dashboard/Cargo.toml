@@ -1,0 +1,21 @@
+[package]
+name = "clippit-dashboard"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "clippit-dashboard"
+path = "src/main.rs"
+
+[dependencies]
+clippit-core = { path = "../clippit-core" }
+clippit-ipc = { path = "../clippit-ipc" }
+
+gtk = { version = "0.9", package = "gtk4", features = ["v4_6"] }
+libadwaita = { version = "0.7", features = ["v1_2"] }
+pango = "0.20"
+dirs = "5.0"
+anyhow.workspace = true
+rust-i18n.workspace = true

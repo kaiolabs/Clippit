@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Clippit
+Comment=Modern Clipboard Manager
+Icon=clippit
+Exec=/usr/local/bin/clippit-dashboard
+Terminal=false
+Categories=Utility;System;
+Keywords=clipboard;manager;history;copy;paste;
+StartupNotify=true
+StartupWMClass=clippit-dashboard

@@ -1,0 +1,10 @@
+[package]
+name = "clippit-qt-bridge"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+clippit-core = { path = "../clippit-core" }
+clippit-ipc = { path = "../clippit-ipc" }

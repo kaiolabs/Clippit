@@ -1,0 +1,17 @@
+[package]
+name = "clippit-ui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "clippit-ui"
+path = "src/main.rs"
+
+[dependencies]
+clippit-ipc = { path = "../clippit-ipc" }
+
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

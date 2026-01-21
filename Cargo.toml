@@ -1,0 +1,68 @@
+[workspace]
+members = [
+    "crates/clippit-core",
+    "crates/clippit-daemon",
+    "crates/clippit-ipc",
+    "crates/clippit-ui",
+    "crates/clippit-qt-bridge",
+    "crates/clippit-dashboard",
+    "crates/clippit-popup",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Clippit Team"]
+license = "MIT"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.36", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Database
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# X11
+x11-clipboard = "0.9"
+x11rb = { version = "0.13", features = ["allow-unsafe-code"] }
+
+# Global hotkey
+global-hotkey = "0.5"
+
+# IPC
+interprocess = "2.0"
+
+# Qt bindings
+cxx = "1.0"
+cxx-qt = "0.6"
+cxx-qt-lib = "0.6"
+cxx-qt-build = "0.6"
+
+# Hashing
+sha2 = "0.10"
+
+# Image processing
+image = "0.25"
+
+# Configuration
+toml = "0.8"
+dirs = "5.0"
+
+# Internationalization
+rust-i18n = "3.0"

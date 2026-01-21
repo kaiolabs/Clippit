@@ -1,0 +1,44 @@
+FROM ubuntu:22.04
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    pkg-config \
+    libgtk-4-dev \
+    libadwaita-1-dev \
+    libsqlite3-dev \
+    xdotool \
+    xclip \
+    dpkg-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Verify GTK4 installation
+RUN pkg-config --modversion gtk4 && \
+    echo "✅ GTK4 $(pkg-config --modversion gtk4) encontrado em $(pkg-config --variable=prefix gtk4)"
+
+WORKDIR /build
+
+# Build script - ensure PKG_CONFIG_PATH is set for cargo
+CMD ["bash", "-c", "\
+    export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig && \
+    echo '🔍 Verificando ambiente de build...' && \
+    echo '   GTK4: '$(pkg-config --modversion gtk4) && \
+    echo '   Rust: '$(rustc --version) && \
+    echo '   Cargo: '$(cargo --version) && \
+    echo '' && \
+    echo '🚀 Compilando Clippit (pode demorar 10-15 minutos)...' && \
+    echo '' && \
+    cargo build --release 2>&1 | tee /tmp/build.log && \
+    echo '' && \
+    echo '📦 Criando pacote .deb...' && \
+    ./scripts/build-deb.sh \
+"]

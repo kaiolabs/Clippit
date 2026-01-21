@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/qt/qml/com/clippit/popup">
+        <file>Popup.qml</file>
+        <file>HistoryItem.qml</file>
+    </qresource>
+</RCC>
