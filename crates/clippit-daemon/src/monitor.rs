@@ -23,27 +23,27 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
         // Try to get text first
         match clipboard.get_text() {
             Ok(text) => {
-                // Check if content changed
+                    // Check if content changed
                 if last_text.as_ref() != Some(&text) {
                     info!("Clipboard text changed, saving to history");
 
-                    let entry = ClipboardEntry::new_text(text.clone());
-                    let mut manager = history_manager.lock().unwrap();
+                        let entry = ClipboardEntry::new_text(text.clone());
+                        let mut manager = history_manager.lock().unwrap();
 
-                    match manager.add_entry(entry) {
-                        Ok(Some(id)) => {
+                        match manager.add_entry(entry) {
+                            Ok(Some(id)) => {
                             info!("Saved text entry with id {}", id);
                             last_text = Some(text);
-                        }
-                        Ok(None) => {
-                            // Duplicate, skip
-                        }
-                        Err(e) => {
-                            error!("Failed to save entry: {}", e);
+                            }
+                            Ok(None) => {
+                                // Duplicate, skip
+                            }
+                            Err(e) => {
+                                error!("Failed to save entry: {}", e);
+                            }
                         }
                     }
                 }
-            }
             Err(_) => {
                 // No text in clipboard or error reading - this is normal
             }
@@ -56,71 +56,71 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
                     // Convert arboard::ImageData to Vec<u8> (PNG format)
                     match convert_image_data_to_png(&img_data) {
                         Ok(png_bytes) => {
-                            // Validate size (convert MB to bytes)
-                            let max_size_bytes = (config.privacy.max_image_size_mb as usize) * 1024 * 1024;
-                            
+                    // Validate size (convert MB to bytes)
+                    let max_size_bytes = (config.privacy.max_image_size_mb as usize) * 1024 * 1024;
+                    
                             if png_bytes.len() <= max_size_bytes {
-                                // Compute hash to avoid duplicates
-                                use sha2::{Digest, Sha256};
-                                let mut hasher = Sha256::new();
+                        // Compute hash to avoid duplicates
+                        use sha2::{Digest, Sha256};
+                        let mut hasher = Sha256::new();
                                 hasher.update(&png_bytes);
-                                let current_hash = format!("{:x}", hasher.finalize());
-                                
-                                info!("🔍 Image hash comparison:");
-                                info!("   Current hash: {}...", &current_hash[..12]);
-                                info!("   Last hash: {:?}", last_image_hash.as_ref().map(|h| &h[..12]));
-                                info!("   Are different? {}", last_image_hash.as_ref() != Some(&current_hash));
-                                
-                                // Only save if different from last image
-                                if last_image_hash.as_ref() != Some(&current_hash) {
-                                    info!("📸 New image detected, optimizing and saving...");
-                                    
-                                    // Optimize if needed (max 2048px)
+                        let current_hash = format!("{:x}", hasher.finalize());
+                        
+                        info!("🔍 Image hash comparison:");
+                        info!("   Current hash: {}...", &current_hash[..12]);
+                        info!("   Last hash: {:?}", last_image_hash.as_ref().map(|h| &h[..12]));
+                        info!("   Are different? {}", last_image_hash.as_ref() != Some(&current_hash));
+                        
+                        // Only save if different from last image
+                        if last_image_hash.as_ref() != Some(&current_hash) {
+                            info!("📸 New image detected, optimizing and saving...");
+                            
+                            // Optimize if needed (max 2048px)
                                     match optimize_image(png_bytes.clone(), 2048) {
-                                        Ok(optimized) => {
-                                            // Generate thumbnail (128x128)
-                                            let thumbnail = create_thumbnail(&optimized, 128).ok();
+                                Ok(optimized) => {
+                                    // Generate thumbnail (128x128)
+                                    let thumbnail = create_thumbnail(&optimized, 128).ok();
+                                    
+                                    // Save image to file
+                                    match save_image_to_file(&optimized, &current_hash) {
+                                        Ok(image_path) => {
+                                            info!("💾 Saved image to: {}", image_path);
                                             
-                                            // Save image to file
-                                            match save_image_to_file(&optimized, &current_hash) {
-                                                Ok(image_path) => {
-                                                    info!("💾 Saved image to: {}", image_path);
-                                                    
-                                                    let entry = ClipboardEntry::new_image(image_path, thumbnail);
-                                                    let mut manager = history_manager.lock().unwrap();
-                                                    
-                                                    match manager.add_entry(entry) {
-                                                        Ok(Some(id)) => {
-                                                            info!("✅ Saved image entry with id {} (with thumbnail)", id);
-                                                            last_image_hash = Some(current_hash.clone());
-                                                        }
-                                                        Ok(None) => {
-                                                            info!("⏭️  Image duplicate, skipped");
+                                            let entry = ClipboardEntry::new_image(image_path, thumbnail);
+                                            let mut manager = history_manager.lock().unwrap();
+                                            
+                                            match manager.add_entry(entry) {
+                                                Ok(Some(id)) => {
+                                                    info!("✅ Saved image entry with id {} (with thumbnail)", id);
+                                                    last_image_hash = Some(current_hash.clone());
+                                                }
+                                                Ok(None) => {
+                                                    info!("⏭️  Image duplicate, skipped");
                                                             // Update hash even for duplicates to avoid loop
-                                                            last_image_hash = Some(current_hash.clone());
-                                                        }
-                                                        Err(e) => {
-                                                            error!("❌ Failed to save image entry: {}", e);
-                                                        }
-                                                    }
+                                                    last_image_hash = Some(current_hash.clone());
                                                 }
                                                 Err(e) => {
-                                                    error!("❌ Failed to save image file: {}", e);
+                                                    error!("❌ Failed to save image entry: {}", e);
                                                 }
                                             }
                                         }
                                         Err(e) => {
-                                            error!("❌ Failed to optimize image: {}", e);
+                                            error!("❌ Failed to save image file: {}", e);
                                         }
                                     }
                                 }
-                            } else {
-                                warn!("⚠️  Image too large ({} MB > {} MB), skipping", 
-                                    png_bytes.len() / 1024 / 1024, 
-                                    config.privacy.max_image_size_mb);
+                                Err(e) => {
+                                    error!("❌ Failed to optimize image: {}", e);
+                                }
                             }
                         }
-                        Err(e) => {
+                    } else {
+                        warn!("⚠️  Image too large ({} MB > {} MB), skipping", 
+                                    png_bytes.len() / 1024 / 1024, 
+                            config.privacy.max_image_size_mb);
+                    }
+                }
+                Err(e) => {
                             warn!("Failed to convert image data to PNG: {}", e);
                         }
                     }
@@ -251,7 +251,7 @@ pub fn set_clipboard_content(entry: &ClipboardEntry) -> Result<()> {
                 };
                 
                 clipboard.set_image(img_data)?;
-                info!("✅ Image copied to clipboard successfully");
+                    info!("✅ Image copied to clipboard successfully");
             }
         }
     }
