@@ -100,6 +100,7 @@ pub fn setup_search_filter(
     
     // Adicionar EventController para Tab e navegação
     let key_controller = gtk::EventControllerKey::new();
+    key_controller.set_propagation_phase(gtk::PropagationPhase::Capture);  // Processar ANTES da janela
     let search_entry_for_keys = search_entry.clone();
     let suggestions_popover_for_keys = suggestions_popover.clone();
     

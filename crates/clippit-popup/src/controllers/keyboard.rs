@@ -14,12 +14,14 @@ pub fn setup_keyboard_navigation(
     list_box: &gtk::ListBox,
     scrolled: &gtk::ScrolledWindow,
     entry_map: &EntryMap,
+    search_entry: &gtk::SearchEntry,
 ) {
     let window_nav = window.clone();
     let app_nav = app.clone();
     let entry_map_for_key = entry_map.clone();
     let scrolled_for_key = scrolled.clone();
     let list_box_for_key = list_box.clone();
+    let search_entry_for_key = search_entry.clone();
     
     // Load config to get the hotkey
     let config = Config::load().unwrap_or_default();
@@ -50,12 +52,30 @@ pub fn setup_keyboard_navigation(
                 gtk::glib::Propagation::Stop
             }
             gtk::gdk::Key::Up => {
-                handle_up_key(&list_box_for_key, &scrolled_for_key);
-                gtk::glib::Propagation::Stop
+                // Só navega na lista se o search_entry não tiver foco
+                if !search_entry_for_key.has_focus() {
+                    handle_up_key(&list_box_for_key, &scrolled_for_key);
+                    gtk::glib::Propagation::Stop
+                } else {
+                    gtk::glib::Propagation::Proceed  // Deixa o popover processar
+                }
             }
             gtk::gdk::Key::Down => {
-                handle_down_key(&list_box_for_key, &scrolled_for_key);
-                gtk::glib::Propagation::Stop
+                // Só navega na lista se o search_entry não tiver foco
+                if !search_entry_for_key.has_focus() {
+                    handle_down_key(&list_box_for_key, &scrolled_for_key);
+                    gtk::glib::Propagation::Stop
+                } else {
+                    gtk::glib::Propagation::Proceed  // Deixa o popover processar
+                }
+            }
+            gtk::gdk::Key::Tab => {
+                // Se search_entry tem foco, deixa o autocomplete processar
+                if search_entry_for_key.has_focus() {
+                    gtk::glib::Propagation::Proceed
+                } else {
+                    gtk::glib::Propagation::Proceed
+                }
             }
             _ => gtk::glib::Propagation::Proceed
         }

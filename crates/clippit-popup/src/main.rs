@@ -129,7 +129,7 @@ fn build_ui(app: &Application) {
     window.set_focus_visible(true);
     
     // Setup keyboard navigation first (so ESC works immediately)
-    setup_keyboard_navigation(&window, app, &list_box, &scrolled, &entry_map);
+    setup_keyboard_navigation(&window, app, &list_box, &scrolled, &entry_map, &search_entry);
     
     // Load data asynchronously using idle_add (more efficient than timeout)
     let list_box_clone = list_box.clone();
