@@ -25,6 +25,8 @@ impl SuggestionsPopover {
         scrolled.set_child(Some(&list_box));
         scrolled.set_max_content_height(250);
         scrolled.set_propagate_natural_height(true);
+        scrolled.set_min_content_width(350);  // Largura mínima
+        scrolled.set_propagate_natural_width(true);
         
         popover.set_child(Some(&scrolled));
         
@@ -52,6 +54,7 @@ impl SuggestionsPopover {
             box_row.set_margin_end(8);
             box_row.set_margin_top(6);
             box_row.set_margin_bottom(6);
+            box_row.set_hexpand(true);
             
             // Ícone baseado na fonte
             let icon = match suggestion.source {
@@ -67,6 +70,9 @@ impl SuggestionsPopover {
             let label = gtk::Label::new(Some(&suggestion.word));
             label.add_css_class("suggestion-word");
             label.set_halign(gtk::Align::Start);
+            label.set_hexpand(true);
+            label.set_ellipsize(gtk::pango::EllipsizeMode::End);
+            label.set_max_width_chars(40);
             box_row.append(&label);
             
             row.set_child(Some(&box_row));
