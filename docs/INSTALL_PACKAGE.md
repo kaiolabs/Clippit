@@ -1,139 +1,226 @@
-# Clippit - Guia de Instalação (Pacote .deb)
+# 📦 Instalação via Pacote .deb
 
-## 🚀 Instalação Rápida
+Guia completo para instalar o Clippit usando o pacote `.deb` pré-compilado.
 
-### 1. Baixe o pacote
+---
 
-Baixe o arquivo `clippit_1.0.0_amd64.deb` fornecido.
+## 📋 Requisitos
 
-### 2. Instale com um único comando
+### Sistema Operacional
+
+- ✅ Ubuntu 22.04+ (Jammy, Noble)
+- ✅ Debian 12+ (Bookworm)
+- ✅ Linux Mint 21+
+- ✅ Pop!_OS 22.04+
+- ✅ Zorin OS 17+
+
+### Display Server
+
+- ✅ **Wayland** (nativo)
+- ⚠️ X11 não é mais suportado (use Wayland)
+
+### Dependências Runtime
+
+O pacote `.deb` já inclui ou declara as dependências:
+- `libgtk-4-1` - Interface gráfica
+- `libadwaita-1-0` - Componentes modernos
+
+---
+
+## 🚀 Instalação
+
+### 1. Baixar o Pacote
+
+Baixe o arquivo `.deb` da [última release](https://github.com/seu-usuario/clippit/releases):
+
+```bash
+# Exemplo
+wget https://github.com/seu-usuario/clippit/releases/download/v1.0.0/clippit_1.0.0_amd64.deb
+```
+
+### 2. Instalar
 
 ```bash
 sudo dpkg -i clippit_1.0.0_amd64.deb
 ```
 
-### 3. Inicie o Clippit
+### 3. Resolver Dependências (se necessário)
+
+Se houver dependências faltando:
+
+```bash
+sudo apt install -f
+```
+
+### 4. Iniciar o Daemon
 
 ```bash
 systemctl --user enable --now clippit
 ```
 
-Ou simplesmente **reinicie sua sessão** para iniciar automaticamente!
+---
+
+## ✅ Verificação
+
+### Verificar se está instalado
+
+```bash
+which clippit-daemon
+which clippit-popup
+which clippit-dashboard
+```
+
+### Verificar se daemon está rodando
+
+```bash
+systemctl --user status clippit
+```
+
+### Testar atalho
+
+Pressione `Super + V` - o popup deve aparecer
 
 ---
 
-## ✅ O que é instalado automaticamente
+## 🎯 Uso
 
-O pacote `.deb` instala e configura:
+### Atalho Global
 
-- ✅ **Binários do Clippit** (`/usr/local/bin/`)
-  - `clippit-daemon` - Serviço em background
-  - `clippit-dashboard` - Interface de configuração
-  - `clippit-popup` - Popup de histórico
+- **`Super + V`** - Abre o histórico do clipboard
 
-- ✅ **Dependências necessárias**
-  - `xdotool` - Captura de foco e simulação de paste
-  - `xclip` - Operações de clipboard com imagens
-  - `libgtk-4-1` - Interface GTK4
-  - `libadwaita-1-0` - Componentes visuais modernos
-
-- ✅ **Integração com o sistema**
-  - Ícone no menu de aplicativos
-  - Serviço systemd para auto-start
-  - Atalho global `Ctrl+;`
-
----
-
-## 🎯 Como usar
-
-### Copiar e Colar do Histórico
-
-1. **Copie qualquer texto ou imagem** (Ctrl+C normal)
-2. **Pressione `Ctrl+;`** para ver o histórico
-3. **Navegue com ↑↓** e **pressione Enter** para colar
-4. **Digite para buscar** no histórico
-
-### Configurar o Clippit
-
-Abra o dashboard de configurações:
+### Dashboard
 
 ```bash
 clippit-dashboard
 ```
 
-Ou procure por "Clippit" no menu de aplicativos.
+Ou busque por "Clippit" no menu de aplicativos.
 
 ---
 
-## 🔧 Comandos Úteis
+## 🔧 Gerenciamento
 
-### Ver status do serviço
-```bash
-systemctl --user status clippit
-```
+### Ver Logs
 
-### Reiniciar o serviço
-```bash
-systemctl --user restart clippit
-```
-
-### Ver logs
 ```bash
 journalctl --user -u clippit -f
 ```
 
-### Desinstalar
+### Reiniciar Daemon
+
 ```bash
-sudo dpkg -r clippit
+systemctl --user restart clippit
+```
+
+### Parar Daemon
+
+```bash
+systemctl --user stop clippit
+```
+
+### Desinstalar
+
+```bash
+sudo apt remove clippit
+```
+
+### Remover Dados
+
+```bash
+rm -rf ~/.local/share/clippit
 ```
 
 ---
 
-## 📋 Requisitos do Sistema
+## 📂 Arquivos Instalados
 
-- **Sistema Operacional:** Ubuntu 20.04+, Debian 11+, Zorin OS 16+, ou derivados
-- **Arquitetura:** amd64 (64-bit)
-- **Display Server:** X11 (Wayland não suportado ainda)
-- **Memória:** ~10MB RAM
-- **Espaço em disco:** ~30MB
+```
+/usr/bin/
+├── clippit-daemon      # Daemon principal
+├── clippit-popup       # Popup do histórico
+└── clippit-dashboard   # Dashboard de configurações
+
+~/.local/share/clippit/
+├── history.db          # Banco de dados
+└── images/            # Imagens salvas
+
+~/.config/systemd/user/
+└── clippit.service     # Serviço systemd
+```
 
 ---
 
-## 🐛 Solução de Problemas
+## 🐛 Troubleshooting
 
-### O atalho não funciona
+### Erro: "dpkg: error processing"
 
-Verifique se o daemon está rodando:
+```bash
+sudo apt install -f
+```
+
+### Daemon não inicia
+
+```bash
+# Ver erros
+journalctl --user -u clippit -n 50
+
+# Remover socket antigo
+rm /tmp/clippit.sock
+
+# Reiniciar
+systemctl --user restart clippit
+```
+
+### Atalho não funciona
+
+1. Verificar se daemon está rodando:
 ```bash
 systemctl --user status clippit
 ```
 
-### Não cola no aplicativo correto
-
-Verifique se xdotool está instalado:
+2. Verificar conflitos de atalho:
 ```bash
-which xdotool
+gsettings list-recursively | grep -i "super+v"
 ```
 
-### Imagens não são copiadas
+### Clipboard não captura
 
-Verifique se xclip está instalado:
+1. Verificar se está no Wayland:
 ```bash
-which xclip
+echo $XDG_SESSION_TYPE  # Deve mostrar "wayland"
+```
+
+2. Reiniciar daemon:
+```bash
+systemctl --user restart clippit
 ```
 
 ---
 
-## 🆘 Suporte
+## 🔄 Atualização
 
-- **Logs:** `journalctl --user -u clippit -f`
-- **Configuração:** `~/.config/clippit/config.toml`
-- **Histórico:** `~/.local/share/clippit/history.db`
+Para atualizar para uma nova versão:
+
+```bash
+# Parar daemon
+systemctl --user stop clippit
+
+# Instalar nova versão
+sudo dpkg -i clippit_NEW_VERSION_amd64.deb
+
+# Reiniciar daemon
+systemctl --user start clippit
+```
 
 ---
 
-## 🎉 Pronto!
+## 📝 Notas
 
-O Clippit está instalado e pronto para uso. Aproveite seu novo gerenciador de clipboard!
+- O Clippit usa **arboard** para clipboard (Wayland-nativo)
+- Notificações do sistema são usadas para feedback
+- Auto-paste não está disponível no Wayland por limitações de segurança
+- Use `Ctrl+V` manualmente após selecionar um item
 
-**Dica:** Pressione `Ctrl+;` a qualquer momento para acessar seu histórico de clipboard! 🚀
+---
+
+**Problemas?** Veja [TROUBLESHOOTING.md](TROUBLESHOOTING.md)

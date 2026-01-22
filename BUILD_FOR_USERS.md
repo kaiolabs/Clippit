@@ -1,12 +1,13 @@
 # 📦 Clippit - Como Compilar no Seu Sistema
 
-Este guia ensina como compilar o Clippit no **seu próprio sistema Ubuntu/Debian**.
+Este guia ensina como compilar o Clippit no **seu próprio sistema Ubuntu/Debian** com **suporte nativo ao Wayland**.
 
 ---
 
 ## 📋 **Requisitos**
 
 - Ubuntu 22.04+ ou Debian 12+
+- Wayland (suportado nativamente no GNOME 42+)
 - Conexão com internet
 
 ---
@@ -23,8 +24,8 @@ sudo apt update && sudo apt install -y \
     libgtk-4-dev \
     libadwaita-1-dev \
     libsqlite3-dev \
-    xdotool \
-    xclip
+    libdbus-1-dev \
+    libnotify-bin
 ```
 
 ### **2. Instalar Rust:**
@@ -69,9 +70,36 @@ sudo apt install -f
 # Ativar serviço
 systemctl --user enable --now clippit
 
-# Ou usar o atalho
-# Pressione Super+V para abrir o histórico
+# Testar o atalho
+# Pressione Ctrl+Numpad1 para abrir o histórico (padrão)
+# Ou configure outro atalho com: clippit-dashboard
 ```
+
+---
+
+## 🔄 **Atualizar o Clippit (Para Desenvolvedores)**
+
+Se você está desenvolvendo e precisa testar mudanças rapidamente, use o script de atualização:
+
+```bash
+# Compilar e atualizar automaticamente
+./update-clippit.sh
+```
+
+**O que o script faz:**
+- ✅ Compila em modo release
+- ✅ Para o daemon em execução
+- ✅ Remove binários antigos
+- ✅ Instala novos binários
+- ✅ Instala ícone e arquivo .desktop
+- ✅ Recarrega systemd
+- ✅ Reinicia o daemon
+- ✅ Mostra versão instalada
+
+**Após atualizar:**
+- O daemon reinicia automaticamente
+- Use o atalho para testar o popup
+- Se os ícones não aparecerem, faça logout/login
 
 ---
 
@@ -82,22 +110,45 @@ systemctl --user enable --now clippit
 sudo apt install libgtk-4-dev libadwaita-1-dev
 ```
 
-### Erro: `xdotool não encontrado`
-```bash
-sudo apt install xdotool xclip
-```
-
 ### O `.deb` não foi criado
 - Verifique se todas as dependências foram instaladas
 - Execute novamente: `./scripts/build-deb-simple.sh`
 
+### Ícones não aparecem no GNOME
+```bash
+# Atualizar caches
+sudo gtk-update-icon-cache -f /usr/share/icons/hicolor/
+sudo update-desktop-database /usr/share/applications/
+
+# Reiniciar indexador do GNOME
+tracker3 reset -r
+tracker3 daemon -s
+
+# Se ainda não funcionar, faça logout/login
+```
+
+### Notificações não aparecem
+```bash
+# Instalar libnotify (necessário para notificações do sistema)
+sudo apt install libnotify-bin
+```
+
+### Atalho não funciona
+- Verifique se há conflito com atalhos do sistema
+- Configure outro atalho usando `clippit-dashboard`
+- No Wayland, alguns atalhos podem precisar de permissão via portal
+
 ---
 
-## 📝 **Resumo**
+## 📝 **Resumo - Instalação Completa**
 
 ```bash
 # 1. Instalar dependências
-sudo apt update && sudo apt install -y curl build-essential pkg-config libgtk-4-dev libadwaita-1-dev libsqlite3-dev xdotool xclip
+sudo apt update && sudo apt install -y \
+    curl build-essential pkg-config \
+    libgtk-4-dev libadwaita-1-dev \
+    libsqlite3-dev libdbus-1-dev \
+    libnotify-bin
 
 # 2. Instalar Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -115,8 +166,25 @@ sudo apt install -f
 systemctl --user enable --now clippit
 ```
 
+## 📝 **Resumo - Atualização Rápida (Dev)**
+
+```bash
+# Para desenvolvedores que já têm tudo instalado:
+cd clippit
+./update-clippit.sh
+```
+
 ---
 
 **Pronto! O Clippit está instalado e funcionando! 🎉**
 
-Pressione `Super+V` para abrir o histórico do clipboard.
+Pressione `Ctrl+Numpad1` (ou o atalho configurado) para abrir o histórico do clipboard.
+
+## 🌊 **Sobre o Wayland**
+
+O Clippit agora é **nativo do Wayland**, o que significa:
+- ✅ Mais seguro e moderno
+- ✅ Melhor integração com GNOME
+- ✅ Funciona nativamente sem X11
+- ⚠️ Não tem auto-paste (limitação de segurança do Wayland)
+- 💡 Use `Ctrl+V` para colar após selecionar um item

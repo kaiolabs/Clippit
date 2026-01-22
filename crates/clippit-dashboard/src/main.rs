@@ -9,7 +9,7 @@ use clippit_core::{Config, set_language};
 rust_i18n::i18n!("../clippit-core/locales", fallback = "en");
 use rust_i18n::t;
 
-const APP_ID: &str = "com.clippit.Dashboard";
+const APP_ID: &str = "com.clippit.Clippit";
 
 fn main() -> anyhow::Result<()> {
     // Initialize GTK

@@ -139,9 +139,7 @@ sudo apt install \
     pkg-config \
     libgtk-4-dev \
     libadwaita-1-dev \
-    libsqlite3-dev \
-    xdotool \
-    xclip
+    libsqlite3-dev
 ```
 
 ### Configurando o Ambiente

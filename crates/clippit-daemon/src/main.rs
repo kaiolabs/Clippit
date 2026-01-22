@@ -5,22 +5,25 @@ use anyhow::Result;
 use clippit_core::HistoryManager;
 use clippit_ipc::{ContentType, HistoryEntry, IpcMessage, IpcResponse, IpcServer};
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tokio::task;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Check for --version flag
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 && (args[1] == "--version" || args[1] == "-v") {
+        println!("clippit-daemon {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     // Initialize logging
     tracing_subscriber::fmt()
         .with_env_filter("clippit_daemon=info")
         .init();
 
-    info!("Starting Clippit daemon...");
-    
-    // Check required dependencies
-    check_dependencies();
+    info!("Starting Clippit daemon v{} (Wayland-native)...", env!("CARGO_PKG_VERSION"));
 
     // Initialize history manager
     let db_path = get_db_path();
@@ -192,8 +195,7 @@ fn handle_ipc_message(
             let manager = history_manager.lock().unwrap();
             match manager.get_by_id(id) {
                 Ok(Some(_entry)) => {
-                    // NÃO copia aqui - o popup já faz isso com xclip
-                    // Evita duplicação do conteúdo
+                    // Clipboard copy is handled by popup with arboard
                     info!("Item {} selected (clipboard copy handled by popup)", id);
                     IpcResponse::Ok
                 }
@@ -221,34 +223,3 @@ fn get_db_path() -> PathBuf {
     path
 }
 
-fn check_dependencies() {
-    let mut missing_deps = Vec::new();
-    
-    // Check xdotool (required for window focus capture and paste)
-    if Command::new("xdotool").arg("--version").output().is_err() {
-        missing_deps.push("xdotool");
-        error!("❌ xdotool not found!");
-        error!("   xdotool is required for capturing window focus and simulating paste");
-        error!("   Install: sudo apt install xdotool");
-    } else {
-        info!("✓ xdotool found");
-    }
-    
-    // Check xclip (required for image clipboard operations)
-    if Command::new("xclip").arg("-version").output().is_err() {
-        missing_deps.push("xclip");
-        error!("❌ xclip not found!");
-        error!("   xclip is required for image clipboard operations");
-        error!("   Install: sudo apt install xclip");
-    } else {
-        info!("✓ xclip found");
-    }
-    
-    if !missing_deps.is_empty() {
-        warn!("⚠️  Missing dependencies: {}", missing_deps.join(", "));
-        warn!("⚠️  Clippit may not work correctly without these tools");
-        warn!("⚠️  See README.md for installation instructions");
-    } else {
-        info!("✓ All dependencies found");
-    }
-}

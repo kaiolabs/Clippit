@@ -4,7 +4,7 @@
 
 ![Clippit Logo](assets/logo_clippit.png)
 
-**Um gerenciador de área de transferência moderno, rápido e elegante para Linux (X11)**
+**Um gerenciador de área de transferência moderno, rápido e elegante para Linux (Wayland)**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
@@ -78,8 +78,7 @@ systemctl --user enable --now clippit
 # 1. Instalar dependências
 sudo apt update && sudo apt install -y \
     curl build-essential pkg-config \
-    libgtk-4-dev libadwaita-1-dev libsqlite3-dev \
-    xdotool xclip
+    libgtk-4-dev libadwaita-1-dev libsqlite3-dev
 
 # 2. Instalar Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -175,7 +174,7 @@ clippit/
 ```
 ┌─────────────┐      ┌──────────────┐      ┌────────────┐
 │  Clipboard  │ ───> │    Daemon    │ ───> │  Database  │
-│    (X11)    │      │  (Monitor)   │      │  (SQLite)  │
+│  (Wayland)  │      │  (Monitor)   │      │  (SQLite)  │
 └─────────────┘      └──────────────┘      └────────────┘
                             │
                             │ IPC
@@ -196,11 +195,9 @@ clippit/
 - ✅ Linux Mint 21+
 - ✅ Pop!_OS 22.04+
 - ✅ Zorin OS 17+
-- ❌ Wayland (ainda não suportado - use X11)
+- ✅ Wayland (GNOME, KDE Plasma, Sway)
 
 ### **Dependências Runtime:**
-- `xdotool` - Captura de foco e simulação de paste
-- `xclip` - Operações de clipboard com imagens
 - `GTK4 4.6+` - Interface gráfica
 - `libadwaita 1.2+` - Componentes modernos
 
@@ -253,37 +250,32 @@ systemctl --user restart clippit
 <details>
 <summary><b>📋 Clipboard não captura</b></summary>
 
-1. Certifique-se de estar usando **X11** (não Wayland):
+1. Verifique se está usando Wayland:
    ```bash
    echo $XDG_SESSION_TYPE
-   # Deve mostrar: x11
+   # Deve mostrar: wayland
    ```
 
-2. Instale as dependências obrigatórias:
-   ```bash
-   sudo apt install xdotool xclip
-   ```
-
-3. Reinicie o daemon:
+2. Reinicie o daemon:
    ```bash
    systemctl --user restart clippit
+   ```
+
+3. Verifique os logs:
+   ```bash
+   journalctl --user -u clippit -n 50
    ```
 </details>
 
 <details>
 <summary><b>🖼️ Imagens não aparecem</b></summary>
 
-1. Verifique se `xclip` está instalado:
-   ```bash
-   which xclip
-   ```
-
-2. Verifique permissões da pasta de imagens:
+1. Verifique permissões da pasta de imagens:
    ```bash
    ls -la ~/.local/share/clippit/images/
    ```
 
-3. Ative captura de imagens no dashboard:
+2. Ative captura de imagens no dashboard:
    ```bash
    clippit-dashboard
    ```
@@ -324,7 +316,7 @@ systemctl --user restart clippit
 - [ ] Importar/exportar histórico
 
 ### 🔮 **v2.0 - Futuro**
-- [ ] Suporte a Wayland
+- [x] Suporte a Wayland (concluído em v1.1)
 - [ ] Sincronização entre máquinas
 - [ ] Aplicativo mobile companion
 - [ ] Plugins/extensões
@@ -366,7 +358,8 @@ Este projeto está licenciado sob a **MIT License** - veja o arquivo [LICENSE](L
 - [GTK Project](https://www.gtk.org/) - Framework UI
 - [libadwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/) - Componentes modernos
 - [Rust Community](https://www.rust-lang.org/) - Linguagem incrível
-- [X11](https://www.x.org/) - Sistema de janelas
+- [Wayland](https://wayland.freedesktop.org/) - Protocolo de display moderno
+- [arboard](https://github.com/1Password/arboard) - Clipboard cross-platform
 
 ---
 

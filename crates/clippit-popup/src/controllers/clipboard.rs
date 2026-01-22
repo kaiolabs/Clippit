@@ -1,34 +1,29 @@
-use std::process::Command;
-use crate::utils::simulate_paste_to_window;
+use arboard::{Clipboard, ImageData};
 
-/// Copies an entry to the clipboard and pastes it to a target window
+/// Copies an entry to the clipboard and shows a system notification
 /// 
 /// This function:
 /// 1. Gets the full entry data via IPC
-/// 2. Copies the content to X11 clipboard using xclip
-/// 3. Simulates Ctrl+V in the target window
+/// 2. Copies the content to clipboard using arboard (Wayland-native)
+/// 3. Shows a system notification to user
+/// 4. Returns success status to allow caller to close the window immediately
 /// 
 /// # Arguments
-/// * `entry_id` - The ID of the entry to paste
-/// * `target_window_id` - The X11 window ID to paste into
-pub fn copy_to_clipboard_and_paste_with_target(entry_id: i64, target_window_id: u64) {
-    // Set panic handler for this thread
-    std::panic::set_hook(Box::new(|panic_info| {
-        eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        eprintln!("💥 PANIC in paste thread: {:?}", panic_info);
-        eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    }));
-    
+/// * `entry_id` - The ID of the entry to copy
+/// 
+/// # Returns
+/// * `true` if copy was successful, `false` otherwise
+pub fn copy_to_clipboard(entry_id: i64) -> bool {
     eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    eprintln!("🔵 copy_to_clipboard_and_paste_with_target() START");
-    eprintln!("   entry_id: {}, target_window: {}", entry_id, target_window_id);
+    eprintln!("🔵 copy_to_clipboard() START");
+    eprintln!("   entry_id: {}", entry_id);
     eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     
-    // OPTIMIZED: Get only the selected entry data (lazy loading)
-    eprintln!("📡 Step 1: Getting full data for entry ID {}...", entry_id);
+    // Get entry data from daemon via IPC
+    eprintln!("📡 Getting full data for entry ID {}...", entry_id);
     let query_start = std::time::Instant::now();
     
-    match clippit_ipc::IpcClient::get_entry_data(entry_id) {
+    let success = match clippit_ipc::IpcClient::get_entry_data(entry_id) {
         Ok(entry) => {
             let query_duration = query_start.elapsed();
             eprintln!("✅ Entry data retrieved in {:?}", query_duration);
@@ -45,113 +40,138 @@ pub fn copy_to_clipboard_and_paste_with_target(entry_id: i64, target_window_id: 
                 eprintln!("   Data size: {} bytes ({:.2} MB)", data.len(), data.len() as f64 / (1024.0 * 1024.0));
             }
             
-            // 2. Copy content to X11 clipboard using xclip
-            eprintln!("📋 Step 2: Copying to clipboard...");
-            let copied_successfully = match entry.content_type {
-                clippit_ipc::ContentType::Text => {
-                    if let Some(text) = &entry.content_text {
-                            eprintln!("🔵 Copying {} chars to X11 clipboard using xclip...", text.len());
-                            
-                            // Usa xclip para copiar texto diretamente para o clipboard do X11
-                            use std::io::Write;
-                            match Command::new("xclip")
-                                .args(&["-selection", "clipboard"])
-                                .stdin(std::process::Stdio::piped())
-                                .spawn()
-                            {
-                                Ok(mut child) => {
-                                    if let Some(mut stdin) = child.stdin.take() {
-                                        match stdin.write_all(text.as_bytes()) {
-                                            Ok(_) => {
-                                                drop(stdin); // Fecha stdin
-                                                match child.wait() {
-                                                    Ok(status) if status.success() => {
-                                                        eprintln!("✅ Text copied to clipboard: {} chars", text.len());
-                                                        true
-                                                    },
-                                                    Ok(status) => {
-                                                        eprintln!("❌ xclip exited with status: {}", status);
-                                                        false
-                                                    },
-                                                    Err(e) => {
-                                                        eprintln!("❌ Failed to wait for xclip: {}", e);
-                                                        false
-                                                    }
-                                                }
-                                            },
-                                            Err(e) => {
-                                                eprintln!("❌ Failed to write to xclip stdin: {}", e);
-                                                false
-                                            }
-                                        }
-                                    } else {
-                                        eprintln!("❌ Failed to get xclip stdin");
-                                        false
-                                    }
-                                },
-                                Err(e) => {
-                                    eprintln!("❌ Failed to spawn xclip: {}", e);
-                                    false
-                                }
-                            }
-                        } else {
-                            eprintln!("❌ Text entry has no content");
-                            false
-                        }
-                    },
-                  clippit_ipc::ContentType::Image => {
-                      // NOVA ABORDAGEM SIMPLES: Usa o arquivo de imagem diretamente
-                      // Muito mais confiável que stdin para imagens grandes
-                      
-                      // Busca o image_path do entry original (metadata)
-                      if let Some(image_path) = &entry.image_path {
-                          eprintln!("📸 Copying image from file: {}", image_path);
-                          
-                          // xclip lê o arquivo diretamente (muito mais rápido e confiável)
-                          match Command::new("xclip")
-                              .args(&["-selection", "clipboard", "-t", "image/png", "-i", image_path])
-                              .output()
-                          {
-                              Ok(output) => {
-                                  if output.status.success() {
-                                      eprintln!("✅ Image copied to clipboard from file: {}", image_path);
-                                      true
-                                  } else {
-                                      eprintln!("❌ xclip failed: {:?}", String::from_utf8_lossy(&output.stderr));
-                                      false
-                                  }
-                              },
-                              Err(e) => {
-                                  eprintln!("❌ Failed to execute xclip: {}", e);
-                                  false
-                              }
-                          }
-                      } else {
-                          eprintln!("❌ Image entry has no image_path!");
-                          false
-                      }
-                  }
+            // Create clipboard instance
+            let mut clipboard = match Clipboard::new() {
+                Ok(cb) => cb,
+                Err(e) => {
+                    eprintln!("❌ Failed to create clipboard: {}", e);
+                    show_notification("Erro", &format!("Erro ao acessar clipboard: {}", e));
+                    return false;
+                }
             };
             
-            // 3. Now simulate paste with target window
-            eprintln!("📋 Step 3: Checking if copy was successful...");
-            if copied_successfully {
-                eprintln!("✅ Content copied successfully!");
-                eprintln!("⌨️  Step 4: Simulating paste to window {}...", target_window_id);
-                simulate_paste_to_window(target_window_id);
-                eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                eprintln!("✅ copy_to_clipboard_and_paste_with_target() COMPLETED");
-                eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            } else {
-                eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                eprintln!("❌ FAILED: Skipping paste - copy failed");
-                eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            // Copy content based on type
+            match entry.content_type {
+                clippit_ipc::ContentType::Text => {
+                    if let Some(text) = &entry.content_text {
+                        eprintln!("🔵 Copying {} chars to clipboard using arboard...", text.len());
+                        
+                        match clipboard.set_text(text) {
+                            Ok(_) => {
+                                eprintln!("✅ Text copied to clipboard: {} chars", text.len());
+                                // Show preview of copied text (first 80 chars)
+                                let preview = if text.len() > 80 {
+                                    format!("{}...", &text[..80])
+                                } else {
+                                    text.clone()
+                                };
+                                show_notification("Clippit", &format!("Copiado: {}", preview));
+                                true
+                            }
+                            Err(e) => {
+                                eprintln!("❌ Failed to copy text: {}", e);
+                                show_notification("Erro", &format!("Erro ao copiar texto: {}", e));
+                                false
+                            }
+                        }
+                    } else {
+                        eprintln!("❌ Text entry has no content");
+                        show_notification("Erro", "Entrada sem conteúdo");
+                        false
+                    }
+                }
+                clippit_ipc::ContentType::Image => {
+                    if let Some(image_path) = &entry.image_path {
+                        eprintln!("📸 Copying image from file: {}", image_path);
+                        
+                        // Load image from file
+                        match image::open(image_path) {
+                            Ok(img) => {
+                                let rgba = img.to_rgba8();
+                                let img_data = ImageData {
+                                    width: rgba.width() as usize,
+                                    height: rgba.height() as usize,
+                                    bytes: rgba.as_raw().into(),
+                                };
+                                
+                                match clipboard.set_image(img_data) {
+                                    Ok(_) => {
+                                        eprintln!("✅ Image copied to clipboard from file: {}", image_path);
+                                        show_notification("Clippit", &format!("Imagem copiada ({}x{})", rgba.width(), rgba.height()));
+                                        true
+                                    }
+                                    Err(e) => {
+                                        eprintln!("❌ Failed to copy image: {}", e);
+                                        show_notification("Erro", &format!("Erro ao copiar imagem: {}", e));
+                                        false
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("❌ Failed to load image: {}", e);
+                                show_notification("Erro", &format!("Erro ao carregar imagem: {}", e));
+                                false
+                            }
+                        }
+                    } else {
+                        eprintln!("❌ Image entry has no image_path!");
+                        show_notification("Erro", "Imagem sem caminho");
+                        false
+                    }
+                }
             }
         }
         Err(e) => {
             eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             eprintln!("❌ FAILED: Could not get entry data for ID {}: {}", entry_id, e);
             eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            show_notification("Erro", &format!("Erro: {}", e));
+            false
+        }
+    };
+    
+    if success {
+        eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        eprintln!("✅ copy_to_clipboard() COMPLETED");
+        eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    } else {
+        eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        eprintln!("❌ copy_to_clipboard() FAILED");
+        eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    }
+    
+    success
+}
+
+/// Show a system notification using notify-send (reliable and blocking)
+fn show_notification(summary: &str, body: &str) {
+    eprintln!("🔔 Enviando notificação via notify-send...");
+    eprintln!("   Summary: {}", summary);
+    eprintln!("   Body: {}", body);
+    
+    // Use notify-send directly - it's more reliable for short-lived processes
+    match std::process::Command::new("notify-send")
+        .arg(summary)
+        .arg(body)
+        .arg("-i")
+        .arg("edit-copy")
+        .arg("-t")
+        .arg("3000")
+        .arg("-a")
+        .arg("Clippit")
+        .arg("-u")
+        .arg("normal")
+        .status()
+    {
+        Ok(status) if status.success() => {
+            eprintln!("✅ Notificação enviada com sucesso!");
+        }
+        Ok(status) => {
+            eprintln!("⚠️  notify-send retornou status: {:?}", status);
+        }
+        Err(e) => {
+            eprintln!("❌ Falha ao executar notify-send: {}", e);
+            eprintln!("   Verifique se libnotify-bin está instalado");
         }
     }
 }

@@ -32,15 +32,13 @@ else
     DAEMON_WAS_RUNNING=false
 fi
 
-# Check if X11
-if [ "$XDG_SESSION_TYPE" != "x11" ]; then
-    echo "⚠️  Warning: Clippit is designed for X11. Current session: $XDG_SESSION_TYPE"
-    echo "   Wayland support is not yet available."
-    read -p "Continue anyway? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
+# Check if Wayland
+if [ "$XDG_SESSION_TYPE" == "wayland" ]; then
+    echo "✅ Wayland session detected - Clippit will work properly!"
+elif [ "$XDG_SESSION_TYPE" == "x11" ]; then
+    echo "⚠️  X11 session detected!"
+    echo "   Clippit requires Wayland. X11 support has been removed."
+    echo "   Please switch to a Wayland session to use Clippit."
 fi
 
 # Build release

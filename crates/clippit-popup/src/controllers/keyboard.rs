@@ -2,13 +2,12 @@ use gtk::prelude::*;
 use libadwaita as adw;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use clippit_core::Config;
 
-use crate::utils::get_focused_window_id;
-use crate::controllers::copy_to_clipboard_and_paste_with_target;
+use crate::controllers::copy_to_clipboard;
 use crate::models::EntryMap;
 
-/// Sets up keyboard navigation (arrows, ESC, Enter)
+/// Sets up keyboard navigation (arrows, ESC, Enter, and toggle hotkey)
 pub fn setup_keyboard_navigation(
     window: &adw::ApplicationWindow,
     app: &gtk::Application,
@@ -22,10 +21,24 @@ pub fn setup_keyboard_navigation(
     let scrolled_for_key = scrolled.clone();
     let list_box_for_key = list_box.clone();
     
+    // Load config to get the hotkey
+    let config = Config::load().unwrap_or_default();
+    let hotkey_str = format!("{}+{}", config.hotkeys.show_history_modifier, config.hotkeys.show_history_key);
+    eprintln!("🔵 Popup will also listen for configured hotkey: {}", hotkey_str);
+    
+    let hotkey_str_for_closure = hotkey_str.clone();
+    
     let key_controller = gtk::EventControllerKey::new();
     key_controller.set_propagation_phase(gtk::PropagationPhase::Capture);
     
-    key_controller.connect_key_pressed(move |_, key, _, _| {
+    key_controller.connect_key_pressed(move |_, key, _, modifiers| {
+        // Check if this is the configured hotkey (for toggle)
+        if is_configured_hotkey(key, modifiers, &hotkey_str_for_closure) {
+            eprintln!("🔵 Configured hotkey pressed while popup open - closing (toggle)");
+            window_nav.close();
+            return gtk::glib::Propagation::Stop;
+        }
+        
         match key {
             gtk::gdk::Key::Escape => {
                 eprintln!("🔵 ESC pressed - closing popup");
@@ -50,7 +63,54 @@ pub fn setup_keyboard_navigation(
     
     window.add_controller(key_controller);
     
-    eprintln!("🔵 Keyboard navigation setup: ↑↓ to navigate, Enter to paste, ESC to close");
+    eprintln!("🔵 Keyboard navigation setup: ↑↓ to navigate, Enter to copy, ESC or {} to close", hotkey_str);
+}
+
+/// Check if the pressed key matches the configured hotkey
+fn is_configured_hotkey(key: gtk::gdk::Key, modifiers: gtk::gdk::ModifierType, hotkey_str: &str) -> bool {
+    // Parse hotkey string (e.g. "ctrl+kp_1" or "super+v")
+    let parts: Vec<String> = hotkey_str.split('+').map(|s| s.trim().to_lowercase()).collect();
+    
+    let mut required_ctrl = false;
+    let mut required_alt = false;
+    let mut required_shift = false;
+    let mut required_super = false;
+    let mut required_key = gtk::gdk::Key::VoidSymbol;
+    
+    for part in &parts {
+        match part.as_ref() {
+            "ctrl" | "control" => required_ctrl = true,
+            "alt" => required_alt = true,
+            "shift" => required_shift = true,
+            "super" | "meta" | "win" => required_super = true,
+            "kp_1" | "numpad1" => required_key = gtk::gdk::Key::KP_1,
+            "kp_2" | "numpad2" => required_key = gtk::gdk::Key::KP_2,
+            "kp_3" | "numpad3" => required_key = gtk::gdk::Key::KP_3,
+            "kp_4" | "numpad4" => required_key = gtk::gdk::Key::KP_4,
+            "kp_5" | "numpad5" => required_key = gtk::gdk::Key::KP_5,
+            "kp_6" | "numpad6" => required_key = gtk::gdk::Key::KP_6,
+            "kp_7" | "numpad7" => required_key = gtk::gdk::Key::KP_7,
+            "kp_8" | "numpad8" => required_key = gtk::gdk::Key::KP_8,
+            "kp_9" | "numpad9" => required_key = gtk::gdk::Key::KP_9,
+            "kp_0" | "numpad0" => required_key = gtk::gdk::Key::KP_0,
+            "v" => required_key = gtk::gdk::Key::v,
+            "c" => required_key = gtk::gdk::Key::c,
+            _ => {}
+        }
+    }
+    
+    // Check if modifiers match
+    let has_ctrl = modifiers.contains(gtk::gdk::ModifierType::CONTROL_MASK);
+    let has_alt = modifiers.contains(gtk::gdk::ModifierType::ALT_MASK);
+    let has_shift = modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK);
+    let has_super = modifiers.contains(gtk::gdk::ModifierType::SUPER_MASK);
+    
+    // Match key and modifiers
+    key == required_key &&
+        has_ctrl == required_ctrl &&
+        has_alt == required_alt &&
+        has_shift == required_shift &&
+        has_super == required_super
 }
 
 /// Sets up row activation handler (click on row)
@@ -69,12 +129,15 @@ pub fn setup_row_activation(
         eprintln!("🔵 Row activated (clicked): index {}", row_index);
         
         if let Some(&entry_id) = entry_map_for_row.borrow().get(&row_index) {
-            eprintln!("🔵 Activating entry ID: {}", entry_id);
+            eprintln!("🔵 Copying entry ID: {}", entry_id);
             
-            let original_window_id = get_focused_window_id();
-            eprintln!("🔵 Captured original window ID: {}", original_window_id);
+            // Copy to clipboard (shows system notification and waits for it to be sent)
+            copy_to_clipboard(entry_id);
             
-            spawn_paste_thread(entry_id, original_window_id, &window_for_row, &app_for_row, "row");
+            // Close immediately - notification was already sent
+            eprintln!("🔵 Closing window (notification sent)...");
+            window_for_row.close();
+            app_for_row.quit();
         }
     });
 }
@@ -89,12 +152,20 @@ fn handle_enter_key(
         let row_index = selected.index();
         
         if let Some(&entry_id) = entry_map.borrow().get(&row_index) {
-            eprintln!("🔵 Enter pressed - pasting entry ID: {}", entry_id);
+            eprintln!("🔵 Enter pressed - copying entry ID: {}", entry_id);
             
-            let original_window_id = get_focused_window_id();
-            eprintln!("🔵 Captured original window ID: {}", original_window_id);
+            // Copy to clipboard (shows system notification and waits for it to be sent)
+            copy_to_clipboard(entry_id);
             
-            spawn_paste_thread(entry_id, original_window_id, window, app, "enter");
+            // Close immediately - notification was already sent
+            eprintln!("🔵 Closing window (notification sent)...");
+            window.close();
+            app.quit();
+            
+            // Close window immediately
+            eprintln!("🔵 Closing window immediately...");
+            window.close();
+            app.quit();
         }
     }
 }
@@ -147,57 +218,4 @@ fn handle_down_key(list_box: &gtk::ListBox, scrolled: &gtk::ScrolledWindow) {
             }
         }
     }
-}
-
-fn spawn_paste_thread(
-    entry_id: i64,
-    window_id: u64,
-    window: &adw::ApplicationWindow,
-    app: &gtk::Application,
-    source: &str,
-) {
-    let paste_done = Arc::new(AtomicBool::new(false));
-    let paste_done_check = paste_done.clone();
-    
-    // ✅ CRITICAL: Hold app to prevent early termination
-    let _hold = app.hold();
-    eprintln!("🔵 App held to prevent early termination");
-    
-    let source_name = format!("clippit-paste-{}", source);
-    let source_str = source.to_string();
-    std::thread::Builder::new()
-        .name(source_name.clone())
-        .spawn(move || {
-            eprintln!("🔵 Paste thread ({}) started!", source_str);
-            
-            let result = std::panic::catch_unwind(|| {
-                copy_to_clipboard_and_paste_with_target(entry_id, window_id);
-            });
-            
-            if let Err(e) = result {
-                eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                eprintln!("💥 PANIC in paste thread ({}): {:?}", source_str, e);
-                eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            }
-            
-            eprintln!("🔵 Paste thread ({}) completed!", source_str);
-            paste_done.store(true, Ordering::SeqCst);
-        })
-        .expect("Failed to spawn paste thread");
-    
-    window.close();
-    eprintln!("🔵 Window closed ({}), monitoring paste completion...", source);
-    
-    let source_str2 = source.to_string();
-    let app_for_quit = app.clone();
-    gtk::glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
-        if paste_done_check.load(Ordering::SeqCst) {
-            eprintln!("🔵 Paste done ({}), quitting app", source_str2);
-            // Note: hold() keeps app alive, quit() overrides it
-            app_for_quit.quit();
-            gtk::glib::ControlFlow::Break
-        } else {
-            gtk::glib::ControlFlow::Continue
-        }
-    });
 }

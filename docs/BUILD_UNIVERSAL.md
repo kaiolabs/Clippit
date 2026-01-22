@@ -1,231 +1,267 @@
-# 📦 Build Universal - Clippit
+# 🏗️ Build Universal - Clippit
 
-## 🎯 O que é?
-
-Um **pacote .deb UNIVERSAL** que funciona em **qualquer distribuição Linux**, independente da versão do glibc!
-
-### ✅ Compatível com:
-- Ubuntu 20.04, 22.04, 24.04+
-- Debian 11, 12+
-- Linux Mint 20, 21, 22+
-- Fedora (qualquer versão)
-- openSUSE (qualquer versão)
-- Arch Linux
-- **QUALQUER distribuição com kernel 3.2+**
+Guia para criar um pacote `.deb` universal que funcione em múltiplas distribuições Ubuntu/Debian.
 
 ---
 
-## 🚀 Como Usar
+## 🎯 Objetivo
 
-### 1️⃣ **Executar o script:**
+Criar um **único** pacote `.deb` que funcione em:
+- Ubuntu 22.04+ (Jammy, Noble)
+- Debian 12+ (Bookworm)
+- Linux Mint 21+
+- Pop!_OS 22.04+
+- Outros derivados
+
+---
+
+## 📋 Estratégia
+
+### 1. Compilação Estática
+
+Compilar com o máximo de libs estáticas possível para reduzir dependências runtime.
+
+### 2. GLIBC Compatibility
+
+Compilar em sistema com GLIBC mais antiga (ex: Ubuntu 22.04) para compatibilidade retroativa.
+
+### 3. Dynamic Libs Essenciais
+
+Apenas libs essenciais como runtime deps:
+- `libgtk-4-1`
+- `libadwaida-1-0`
+- `libsqlite3-0`
+
+---
+
+## 🚀 Build Process
+
+### Método 1: Script Automático
 
 ```bash
 ./scripts/build-deb-universal.sh
 ```
 
-### 2️⃣ **Aguardar compilação:**
+O script:
+1. Compila em release com otimizações
+2. Strip de símbolos de debug
+3. Cria estrutura .deb
+4. Gera arquivo de controle com deps mínimas
+5. Empacota o .deb
 
-O script vai:
-- ✅ Instalar target musl (se necessário)
-- ✅ Instalar musl-tools (se necessário)
-- ✅ Compilar com linkagem estática
-- ✅ Criar pacote .deb universal
-- ✅ Otimizar tamanho dos binários
-
-**Tempo estimado:** 5-10 minutos (primeira vez)
-
-### 3️⃣ **Pacote criado:**
-
-```
-clippit_1.0.0_universal_amd64.deb
-```
-
----
-
-## 📋 Pré-requisitos
-
-### No seu PC (para compilar):
+### Método 2: Docker (Isolado)
 
 ```bash
-# Rust (se não tiver)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# Build da imagem
+docker build -f Dockerfile.clippit -t clippit-builder .
 
-# Dependências de build
-sudo apt install -y \
-    build-essential \
-    pkg-config \
-    libgtk-4-dev \
-    libadwaita-1-dev \
-    libsqlite3-dev \
-    musl-tools
+# Executar build
+docker run --rm -v $(pwd):/workspace clippit-builder
+
+# O .deb estará em /tmp/clippit-deb-build/
 ```
-
-### No PC do cliente (para instalar):
-
-**Apenas:**
-```bash
-sudo apt install xdotool xclip
-```
-
-**Pronto!** Não precisa de mais nada! 🎉
 
 ---
 
-## 🔍 Como Funciona?
+## 🔧 Detalhes Técnicos
 
-### **Compilação Estática com musl**
-
-O script compila o Clippit usando **musl libc** ao invés de glibc:
-
-```rust
-rustup target add x86_64-unknown-linux-musl
-cargo build --target x86_64-unknown-linux-musl
-```
-
-### **Vantagens:**
-
-1. ✅ **Sem dependência de glibc** → funciona em qualquer sistema
-2. ✅ **Binários menores** → strip remove símbolos desnecessários
-3. ✅ **Distribuição simples** → um único .deb para todos
-4. ✅ **Compatibilidade máxima** → suporta sistemas muito antigos
-
-### **Limitações:**
-
-- ⚠️ Ainda depende de GTK4/libadwaita em **runtime** (não compilado estaticamente)
-- ⚠️ Mas GTK4 está disponível em praticamente todas as distribuições modernas
-
----
-
-## 📊 Comparação de Builds
-
-| Build Type | Compatibilidade | Tamanho | Dependências |
-|------------|-----------------|---------|--------------|
-| **Normal** | Mesma versão glibc | ~30MB | glibc + GTK4 + deps |
-| **Docker (Ubuntu 20.04)** | glibc 2.31+ | ~30MB | glibc 2.31+ + GTK4 |
-| **Universal (musl)** | QUALQUER | ~25MB | Apenas GTK4 runtime |
-
----
-
-## 🛠️ Troubleshooting
-
-### **Erro: "musl-gcc not found"**
+### Compilação
 
 ```bash
-sudo apt install musl-tools
+# Release build com otimizações
+RUSTFLAGS="-C target-cpu=x86-64 -C link-arg=-Wl,-z,relro,-z,now" \
+    cargo build --release --target x86_64-unknown-linux-gnu
 ```
 
-### **Erro ao compilar GTK4**
+**Flags:**
+- `target-cpu=x86-64`: Compatibilidade máxima (não usa instruções AVX2, etc)
+- `-Wl,-z,relro,-z,now`: Hardening de segurança
 
-Algumas bibliotecas podem não compilar estaticamente. Neste caso:
-
-1. Use o **build Docker** (Ubuntu 20.04):
-   ```bash
-   ./scripts/build-deb-compat.sh
-   ```
-
-2. Ou distribua **código-fonte** para compilar no alvo
-
-### **Build muito lento**
-
-A primeira compilação com musl demora mais. Builds subsequentes são mais rápidos.
-
-Para limpar e recomeçar:
-```bash
-cargo clean
-./scripts/build-deb-universal.sh
-```
-
----
-
-## 🧪 Testar o Pacote
-
-### **No seu sistema:**
+### Strip
 
 ```bash
-# Instalar
-sudo dpkg -i clippit_1.0.0_universal_amd64.deb
-sudo apt install -f  # resolver dependências
-
-# Testar
-systemctl --user start clippit
-systemctl --user status clippit
+strip --strip-unneeded target/release/clippit-daemon
+strip --strip-unneeded target/release/clippit-popup
+strip --strip-unneeded target/release/clippit-dashboard
 ```
 
-### **Verificar se é estático:**
+Remove símbolos de debug → reduz tamanho de ~50MB para ~10MB
+
+---
+
+## 📦 Estrutura do Pacote
+
+```
+clippit_1.0.0_amd64.deb
+└── data.tar.gz
+    ├── usr/
+    │   └── bin/
+    │       ├── clippit-daemon
+    │       ├── clippit-popup
+    │       └── clippit-dashboard
+    ├── usr/
+    │   └── share/
+    │       ├── applications/
+    │       │   └── clippit.desktop
+    │       └── icons/
+    │           └── hicolor/
+    │               └── 256x256/
+    │                   └── apps/
+    │                       └── clippit.png
+    └── lib/
+        └── systemd/
+            └── user/
+                └── clippit.service
+```
+
+### DEBIAN/control
+
+```
+Package: clippit
+Version: 1.0.0
+Architecture: amd64
+Maintainer: Your Name <email@example.com>
+Depends: libgtk-4-1, libadwaita-1-0
+Description: Clippit Clipboard Manager for Wayland
+ Modern clipboard manager for Linux with Wayland support.
+```
+
+**Notas:**
+- Minimal deps (apenas runtime essenciais)
+- Wayland-native via arboard
+- No deps de X11
+
+---
+
+## ✅ Validação
+
+### Testar em Múltiplas Distros
 
 ```bash
-ldd /usr/local/bin/clippit-daemon
+# Ubuntu 22.04 (Jammy)
+lxc launch ubuntu:22.04 test-jammy
+lxc file push clippit_*.deb test-jammy/tmp/
+lxc exec test-jammy -- dpkg -i /tmp/clippit_*.deb
+
+# Ubuntu 24.04 (Noble)
+lxc launch ubuntu:24.04 test-noble
+lxc file push clippit_*.deb test-noble/tmp/
+lxc exec test-noble -- dpkg -i /tmp/clippit_*.deb
+
+# Debian 12 (Bookworm)
+lxc launch images:debian/12 test-bookworm
+lxc file push clippit_*.deb test-bookworm/tmp/
+lxc exec test-bookworm -- dpkg -i /tmp/clippit_*.deb
 ```
 
-**Resultado esperado:**
-- Se totalmente estático: `not a dynamic executable`
-- Se híbrido: apenas GTK4 e libs essenciais
-
----
-
-## 📤 Distribuir
-
-### **Para clientes:**
-
-1. Envie apenas o arquivo:
-   ```
-   clippit_1.0.0_universal_amd64.deb
-   ```
-
-2. Instrução de instalação:
-   ```bash
-   sudo dpkg -i clippit_1.0.0_universal_amd64.deb
-   sudo apt install -f
-   systemctl --user enable --now clippit
-   ```
-
-3. **Pronto!** Funciona em qualquer distribuição! 🎉
-
----
-
-## 💡 Dicas
-
-### **Reduzir tamanho ainda mais:**
+### Verificar Dependências
 
 ```bash
-# Adicionar ao Cargo.toml de cada crate:
-[profile.release]
-opt-level = "z"  # Otimizar para tamanho
-lto = true       # Link-time optimization
-codegen-units = 1
-strip = true     # Strip automático
+# Ver deps declaradas
+dpkg-deb -I clippit_*.deb | grep Depends
+
+# Ver libs dinâmicas linkadas
+ldd /usr/bin/clippit-daemon
+ldd /usr/bin/clippit-popup
 ```
 
-### **Build mais rápido:**
+---
+
+## 🐛 Troubleshooting
+
+### Erro: GLIBC version mismatch
+
+**Causa:** Compilado em sistema com GLIBC mais nova
+
+**Solução:** Compilar em Ubuntu 22.04 ou mais antiga
 
 ```bash
-# Usar compilação paralela
-cargo build --release --target x86_64-unknown-linux-musl -j$(nproc)
+# Verificar GLIBC do binário
+ldd --version
+strings /usr/bin/clippit-daemon | grep GLIBC
+```
+
+### Erro: Missing GTK symbols
+
+**Causa:** Linkado contra GTK4 muito nova
+
+**Solução:** Compilar em sistema com GTK4 4.6+ (Ubuntu 22.04)
+
+### Pacote muito grande
+
+**Causa:** Símbolos de debug não foram removidos
+
+**Solução:**
+```bash
+strip --strip-unneeded target/release/clippit-*
 ```
 
 ---
 
-## 🎯 Quando Usar Este Build?
+## 📊 Tamanhos Esperados
 
-✅ **Use este build se:**
-- Você precisa distribuir para múltiplas distribuições
-- Seus clientes têm sistemas diferentes (Ubuntu, Debian, Fedora, etc.)
-- Você quer evitar problemas de compatibilidade de glibc
-- Você quer a solução mais universal possível
-
-❌ **Use outro método se:**
-- Você controla o sistema alvo → compile localmente
-- Você só tem um tipo de distribuição → use build Docker
-- GTK4 estático é obrigatório → use AppImage (coming soon)
+- **Com debug symbols**: ~50MB
+- **Após strip**: ~10MB
+- **.deb final**: ~3-4MB (comprimido)
 
 ---
 
-## 📚 Recursos
+## 🔒 Checksums
 
-- [musl libc](https://www.musl-libc.org/)
-- [Rust musl target](https://doc.rust-lang.org/rustc/platform-support/x86_64-unknown-linux-musl.html)
-- [Static linking in Rust](https://doc.rust-lang.org/edition-guide/rust-2018/platform-and-target-support/musl-support-for-fully-static-binaries.html)
+Gerar checksums para release:
+
+```bash
+# SHA256
+sha256sum clippit_*.deb > clippit_1.0.0_amd64.deb.sha256
+
+# MD5
+md5sum clippit_*.deb > clippit_1.0.0_amd64.deb.md5
+```
 
 ---
 
-**✨ Build universal = Máxima compatibilidade!**
+## 📝 Release Checklist
+
+- [ ] Compilar em Ubuntu 22.04 (base)
+- [ ] Strip symbols
+- [ ] Gerar .deb
+- [ ] Testar em Ubuntu 22.04
+- [ ] Testar em Ubuntu 24.04
+- [ ] Testar em Debian 12
+- [ ] Gerar checksums
+- [ ] Upload para GitHub Releases
+
+---
+
+## 🚀 CI/CD (GitHub Actions)
+
+`.github/workflows/build.yml`:
+
+```yaml
+name: Build .deb
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install deps
+        run: sudo apt update && sudo apt install -y libgtk-4-dev libadwaita-1-dev libsqlite3-dev
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Build .deb
+        run: ./scripts/build-deb-universal.sh
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: clippit-deb
+          path: /tmp/clippit-deb-build/*.deb
+```
+
+---
+
+**Problemas?** Veja [TROUBLESHOOTING.md](TROUBLESHOOTING.md)

@@ -272,10 +272,12 @@ fn show_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
                             key_final.to_uppercase()
                         );
                         
-                        // Alterar conteúdo do dialog para mostrar sucesso
+                        // Alterar conteúdo do dialog para mostrar sucesso (centralizado)
                         let success_box = gtk::Box::new(gtk::Orientation::Vertical, 24);
                         success_box.set_valign(gtk::Align::Center);
                         success_box.set_halign(gtk::Align::Center);
+                        success_box.set_vexpand(true);
+                        success_box.set_hexpand(true);
                         
                         let success_icon = gtk::Label::new(Some("✓"));
                         success_icon.add_css_class("title-1");
@@ -309,7 +311,7 @@ fn show_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
                         // Restart daemon automatically to apply new hotkey
                         eprintln!("🔄 Reiniciando daemon...");
                         
-                        let dialog_for_status = dialog.clone();
+                        let dialog_for_close = dialog.clone();
                         let status_text_clone = status_text.clone();
                         
                         // Reiniciar daemon em background
@@ -326,30 +328,15 @@ fn show_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
                                 status_text_clone.set_text(&t!("hotkeys.daemon_error"));
                             }
                             
-                            // Contador regressivo de 3 segundos
-                            let countdown_label = status_text_clone.clone();
-                            let dialog_for_countdown = dialog_for_status.clone();
-                            let mut countdown = 3;
-                            
-                            gtk::glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
-                                if countdown > 0 {
-                                    let closing_text = t!("hotkeys.closing_in").replace("{seconds}", &countdown.to_string());
-                                    countdown_label.set_text(&closing_text);
-                                    countdown -= 1;
+                            // Fechar imediatamente com animação suave
+                            let dialog_for_fade = dialog_for_close.clone();
+                            gtk::glib::timeout_add_local(std::time::Duration::from_millis(10), move || {
+                                let target_opacity = dialog_for_fade.opacity() - 0.15;
+                                if target_opacity > 0.0 {
+                                    dialog_for_fade.set_opacity(target_opacity);
                                     gtk::glib::ControlFlow::Continue
                                 } else {
-                                    // Animação de fade-out
-                                    let dialog_for_fade = dialog_for_countdown.clone();
-                                    gtk::glib::timeout_add_local(std::time::Duration::from_millis(10), move || {
-                                        let target_opacity = dialog_for_fade.opacity() - 0.15;
-                                        if target_opacity > 0.0 {
-                                            dialog_for_fade.set_opacity(target_opacity);
-                                            gtk::glib::ControlFlow::Continue
-                                        } else {
-                                            dialog_for_fade.destroy();
-                                            gtk::glib::ControlFlow::Break
-                                        }
-                                    });
+                                    dialog_for_fade.destroy();
                                     gtk::glib::ControlFlow::Break
                                 }
                             });

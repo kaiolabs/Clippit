@@ -1,11 +1,9 @@
 use gtk::prelude::*;
 use libadwaita as adw;
 use adw::prelude::*;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use rust_i18n::t;
 
-use crate::utils::get_focused_window_id;
-use crate::controllers::copy_to_clipboard_and_paste_with_target;
+use crate::controllers::copy_to_clipboard;
 
 /// Adds a delete button to a row that removes the entry from DB and UI
 pub fn add_delete_button(row: &adw::ActionRow, entry_id: i64, list_box: &gtk::ListBox) {
@@ -51,7 +49,7 @@ pub fn add_delete_button(row: &adw::ActionRow, entry_id: i64, list_box: &gtk::Li
     row.add_suffix(&delete_button);
 }
 
-/// Adds a copy-and-paste button to a row
+/// Adds a copy button to a row (Wayland-native with system notification)
 pub fn add_copy_button(
     row: &adw::ActionRow,
     entry_id: i64,
@@ -61,7 +59,7 @@ pub fn add_copy_button(
     let copy_button = gtk::Button::from_icon_name("edit-copy");
     copy_button.set_valign(gtk::Align::Center);
     copy_button.add_css_class("flat");
-    copy_button.set_tooltip_text(Some("Copiar e colar"));
+    copy_button.set_tooltip_text(Some("Copiar para clipboard"));
     
     let button_entry_id = entry_id;
     let window_clone = window.clone();
@@ -70,46 +68,13 @@ pub fn add_copy_button(
     copy_button.connect_clicked(move |_| {
         eprintln!("🔵 Copy button clicked for entry ID: {}", button_entry_id);
         
-        let original_window_id = get_focused_window_id();
-        eprintln!("🔵 Captured original window ID: {}", original_window_id);
+        // Copy to clipboard (shows system notification and waits for it to be sent)
+        copy_to_clipboard(button_entry_id);
         
-        // ✅ CRITICAL: Hold app to prevent early termination
-        let _hold = app_clone.hold();
-        eprintln!("🔵 App held to prevent early termination");
-        
-        let paste_done = Arc::new(AtomicBool::new(false));
-        let paste_done_check = paste_done.clone();
-        
-        std::thread::Builder::new()
-            .name("clippit-paste-button".to_string())
-            .spawn(move || {
-                let result = std::panic::catch_unwind(|| {
-                    copy_to_clipboard_and_paste_with_target(button_entry_id, original_window_id);
-                });
-                
-                if let Err(e) = result {
-                    eprintln!("💥 PANIC in paste thread (button): {:?}", e);
-                }
-                
-                eprintln!("🔵 Paste thread (button) completed!");
-                paste_done.store(true, Ordering::SeqCst);
-            })
-            .expect("Failed to spawn paste thread");
-        
+        // Close immediately - notification was already sent
+        eprintln!("🔵 Closing window (notification sent)...");
         window_clone.close();
-        eprintln!("🔵 Window closed (button), monitoring paste completion...");
-        
-        let app_for_quit = app_clone.clone();
-        gtk::glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
-            if paste_done_check.load(Ordering::SeqCst) {
-                eprintln!("🔵 Paste done (button), quitting app");
-                // Note: hold() keeps app alive, quit() overrides it
-                app_for_quit.quit();
-                gtk::glib::ControlFlow::Break
-            } else {
-                gtk::glib::ControlFlow::Continue
-            }
-        });
+        app_clone.quit();
     });
     
     row.add_suffix(&copy_button);

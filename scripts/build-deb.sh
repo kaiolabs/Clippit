@@ -75,10 +75,10 @@ Version: ${VERSION}
 Section: utils
 Priority: optional
 Architecture: ${ARCH}
-Depends: xdotool, xclip, libgtk-4-1, libadwaita-1-0
+Depends: libgtk-4-1, libadwaita-1-0
 Maintainer: Clippit Team <clippit@example.com>
 Description: Modern clipboard manager for Linux
- Clippit is a lightweight, fast clipboard manager for Linux (X11)
+ Clippit is a lightweight, fast clipboard manager for Linux (Wayland)
  with support for text and images, persistent history, and
  global hotkeys.
  .

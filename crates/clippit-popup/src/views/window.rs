@@ -44,7 +44,7 @@ pub fn create_main_window(
     main_box.append(&header_box);
     main_box.append(&scrolled);
     
-    // Create main window
+    // Create main window (no toast overlay - using system notifications)
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title(&t!("popup.title").to_string())
@@ -56,28 +56,25 @@ pub fn create_main_window(
     // Auto-close on focus loss with intelligent delay
     setup_auto_close(&window);
     
-    eprintln!("🔵 Window: adw::ApplicationWindow, 500x400 (auto-close inteligente 500ms)");
+    eprintln!("🔵 Window: adw::ApplicationWindow, 500x400 (auto-close inteligente 500ms + system notifications)");
     
     (window, list_box, scrolled, search_entry)
 }
 
 fn setup_auto_close(window: &adw::ApplicationWindow) {
     let window_for_focus = window.clone();
-    window.connect_is_active_notify(move |win| {
-        if !win.is_active() {
-            eprintln!("🔴 Popup perdeu o foco - agendando fechamento inteligente...");
-            let window_to_close = window_for_focus.clone();
-            
-            // Delay de 500ms para evitar fechamento acidental
-            gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(500), move || {
-                // Verifica novamente se ainda está inativo
-                if !window_to_close.is_active() {
-                    eprintln!("🔴 Confirmado: popup ainda inativo após 500ms - fechando");
-                    window_to_close.close();
-                } else {
-                    eprintln!("✅ Popup voltou ao foco - cancelando fechamento");
-                }
-            });
-        }
+    
+    // Delay inicial antes de habilitar auto-close (dar tempo para o usuário começar a usar)
+    let window_for_init = window.clone();
+    gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(300), move || {
+        eprintln!("🔵 Auto-close habilitado após 300ms");
+        
+        window_for_init.connect_is_active_notify(move |win| {
+            if !win.is_active() {
+                eprintln!("🔴 Popup perdeu o foco - fechando imediatamente...");
+                let window_to_close = window_for_focus.clone();
+                window_to_close.close();
+            }
+        });
     });
 }

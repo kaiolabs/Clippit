@@ -164,11 +164,11 @@ Version: ${VERSION}
 Section: utils
 Priority: optional
 Architecture: ${ARCH}
-Depends: xdotool, xclip
+Depends: libgtk-4-1, libadwaita-1-0
 Recommends: libgtk-4-1, libadwaita-1-0
 Maintainer: Clippit Team <clippit@example.com>
 Description: Modern clipboard manager for Linux (Universal Build)
- Clippit is a lightweight, fast clipboard manager for Linux (X11)
+ Clippit is a lightweight, fast clipboard manager for Linux (Wayland)
  with support for text and images, persistent history, and
  global hotkeys.
  .
@@ -278,8 +278,7 @@ if [ $? -eq 0 ]; then
     echo ""
     
     echo "📋 Dependências mínimas:"
-    echo "   • xdotool (obrigatório)"
-    echo "   • xclip (obrigatório)"
+    echo "   • GTK4 e libadwaita já incluídos no pacote"
     echo "   • GTK4 runtime (recomendado, geralmente já instalado)"
     echo ""
     

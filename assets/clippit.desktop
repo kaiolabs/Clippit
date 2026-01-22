@@ -1,11 +1,14 @@
 [Desktop Entry]
 Type=Application
 Name=Clippit
-Comment=Modern Clipboard Manager
+GenericName=Clipboard Manager
+Comment=Modern clipboard manager for Wayland
 Icon=clippit
 Exec=/usr/local/bin/clippit-dashboard
 Terminal=false
-Categories=Utility;System;
-Keywords=clipboard;manager;history;copy;paste;
+Categories=Utility;System;GTK;
+Keywords=clipboard;manager;history;copy;paste;wayland;
 StartupNotify=true
-StartupWMClass=clippit-dashboard
+StartupWMClass=Clippit
+X-GNOME-UsesNotifications=true
+X-GNOME-Autostart-enabled=false

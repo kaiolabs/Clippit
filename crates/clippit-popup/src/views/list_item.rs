@@ -20,7 +20,7 @@ pub fn populate_history_list(
     search_map: &Rc<RefCell<std::collections::HashMap<i32, String>>>,
 ) {
     // OPTIMIZED: Use metadata query (fast, no image data loaded)
-    match IpcClient::query_history_metadata(50) {
+    match IpcClient::query_history_metadata(20) {
         Ok(entries) => {
             eprintln!("✅ Got {} metadata entries from history (images without data)", entries.len());
             for (index, entry) in entries.iter().enumerate() {

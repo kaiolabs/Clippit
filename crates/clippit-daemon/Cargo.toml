@@ -14,8 +14,7 @@ clippit-core = { path = "../clippit-core" }
 clippit-ipc = { path = "../clippit-ipc" }
 
 tokio.workspace = true
-x11-clipboard.workspace = true
-x11rb.workspace = true
+arboard.workspace = true
 global-hotkey.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true

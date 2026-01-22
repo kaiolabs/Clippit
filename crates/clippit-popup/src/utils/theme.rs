@@ -26,6 +26,38 @@ pub fn load_custom_css() {
         }
         image.preview-rounded {
             border-radius: 16px;
+        }
+        
+        /* Skeleton loader styles - matches Adwaita design */
+        .skeleton-thumb {
+            background: linear-gradient(90deg, 
+                alpha(@window_fg_color, 0.08) 0%, 
+                alpha(@window_fg_color, 0.12) 50%, 
+                alpha(@window_fg_color, 0.08) 100%);
+            background-size: 200% 100%;
+            border-radius: 12px;
+        }
+        
+        .skeleton-text {
+            background: linear-gradient(90deg, 
+                alpha(@window_fg_color, 0.08) 0%, 
+                alpha(@window_fg_color, 0.12) 50%, 
+                alpha(@window_fg_color, 0.08) 100%);
+            background-size: 200% 100%;
+            border-radius: 6px;
+        }
+        
+        @keyframes skeleton-pulse {
+            0% {
+                background-position: 200% 0;
+            }
+            100% {
+                background-position: -200% 0;
+            }
+        }
+        
+        .skeleton-pulse {
+            animation: skeleton-pulse 1.8s ease-in-out infinite;
         }"
     );
     

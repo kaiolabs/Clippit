@@ -11,7 +11,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "1.2.5"
 edition = "2021"
 authors = ["Clippit Team"]
 license = "MIT"
@@ -38,12 +38,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 
-# X11
-x11-clipboard = "0.9"
-x11rb = { version = "0.13", features = ["allow-unsafe-code"] }
+# Clipboard (Wayland-native)
+arboard = { version = "3.6", features = ["wayland-data-control"] }
 
 # Global hotkey
-global-hotkey = "0.5"
+global-hotkey = "0.7"
 
 # IPC
 interprocess = "2.0"

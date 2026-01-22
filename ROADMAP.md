@@ -269,10 +269,10 @@ Super+Shift+C
 **Previsão:** Q3 2026
 
 ### Suporte Multi-Plataforma
-- [ ] **Wayland Support**
-  - [ ] Protocolo wl-clipboard
-  - [ ] Detecção automática X11/Wayland
-  - [ ] Fallback inteligente
+- [x] **Wayland Support** (✅ Concluído em v1.1)
+  - [x] Protocolo wl-clipboard via arboard
+  - [x] Wayland nativo com toast notifications
+  - [x] Remoção completa de dependências X11
   
 - [ ] **Windows** (opcional)
   - [ ] Backend Win32 API

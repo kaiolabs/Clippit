@@ -28,8 +28,7 @@ case "$OS" in
             libadwaita-1-dev \
             libgraphene-1.0-dev \
             build-essential \
-            pkg-config \
-            xdotool
+            pkg-config
         ;;
     
     fedora)

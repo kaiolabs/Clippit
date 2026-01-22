@@ -25,7 +25,26 @@ pub async fn start_hotkey_handler(_history_manager: Arc<Mutex<HistoryManager>>) 
     
     // Register hotkey
     let hotkey = HotKey::new(modifiers, key_code);
-    manager.register(hotkey)?;
+    
+    // Try to register, unregister and retry if already registered
+    match manager.register(hotkey) {
+        Ok(_) => {
+            info!("Hotkey registered successfully");
+        }
+        Err(e) if e.to_string().contains("already registered") => {
+            info!("Hotkey already registered, unregistering and retrying...");
+            let _ = manager.unregister(hotkey);
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            manager.register(hotkey).map_err(|e| {
+                error!("Failed to register hotkey after retry: {}", e);
+                e
+            })?;
+        }
+        Err(e) => {
+            error!("Failed to register hotkey: {}", e);
+            return Err(e.into());
+        }
+    }
 
     // Log configured hotkey prominently
     eprintln!(""); 
@@ -64,10 +83,14 @@ fn notify_ui_show_popup() -> Result<()> {
     // Check lock file instead of pgrep (more reliable)
     let lock_file = std::path::Path::new("/tmp/clippit-popup.lock");
     
+    info!("🔍 Checking lock file: exists={}", lock_file.exists());
+    
     if lock_file.exists() {
         // Read PID from lock file
         if let Ok(content) = std::fs::read_to_string(lock_file) {
+            info!("📄 Lock file content: '{}'", content);
             if let Ok(pid) = content.trim().parse::<i32>() {
+                info!("🔍 Checking PID {} status...", pid);
                 // Check if process is actually alive (not zombie)
                 let check = Command::new("ps")
                     .args(&["-p", &pid.to_string(), "-o", "stat="])
@@ -75,14 +98,16 @@ fn notify_ui_show_popup() -> Result<()> {
                 
                 if let Ok(output) = check {
                     let stat = String::from_utf8_lossy(&output.stdout);
+                    info!("📊 Process stat: '{}'", stat.trim());
                     // If process is zombie (Z) or doesn't exist, clean up
                     if stat.trim().starts_with('Z') || stat.trim().is_empty() {
-                        info!("Cleaning up stale/zombie popup (PID: {})", pid);
+                        info!("💀 Cleaning up stale/zombie popup (PID: {})", pid);
                         let _ = Command::new("kill").args(&["-9", &pid.to_string()]).output();
                         std::fs::remove_file(lock_file).ok();
                     } else {
                         // Process is alive, toggle (close it)
-                        info!("Popup already open - closing (toggle)");
+                        info!("🔄 Popup already open (PID: {}) - closing (toggle)", pid);
+                        info!("📤 Sending SIGTERM...");
                         let _ = Command::new("kill").args(&["-TERM", &pid.to_string()]).output();
                         
                         // Aguarda o popup fechar completamente (até 500ms)
@@ -95,82 +120,38 @@ fn notify_ui_show_popup() -> Result<()> {
                             
                             if let Ok(output) = check {
                                 if !output.status.success() {
-                                    info!("Popup fechado após {}ms", (i + 1) * 50);
+                                    info!("✅ Popup fechado após {}ms", (i + 1) * 50);
                                     break;
                                 }
                             }
                         }
                         
+                        info!("🗑️  Removing lock file...");
                         std::fs::remove_file(lock_file).ok();
+                        info!("✅ Toggle complete");
                         return Ok(());
                     }
                 }
             }
         }
+    } else {
+        info!("❌ Lock file does not exist");
     }
     
-    // Launch clippit-popup IMEDIATAMENTE (captura window ID de forma rápida)
-    info!("Opening popup...");
-    
-    // Tenta capturar window ID usando xdotool (sem timeout primeiro)
-    let result = Command::new("xdotool")
-        .arg("getwindowfocus")
-        .output();
-    
-    let active_window_id = match result {
-        Ok(output) => {
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let trimmed = stdout.trim();
-                info!("✅ xdotool getwindowfocus output: '{}'", trimmed);
-                
-                if !trimmed.is_empty() && trimmed != "0" {
-                    trimmed.to_string()
-                } else {
-                    info!("⚠️  getwindowfocus returned 0 or empty, trying getactivewindow...");
-                    // Fallback: getactivewindow
-                    Command::new("xdotool")
-                        .arg("getactivewindow")
-                        .output()
-                        .ok()
-                        .and_then(|o| {
-                            if o.status.success() {
-                                let out = String::from_utf8_lossy(&o.stdout);
-                                let trimmed = out.trim();
-                                info!("✅ xdotool getactivewindow output: '{}'", trimmed);
-                                if !trimmed.is_empty() && trimmed != "0" {
-                                    Some(trimmed.to_string())
-                                } else {
-                                    None
-                                }
-                            } else {
-                                info!("❌ getactivewindow failed: {:?}", o.status);
-                                None
-                            }
-                        })
-                        .unwrap_or_else(|| "0".to_string())
-                }
-            } else {
-                info!("❌ xdotool getwindowfocus failed: {:?}", output.status);
-                info!("   stderr: {}", String::from_utf8_lossy(&output.stderr));
-                "0".to_string()
-            }
-        }
-        Err(e) => {
-            info!("❌ Failed to execute xdotool: {}", e);
-            "0".to_string()
-        }
-    };
-    
-    info!("🎯 Final captured window ID: {}", active_window_id);
+    // Launch clippit-popup (Wayland-native, no window ID needed)
+    info!("🚀 Opening popup...");
     
     std::process::Command::new("clippit-popup")
-        .env("CLIPPIT_TARGET_WINDOW", &active_window_id)  // Passa window ID via env
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::inherit())
         .spawn()
         .ok();
+    
+    // Small delay to allow popup to create lock file
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    
+    info!("✅ Popup launch complete");
 
     Ok(())
 }

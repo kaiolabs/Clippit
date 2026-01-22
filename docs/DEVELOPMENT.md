@@ -1,304 +1,427 @@
-# Guia de Desenvolvimento - Clippit
+# 🛠️ Development Guide - Clippit
 
-## Arquitetura do Sistema
+Guia completo para desenvolvedores que querem contribuir com o Clippit.
 
-O Clippit é dividido em 4 crates principais:
+---
 
-### clippit-core
-Core logic do aplicativo com gerenciamento de histórico e armazenamento.
+## 🏗️ Arquitetura
+
+### Visão Geral
+
+```
+┌─────────────────┐
+│  clippit-daemon │ ◄─── Systemd user service
+│                 │
+│  ┌───────────┐  │
+│  │  Monitor  │  │ ◄─── Wayland Clipboard (arboard)
+│  └───────────┘  │
+│                 │
+│  ┌───────────┐  │
+│  │  Hotkey   │  │ ◄─── Desktop Portals
+│  └───────────┘  │
+│                 │
+│  ┌───────────┐  │
+│  │ IPC Server│  │ ◄─── Unix Socket (/tmp/clippit.sock)
+│  └───────────┘  │
+└─────────────────┘
+         ▲
+         │ IPC (JSON)
+         ▼
+┌─────────────────┐
+│  clippit-popup  │ ◄─── GTK4 + libadwaita
+└─────────────────┘
+
+┌─────────────────┐
+│clippit-dashboard│ ◄─── Qt6 (QML)
+└─────────────────┘
+```
+
+### Componentes
+
+#### 1. **clippit-daemon** (Rust)
+
+Daemon principal que roda em background.
+
+**Responsabilidades:**
+- `monitor.rs`: Monitoramento do clipboard Wayland (polling a cada 80ms)
+- `hotkey.rs`: Gerenciamento de hotkeys globais via desktop portals
+- `main.rs`: IPC server (Unix socket), orquestração
+
+**Fluxo:**
+```
+[Wayland Clipboard] ← [Clipboard Monitor] (arboard polling)
+                    ↓
+              [HistoryManager] → SQLite + filesystem
+                    ↑
+              [IPC Server] ←→ [Popup/Dashboard]
+```
+
+#### 2. **clippit-popup** (Rust + GTK4)
+
+Interface de popup do histórico.
+
+**Responsabilidades:**
+- `views/`: Componentes GTK4 (window, list_item, buttons)
+- `controllers/`: Lógica (keyboard, clipboard)
+- `models/`: Estado (entry_map)
+
+**Fluxo:**
+```
+[Usuário seleciona] → [IPC] → [Daemon] → [Wayland Clipboard (arboard)]
+                                        ↓
+                              [System Notification]
+```
+
+#### 3. **clippit-core** (Rust)
+
+Biblioteca compartilhada.
 
 **Módulos:**
-- `storage.rs`: Interface com SQLite
-- `history.rs`: Gerenciamento de histórico com anti-duplicação
-- `validator.rs`: Validação de conteúdo (texto e imagem)
-- `types.rs`: Tipos compartilhados
+- `config.rs`: Configuração (TOML)
+- `history.rs`: HistoryManager (SQLite)
+- `types.rs`: ClipboardEntry, ContentType
+- `storage.rs`: Gerenciamento de imagens
+- `validator.rs`: Validações
 
-**Testes:**
-```bash
-cargo test -p clippit-core
-```
+---
 
-### clippit-ipc
-Comunicação entre daemon e UI via Unix sockets.
+## 🚀 Setup de Desenvolvimento
 
-**Módulos:**
-- `protocol.rs`: Definição de mensagens IPC
-- `server.rs`: Servidor IPC (usado pelo daemon)
-- `client.rs`: Cliente IPC (usado pela UI)
-
-**Socket:** `/tmp/clippit.sock`
-
-### clippit-daemon
-Background service que monitora o clipboard e gerencia hotkeys.
-
-**Componentes:**
-- `monitor.rs`: Monitoramento do clipboard X11 (polling a cada 200ms)
-- `hotkey.rs`: Gerenciamento do atalho Super+V
-- `main.rs`: Orquestração e servidor IPC
-
-**Iniciar daemon:**
-```bash
-RUST_LOG=clippit_daemon=debug cargo run --bin clippit-daemon
-```
-
-### clippit-ui
-Interface do usuário (CLI no MVP, Qt/QML planejado para V2).
-
-**Funcionalidades:**
-- Conexão com daemon via IPC
-- Exibição de histórico
-- Seleção e cópia de itens
-
-**Executar UI:**
-```bash
-cargo run --bin clippit-ui
-```
-
-## Fluxo de Dados
-
-```
-[Usuário copia texto]
-         ↓
-[X11 Clipboard] ← [Clipboard Monitor] (polling)
-         ↓
-[Content Validator]
-         ↓
-[History Manager] → [SQLite Storage]
-         ↓
-[Usuário: Super+V]
-         ↓
-[Hotkey Handler] → [IPC] → [UI]
-         ↓
-[UI query history] → [IPC] → [History Manager]
-         ↓
-[Usuário seleciona] → [IPC] → [Daemon] → [X11 Clipboard]
-```
-
-## Desenvolvimento
-
-### Setup
+### 1. Instalar Dependências
 
 ```bash
-# Instalar dependências (Ubuntu/Debian)
-sudo apt install libx11-dev libxcb1-dev libsqlite3-dev
+# Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Clonar e compilar
-git clone <repo>
+# Dependências de desenvolvimento
+sudo apt install \
+    build-essential \
+    pkg-config \
+    libgtk-4-dev \
+    libadwaita-1-dev \
+    libsqlite3-dev \
+    qt6-base-dev \
+    qt6-declarative-dev \
+    libqt6svg6-dev
+```
+
+### 2. Clonar Repositório
+
+```bash
+git clone https://github.com/seu-usuario/clippit.git
 cd clippit
+```
+
+### 3. Compilar
+
+```bash
+# Debug build
 cargo build
+
+# Release build
+cargo build --release
 ```
 
-### Executar em modo dev
+### 4. Executar
 
-Terminal 1 (daemon):
 ```bash
-RUST_LOG=clippit_daemon=debug cargo run --bin clippit-daemon
+# Daemon (em um terminal)
+cargo run --bin clippit-daemon
+
+# Popup (em outro terminal)
+cargo run --bin clippit-popup
+
+# Dashboard
+cargo run --bin clippit-dashboard
 ```
 
-Terminal 2 (UI):
-```bash
-cargo run --bin clippit-ui
-```
+---
 
-### Testes
+## 🧪 Testing
+
+### Testes Unitários
 
 ```bash
-# Todos os testes
 cargo test
-
-# Teste específico de crate
-cargo test -p clippit-core
-
-# Com output
-cargo test -- --nocapture
-
-# Teste específico
-cargo test test_duplicate_detection
 ```
 
-### Verificação de código
+### Testes Manuais
+
+#### Testar Clipboard Monitor
 
 ```bash
-# Check (compilação sem binários)
-cargo check --all
-
-# Clippy (linter)
-cargo clippy --all
-
-# Format
-cargo fmt --all
-```
-
-## Debugging
-
-### Logs do daemon
-
-```bash
-# Via systemd
-journalctl --user -u clippit -f
-
-# Direto (modo dev)
+# Terminal 1: Rodar daemon com logs
 RUST_LOG=debug cargo run --bin clippit-daemon
+
+# Terminal 2: Copiar algo
+echo "teste" | wl-copy
+
+# Verificar logs no Terminal 1
 ```
 
-### Debug do IPC
+#### Testar Popup
 
 ```bash
-# Verificar se socket existe
-ls -la /tmp/clippit.sock
+# Rodar popup
+cargo run --bin clippit-popup
 
-# Testar conexão
-cargo run --bin clippit-ui
+# Navegar com ↑↓
+# Pressionar Enter
+# Verificar se copiou
 ```
 
-### Debug do clipboard
+#### Testar Hotkey
 
 ```bash
-# Verificar X11
-echo $XDG_SESSION_TYPE  # Deve ser "x11"
-
-# Copiar texto de teste
-echo "test" | xclip -selection clipboard
-
-# Ver logs do daemon
-RUST_LOG=clippit_daemon=debug cargo run --bin clippit-daemon
+# Registrar hotkey (precisa do daemon rodando)
+# Pressionar Super+V
+# Ver se popup abre
 ```
 
-## Estrutura de Banco de Dados
+---
 
-```sql
-CREATE TABLE clipboard_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    content_type TEXT NOT NULL,
-    content_text TEXT,
-    content_data BLOB,
-    timestamp TEXT NOT NULL
-);
+## 📦 Build para Produção
 
-CREATE INDEX idx_timestamp ON clipboard_history(timestamp DESC);
+### Compilação Otimizada
+
+```bash
+cargo build --release --target x86_64-unknown-linux-gnu
 ```
 
-**Localização:** `~/.local/share/clippit/history.db`
+### Gerar .deb
 
-## Adicionando Funcionalidades
+```bash
+./scripts/build-deb.sh
+```
 
-### 1. Novo tipo de conteúdo
+O pacote será gerado em `/tmp/clippit-deb-build/`
 
-1. Adicionar em `clippit-core/src/types.rs`:
+---
+
+## 🔍 Debugging
+
+### Logs Verbosos
+
+```bash
+# Daemon com debug
+RUST_LOG=debug cargo run --bin clippit-daemon
+
+# Popup com debug
+RUST_LOG=debug cargo run --bin clippit-popup
+```
+
+### GTK Inspector
+
+```bash
+# Habilitar GTK Inspector
+GTK_DEBUG=interactive cargo run --bin clippit-popup
+```
+
+### Valgrind (Memory Leaks)
+
+```bash
+valgrind --leak-check=full target/release/clippit-daemon
+```
+
+---
+
+## 📐 Convenções de Código
+
+### Rust Style
+
+```bash
+# Formatar código
+cargo fmt
+
+# Linter
+cargo clippy
+
+# Verificar antes de commit
+cargo fmt && cargo clippy && cargo test
+```
+
+### Commits
+
+Formato: `tipo(escopo): mensagem`
+
+Tipos:
+- `feat`: Nova funcionalidade
+- `fix`: Correção de bug
+- `docs`: Documentação
+- `refactor`: Refatoração
+- `test`: Testes
+
+Exemplos:
+```
+feat(popup): adiciona preview de imagens
+fix(daemon): corrige detecção de duplicatas
+docs(readme): atualiza instruções de instalação
+```
+
+---
+
+## 🗂️ Estrutura do Projeto
+
+```
+clippit/
+├── crates/
+│   ├── clippit-core/        # Biblioteca compartilhada
+│   │   ├── src/
+│   │   │   ├── config.rs
+│   │   │   ├── history.rs
+│   │   │   ├── types.rs
+│   │   │   └── ...
+│   │   └── Cargo.toml
+│   │
+│   ├── clippit-daemon/      # Daemon principal
+│   │   ├── src/
+│   │   │   ├── main.rs
+│   │   │   ├── monitor.rs
+│   │   │   └── hotkey.rs
+│   │   └── Cargo.toml
+│   │
+│   ├── clippit-popup/       # Popup GTK4
+│   │   ├── src/
+│   │   │   ├── main.rs
+│   │   │   ├── views/
+│   │   │   ├── controllers/
+│   │   │   └── models/
+│   │   └── Cargo.toml
+│   │
+│   ├── clippit-dashboard/   # Dashboard Qt6
+│   │   └── ...
+│   │
+│   └── clippit-ipc/         # IPC library
+│       └── ...
+│
+├── scripts/                 # Build scripts
+│   ├── build-deb.sh
+│   └── install.sh
+│
+├── docs/                    # Documentação
+│   ├── DEVELOPMENT.md
+│   └── ...
+│
+├── Cargo.toml              # Workspace
+└── README.md
+```
+
+---
+
+## 🔧 Tecnologias Utilizadas
+
+### Backend
+
+- **Rust 1.75+** - Linguagem principal
+- **tokio** - Runtime assíncrono
+- **rusqlite** - Banco de dados SQLite
+- **serde** - Serialização/deserialização
+- **arboard** - Clipboard cross-platform (Wayland-native)
+- **global-hotkey** - Hotkeys globais (desktop portals)
+
+### Frontend (Popup)
+
+- **GTK4** - Toolkit UI
+- **libadwaita** - Componentes modernos
+- **gtk-rs** - Bindings Rust para GTK
+
+### Frontend (Dashboard)
+
+- **Qt6** - Framework UI
+- **QML** - UI declarativa
+- **cxx-qt** - Bindings Rust para Qt
+
+---
+
+## 🌐 Internacionalização (i18n)
+
+### Adicionar Nova Tradução
+
+1. Criar arquivo em `crates/clippit-core/locales/`:
+
+```yaml
+# locales/es.yml
+popup:
+  title: "Historial del portapapeles"
+  copy_button_tooltip: "Copiar"
+  # ...
+```
+
+2. Usar no código:
+
 ```rust
-pub enum ContentType {
-    Text,
-    Image,
-    File, // Novo tipo
-}
+use rust_i18n::t;
+
+let title = t!("popup.title");
 ```
 
-2. Adicionar validação em `validator.rs`
-3. Atualizar `monitor.rs` para capturar o novo tipo
-4. Atualizar `storage.rs` se necessário
+---
 
-### 2. Nova mensagem IPC
-
-1. Adicionar em `clippit-ipc/src/protocol.rs`:
-```rust
-pub enum IpcMessage {
-    // ... existentes
-    NewMessage { params: String },
-}
-```
-
-2. Implementar handler em `clippit-daemon/src/main.rs`
-3. Adicionar método em `clippit-ipc/src/client.rs`
-
-### 3. Novo comando UI
-
-Adicionar função em `clippit-ui/src/ui.rs`
-
-## Performance
-
-### Métricas esperadas
-
-- Uso de memória: < 50MB em idle
-- Tempo de resposta UI: < 100ms
-- CPU em idle: < 1%
-- Latência IPC: < 1ms
+## 📊 Performance
 
 ### Profiling
 
 ```bash
-# Com flamegraph
-cargo install flamegraph
-sudo flamegraph cargo run --release --bin clippit-daemon
+# CPU profiling
+cargo flamegraph --bin clippit-daemon
 
-# Com perf
-cargo build --release
-perf record ./target/release/clippit-daemon
-perf report
+# Heap profiling
+cargo bloat --release --bin clippit-daemon
 ```
 
-## Troubleshooting Comum
-
-### Daemon não inicia
+### Benchmarks
 
 ```bash
-# Verificar se já está rodando
-ps aux | grep clippit-daemon
-
-# Remover socket antigo
-rm /tmp/clippit.sock
-
-# Verificar permissões
-ls -la ~/.local/share/clippit/
+cargo bench
 ```
 
-### Hotkey não funciona
+---
 
-```bash
-# Verificar conflitos
-dconf read /org/gnome/desktop/wm/keybindings/
+## 🔐 Security
 
-# Testar com outro atalho (editar hotkey.rs)
-```
+### Considerações
 
-### Tests falhando
+- **Wayland**: Clipboard via arboard (wl-clipboard-rs), seguro e nativo
+- **SQLite**: Banco local, sem acesso remoto
+- **IPC**: Unix socket local (`/tmp/clippit.sock`)
+- **Permissions**: Daemon roda como usuário (não root)
 
-```bash
-# Limpar build
-cargo clean
+### Sanitization
 
-# Rebuild
-cargo build
+- Inputs são validados antes de salvar no banco
+- Paths são canonicalizados antes de uso
+- SQL usa prepared statements (SQLi-safe)
 
-# Run tests com output
-cargo test -- --nocapture
-```
+---
 
-## Roadmap Técnico
+## 🤝 Contribuindo
 
-### V1.1 (Próximas melhorias)
-- [ ] Interface Qt/QML completa
-- [ ] Suporte a imagens completo (não só validação)
-- [ ] Busca por texto no histórico
-- [ ] Configuração via arquivo TOML
+### Fluxo
 
-### V2.0
-- [ ] Suporte Wayland
-- [ ] Sincronização entre máquinas
-- [ ] Criptografia de dados sensíveis
-- [ ] Plugin system
-
-## Contribuindo
-
-1. Fork o projeto
-2. Crie uma branch: `git checkout -b feature/nova-funcionalidade`
-3. Commit: `git commit -am 'Adiciona nova funcionalidade'`
-4. Push: `git push origin feature/nova-funcionalidade`
-5. Abra um Pull Request
+1. Fork o repositório
+2. Crie branch: `git checkout -b feat/minha-feature`
+3. Commit: `git commit -m 'feat: adiciona X'`
+4. Push: `git push origin feat/minha-feature`
+5. Abra Pull Request
 
 ### Checklist PR
 
-- [ ] Código compila sem warnings
-- [ ] Testes adicionados para nova funcionalidade
-- [ ] Testes passando
+- [ ] Código formatado (`cargo fmt`)
+- [ ] Sem warnings de clippy (`cargo clippy`)
+- [ ] Testes passando (`cargo test`)
 - [ ] Documentação atualizada
 - [ ] CHANGELOG.md atualizado
+
+---
+
+## 📚 Recursos
+
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [GTK4 Docs](https://docs.gtk.org/gtk4/)
+- [libadwaita Docs](https://gnome.pages.gitlab.gnome.org/libadwaita/)
+- [arboard](https://github.com/1Password/arboard)
+- [Wayland Protocol](https://wayland.freedesktop.org/)
+
+---
+
+**Dúvidas?** Abra um [issue](https://github.com/seu-usuario/clippit/issues) ou entre no [Discord](#)
