@@ -94,10 +94,22 @@ pub fn load_custom_css() {
         
         .suggestion-history-icon {
             color: @success_color;
+            opacity: 0.9;
         }
         
-        .suggestion-dict-icon {
-            color: @accent_color;
+        .suggestion-row:selected .suggestion-history-icon {
+            color: @accent_fg_color;
+            opacity: 1;
+        }
+        
+        /* Garante que botões de ação sejam visíveis em qualquer tema */
+        button.flat.circular {
+            opacity: 0.7;
+            transition: opacity 0.2s ease;
+        }
+        
+        button.flat.circular:hover {
+            opacity: 1;
         }"
     );
     

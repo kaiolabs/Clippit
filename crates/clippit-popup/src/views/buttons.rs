@@ -10,6 +10,7 @@ pub fn add_delete_button(row: &adw::ActionRow, entry_id: i64, list_box: &gtk::Li
     let delete_button = gtk::Button::from_icon_name("user-trash-symbolic");
     delete_button.set_valign(gtk::Align::Center);
     delete_button.add_css_class("flat");
+    delete_button.add_css_class("circular");
     delete_button.set_tooltip_text(Some(&t!("popup.delete_item_tooltip")));
     
     let delete_entry_id = entry_id;
@@ -56,9 +57,10 @@ pub fn add_copy_button(
     window: &adw::ApplicationWindow,
     app: &gtk::Application,
 ) {
-    let copy_button = gtk::Button::from_icon_name("edit-copy");
+    let copy_button = gtk::Button::from_icon_name("edit-copy-symbolic");
     copy_button.set_valign(gtk::Align::Center);
     copy_button.add_css_class("flat");
+    copy_button.add_css_class("circular");
     copy_button.set_tooltip_text(Some("Copiar para clipboard"));
     
     let button_entry_id = entry_id;

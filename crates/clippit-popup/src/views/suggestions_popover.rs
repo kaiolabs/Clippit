@@ -56,10 +56,10 @@ impl SuggestionsPopover {
             box_row.set_margin_bottom(6);
             box_row.set_hexpand(true);
             
-            // Ícone baseado na fonte
+            // Ícone baseado na fonte (usando simbólico para adaptar ao tema)
             let icon = match suggestion.source {
                 SuggestionSource::History => {
-                    let icon = gtk::Image::from_icon_name("document-open-recent");
+                    let icon = gtk::Image::from_icon_name("document-open-recent-symbolic");
                     icon.add_css_class("suggestion-history-icon");
                     icon
                 }
