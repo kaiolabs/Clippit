@@ -82,7 +82,7 @@ pub fn setup_search_filter(
         if let Some(current_word) = extract_current_word(&text, entry.position()) {
             if current_word.len() >= 2 {
                 let suggestions = suggestion_engine_for_changed.borrow()
-                    .get_suggestions(&current_word, 7);
+                    .get_suggestions(&current_word, 3);  // Máximo 3 sugestões
                 
                 if !suggestions.is_empty() {
                     suggestions_popover_for_changed.borrow_mut().update_suggestions(suggestions);
