@@ -109,13 +109,19 @@ pub fn setup_search_filter(
         
         match key {
             gtk::gdk::Key::Tab => {
+                eprintln!("🔍 Tab pressed - popover_visible: {}", popover_visible);
                 // Completar palavra selecionada (só se popover visível)
                 if popover_visible {
                     if let Some(suggestion) = suggestions_popover_for_keys.borrow().get_selected_suggestion() {
+                        eprintln!("🔍 Completing with: {}", suggestion.word);
                         complete_current_word(&search_entry_for_keys, &suggestion.word);
                         suggestions_popover_for_keys.borrow().hide();
                         return gtk::glib::Propagation::Stop;
+                    } else {
+                        eprintln!("🔍 No suggestion selected");
                     }
+                } else {
+                    eprintln!("🔍 Popover not visible");
                 }
             }
             gtk::gdk::Key::Up => {
