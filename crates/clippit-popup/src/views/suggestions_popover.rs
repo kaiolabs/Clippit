@@ -13,7 +13,7 @@ impl SuggestionsPopover {
     pub fn new(parent: &gtk::SearchEntry) -> Self {
         let popover = Popover::new();
         popover.set_parent(parent);
-        popover.set_position(gtk::PositionType::Top);  // Preferencialmente em cima
+        popover.set_position(gtk::PositionType::Bottom);  // Preferencialmente embaixo
         popover.set_autohide(false);
         popover.add_css_class("suggestions-popover");
         
