@@ -136,6 +136,36 @@ fn handle_ipc_message(
             }
         }
 
+        IpcMessage::QueryHistoryMetadataWithOffset { limit, offset } => {
+            let manager = history_manager.lock().unwrap();
+            match manager.get_recent_metadata_with_offset(limit, offset) {
+                Ok(entries) => {
+                    let ipc_entries: Vec<HistoryEntry> = entries
+                        .into_iter()
+                        .map(|e| HistoryEntry {
+                            id: e.id,
+                            content_type: match e.content_type {
+                                clippit_core::ContentType::Text => ContentType::Text,
+                                clippit_core::ContentType::Image => ContentType::Image,
+                            },
+                            content_text: e.content_text,
+                            content_data: e.content_data,
+                            image_path: e.image_path,
+                            thumbnail_data: e.thumbnail_data,
+                            timestamp: e.timestamp,
+                        })
+                        .collect();
+                    info!("Returned {} metadata entries with offset {} (infinite scroll)", ipc_entries.len(), offset);
+                    IpcResponse::HistoryMetadataResponse {
+                        entries: ipc_entries,
+                    }
+                }
+                Err(e) => IpcResponse::Error {
+                    message: format!("Failed to get history metadata with offset: {}", e),
+                },
+            }
+        }
+
         IpcMessage::GetEntryData { id } => {
             let manager = history_manager.lock().unwrap();
             match manager.get_by_id(id) {

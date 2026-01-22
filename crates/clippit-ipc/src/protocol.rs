@@ -24,8 +24,9 @@ pub struct HistoryEntry {
 pub enum IpcMessage {
     ShowPopup,
     QueryHistory { limit: usize },           // Existing - kept for compatibility
-    QueryHistoryMetadata { limit: usize },   // NEW: Get metadata without image data
-    GetEntryData { id: i64 },                // NEW: Get full data for specific entry
+    QueryHistoryMetadata { limit: usize },   // Get metadata without image data
+    QueryHistoryMetadataWithOffset { limit: usize, offset: usize },  // For infinite scroll
+    GetEntryData { id: i64 },                // Get full data for specific entry
     SelectItem { id: i64 },
     Ping,
 }

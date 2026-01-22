@@ -52,6 +52,15 @@ impl IpcClient {
         }
     }
 
+    /// Query history metadata with offset (for infinite scroll)
+    pub fn query_history_metadata_with_offset(limit: usize, offset: usize) -> Result<Vec<crate::protocol::HistoryEntry>> {
+        match Self::send_message(IpcMessage::QueryHistoryMetadataWithOffset { limit, offset })? {
+            IpcResponse::HistoryMetadataResponse { entries } => Ok(entries),
+            IpcResponse::Error { message } => Err(anyhow::anyhow!("Server error: {}", message)),
+            _ => Err(anyhow::anyhow!("Unexpected response")),
+        }
+    }
+
     /// Get full data for a specific entry by ID (loads image data on-demand)
     pub fn get_entry_data(id: i64) -> Result<crate::protocol::HistoryEntry> {
         match Self::send_message(IpcMessage::GetEntryData { id })? {
