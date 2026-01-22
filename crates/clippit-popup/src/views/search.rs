@@ -24,8 +24,8 @@ pub fn setup_search_filter(
     let suggestion_engine = Rc::new(RefCell::new(SuggestionEngine::new()));
     let suggestions_popover = Rc::new(RefCell::new(SuggestionsPopover::new(search_entry)));
     
-    // Popular histórico no engine
-    match IpcClient::query_history_metadata(100) {
+    // Popular histórico no engine (mesmo número de entradas da lista)
+    match IpcClient::query_history_metadata(20) {
         Ok(entries) => {
             suggestion_engine.borrow_mut().update_history_words(&entries);
             eprintln!("✅ {} entradas carregadas para sugestões", entries.len());
