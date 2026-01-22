@@ -96,6 +96,10 @@ impl SuggestionsPopover {
         self.popover.popdown();
     }
     
+    pub fn is_visible(&self) -> bool {
+        self.popover.is_visible()
+    }
+    
     pub fn navigate_up(&mut self) {
         if self.selected_index > 0 {
             self.selected_index -= 1;

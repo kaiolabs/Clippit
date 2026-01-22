@@ -105,26 +105,38 @@ pub fn setup_search_filter(
     let suggestions_popover_for_keys = suggestions_popover.clone();
     
     key_controller.connect_key_pressed(move |_, key, _, _| {
+        let popover_visible = suggestions_popover_for_keys.borrow().is_visible();
+        
         match key {
             gtk::gdk::Key::Tab => {
-                // Completar palavra selecionada
-                if let Some(suggestion) = suggestions_popover_for_keys.borrow().get_selected_suggestion() {
-                    complete_current_word(&search_entry_for_keys, &suggestion.word);
-                    suggestions_popover_for_keys.borrow().hide();
-                    return gtk::glib::Propagation::Stop;
+                // Completar palavra selecionada (só se popover visível)
+                if popover_visible {
+                    if let Some(suggestion) = suggestions_popover_for_keys.borrow().get_selected_suggestion() {
+                        complete_current_word(&search_entry_for_keys, &suggestion.word);
+                        suggestions_popover_for_keys.borrow().hide();
+                        return gtk::glib::Propagation::Stop;
+                    }
                 }
             }
             gtk::gdk::Key::Up => {
-                suggestions_popover_for_keys.borrow_mut().navigate_up();
-                return gtk::glib::Propagation::Stop;
+                // Só navega nas sugestões se popover visível
+                if popover_visible {
+                    suggestions_popover_for_keys.borrow_mut().navigate_up();
+                    return gtk::glib::Propagation::Stop;
+                }
             }
             gtk::gdk::Key::Down => {
-                suggestions_popover_for_keys.borrow_mut().navigate_down();
-                return gtk::glib::Propagation::Stop;
+                // Só navega nas sugestões se popover visível
+                if popover_visible {
+                    suggestions_popover_for_keys.borrow_mut().navigate_down();
+                    return gtk::glib::Propagation::Stop;
+                }
             }
             gtk::gdk::Key::Escape => {
-                suggestions_popover_for_keys.borrow().hide();
-                return gtk::glib::Propagation::Stop;
+                if popover_visible {
+                    suggestions_popover_for_keys.borrow().hide();
+                    return gtk::glib::Propagation::Stop;
+                }
             }
             _ => {}
         }
