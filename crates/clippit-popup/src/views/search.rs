@@ -112,9 +112,14 @@ pub fn setup_search_filter(
                 eprintln!("🔍 Tab pressed - popover_visible: {}", popover_visible);
                 // Completar palavra selecionada (só se popover visível)
                 if popover_visible {
-                    if let Some(suggestion) = suggestions_popover_for_keys.borrow().get_selected_suggestion() {
-                        eprintln!("🔍 Completing with: {}", suggestion.word);
-                        complete_current_word(&search_entry_for_keys, &suggestion.word);
+                    // Clone word ANTES de chamar complete_current_word para evitar "RefCell already borrowed"
+                    let word_to_complete = suggestions_popover_for_keys.borrow()
+                        .get_selected_suggestion()
+                        .map(|s| s.word.clone());
+                    
+                    if let Some(word) = word_to_complete {
+                        eprintln!("🔍 Completing with: {}", word);
+                        complete_current_word(&search_entry_for_keys, &word);
                         suggestions_popover_for_keys.borrow().hide();
                         return gtk::glib::Propagation::Stop;
                     } else {
