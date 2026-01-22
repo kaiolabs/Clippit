@@ -31,7 +31,7 @@ pub fn setup_keyboard_navigation(
     let hotkey_str_for_closure = hotkey_str.clone();
     
     let key_controller = gtk::EventControllerKey::new();
-    key_controller.set_propagation_phase(gtk::PropagationPhase::Capture);
+    key_controller.set_propagation_phase(gtk::PropagationPhase::Bubble);  // Processa DEPOIS do search_entry
     
     key_controller.connect_key_pressed(move |_, key, _, modifiers| {
         // Check if this is the configured hotkey (for toggle)
