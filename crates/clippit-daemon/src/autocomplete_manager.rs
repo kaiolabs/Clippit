@@ -14,6 +14,8 @@ pub struct AutocompleteManager {
     selected_index: Arc<Mutex<usize>>,
     /// Palavra parcial atual
     current_partial: Arc<Mutex<String>>,
+    /// Última posição do cursor (para mostrar popup)
+    last_cursor_pos: Arc<Mutex<(i32, i32)>>,
 }
 
 impl AutocompleteManager {
@@ -22,6 +24,7 @@ impl AutocompleteManager {
             current_suggestions: Arc::new(Mutex::new(Vec::new())),
             selected_index: Arc::new(Mutex::new(0)),
             current_partial: Arc::new(Mutex::new(String::new())),
+            last_cursor_pos: Arc::new(Mutex::new((0, 0))),
         }
     }
 
@@ -41,6 +44,7 @@ impl AutocompleteManager {
 
         // Obter posição do cursor
         let cursor_pos = self.get_cursor_position()?;
+        *self.last_cursor_pos.lock().unwrap() = cursor_pos; // 🔑 Armazenar posição!
 
         // Mostrar popup flutuante próximo ao cursor
         self.show_floating_popup(&suggestions, cursor_pos)?;
@@ -243,40 +247,87 @@ impl AutocompleteManager {
         Ok(())
     }
 
-    /// Atualiza notificação com nova seleção
+    /// Atualiza popup com nova seleção
     fn refresh_notification(&self) {
-        let suggestions = self.current_suggestions.lock().unwrap();
+        let suggestions = self.current_suggestions.lock().unwrap().clone();
         let index = *self.selected_index.lock().unwrap();
+        let cursor_pos = self.last_cursor_pos.lock().unwrap().clone();
 
         if suggestions.is_empty() {
             return;
         }
 
-        let text = suggestions
+        // Fechar popup anterior
+        let _ = Command::new("pkill")
+            .arg("-f")
+            .arg("yad.*Clippit")
+            .output();
+
+        // Mostrar novo popup com seleção atualizada
+        self.show_floating_popup_with_selection(&suggestions, index, cursor_pos).ok();
+    }
+    
+    /// Mostra popup com índice de seleção específico
+    fn show_floating_popup_with_selection(&self, suggestions: &[Suggestion], selected: usize, pos: (i32, i32)) -> Result<()> {
+        let words: Vec<String> = suggestions
             .iter()
             .take(5)
             .enumerate()
             .map(|(i, s)| {
-                if i == index {
+                if i == selected {
                     format!("➜ {}", s.word)
                 } else {
                     format!("  {}", s.word)
                 }
             })
-            .collect::<Vec<_>>()
-            .join("\n");
+            .collect();
 
-        let hint = format!("💡 Sugestões ({}/{})\n{}", index + 1, suggestions.len(), text);
+        let text = format!("💡 Sugestões (Tab):\n{}", words.join("\n"));
+        let (x, y) = pos;
+        
+        // Spawn em thread separada para não bloquear
+        std::thread::spawn(move || {
+            // Tentar yad com --no-focus primeiro (overlay sem roubar foco!)
+            let yad_result = Command::new("yad")
+                .arg("--text-info")
+                .arg("--title=")
+                .arg(format!("--width=280"))
+                .arg(format!("--height=140"))
+                .arg(format!("--posx={}", x))
+                .arg(format!("--posy={}", y + 20)) // Abaixo do cursor
+                .arg("--no-buttons")
+                .arg("--no-focus")           // 🔑 NÃO ROUBAR FOCO!
+                .arg("--skip-taskbar")
+                .arg("--skip-pager")
+                .arg("--on-top")
+                .arg("--undecorated")
+                .arg("--no-escape")
+                .arg("--timeout=5")
+                .arg("--timeout-indicator=bottom")
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+                .and_then(|mut child| {
+                    use std::io::Write;
+                    if let Some(ref mut stdin) = child.stdin {
+                        let _ = stdin.write_all(text.as_bytes());
+                    }
+                    child.wait()
+                });
 
-        Command::new("notify-send")
-            .arg("Clippit Autocomplete")
-            .arg(&hint)
-            .arg("-t")
-            .arg("3000")
-            .arg("-u")
-            .arg("low")
-            .spawn()
-            .ok();
+            // Se yad falhar, usar notify-send (nunca rouba foco)
+            if yad_result.is_err() {
+                let _ = Command::new("notify-send")
+                    .arg("Clippit Autocomplete")
+                    .arg(&text)
+                    .arg("-t")
+                    .arg("2500")
+                    .arg("-u")
+                    .arg("low")
+                    .output();
+            }
+        });
+
+        Ok(())
     }
 
     fn get_suggestions_file_path(&self) -> Result<PathBuf> {
