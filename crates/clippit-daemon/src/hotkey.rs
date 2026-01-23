@@ -140,13 +140,23 @@ fn notify_ui_show_popup() -> Result<()> {
     
     // Launch clippit-popup (Wayland-native, no window ID needed)
     info!("🚀 Opening popup...");
+    eprintln!("🚀🚀🚀 EXECUTING: clippit-popup");
+    eprintln!("🔍 Binary path: /usr/local/bin/clippit-popup");
     
-    std::process::Command::new("clippit-popup")
+    let result = std::process::Command::new("/usr/local/bin/clippit-popup")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::inherit())
-        .spawn()
-        .ok();
+        .spawn();
+    
+    match result {
+        Ok(child) => {
+            eprintln!("✅ clippit-popup spawned successfully (PID: {})", child.id());
+        }
+        Err(e) => {
+            eprintln!("❌ Failed to spawn clippit-popup: {}", e);
+        }
+    }
     
     // Small delay to allow popup to create lock file
     std::thread::sleep(std::time::Duration::from_millis(150));
