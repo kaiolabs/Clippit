@@ -85,15 +85,49 @@ fn handle_lock_file() -> Result<()> {
     if lock_file.exists() {
         if let Ok(content) = std::fs::read_to_string(lock_file) {
             if let Ok(pid) = content.trim().parse::<u32>() {
-                let check = std::process::Command::new("kill")
-                    .args(&["-0", &pid.to_string()])
+                // Verificar se processo está rodando
+                let check = std::process::Command::new("ps")
+                    .args(&["-p", &pid.to_string(), "-o", "stat="])
                     .output();
                 
-                if check.is_ok() && check.unwrap().status.success() {
-                    eprintln!("Clippit popup already running (PID: {})", pid);
-                    std::process::exit(0);
+                if let Ok(output) = check {
+                    let stat = String::from_utf8_lossy(&output.stdout);
+                    
+                    // Se processo está rodando (não é zombie)
+                    if !stat.trim().is_empty() && !stat.trim().starts_with('Z') {
+                        eprintln!("🔄 Popup já rodando (PID: {}) - fechando (toggle)", pid);
+                        
+                        // Enviar SIGTERM para fechar
+                        let _ = std::process::Command::new("kill")
+                            .args(&["-TERM", &pid.to_string()])
+                            .output();
+                        
+                        // Aguardar processo fechar (até 500ms)
+                        for i in 0..10 {
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                            
+                            let check = std::process::Command::new("ps")
+                                .args(&["-p", &pid.to_string()])
+                                .output();
+                            
+                            if let Ok(output) = check {
+                                if !output.status.success() {
+                                    eprintln!("✅ Popup fechado após {}ms", (i + 1) * 50);
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Limpar lock file
+                        std::fs::remove_file(lock_file).ok();
+                        eprintln!("✅ Toggle completo - saindo");
+                        std::process::exit(0);
+                    } else {
+                        eprintln!("💀 Limpando lock file de processo zombie/inexistente (PID: {})", pid);
+                        std::fs::remove_file(lock_file).ok();
+                    }
                 } else {
-                    eprintln!("Removing stale lock file (PID {} not running)", pid);
+                    eprintln!("⚠️  Removendo lock file - não foi possível verificar processo");
                     std::fs::remove_file(lock_file).ok();
                 }
             }
@@ -146,6 +180,23 @@ fn build_ui(app: &Application) {
         
         // Populate history list with entries
         populate_history_list(&list_box_clone, &window_clone, &app_clone, &entry_map_clone, &search_map_clone);
+        
+        // ⚠️ IMPORTANTE: Garantir que primeiro item está selecionado E focado
+        // Usar timeout para garantir que GTK processou a lista completamente
+        let list_box_for_focus = list_box_clone.clone();
+        gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(50), move || {
+            // Selecionar primeiro item explicitamente
+            if let Some(first_row) = list_box_for_focus.row_at_index(0) {
+                list_box_for_focus.select_row(Some(&first_row));
+                eprintln!("✅ Primeiro item selecionado explicitamente");
+                
+                // Dar foco ao primeiro item (não ao list_box)
+                first_row.grab_focus();
+                eprintln!("✅ Foco dado ao primeiro item");
+            } else {
+                eprintln!("⚠️  Nenhum item encontrado para focar");
+            }
+        });
         
         // Setup search filtering (with ability to reload list)
         setup_search_filter(&list_box_clone, &search_entry_clone, &search_map_clone, &window_clone, &app_clone, &entry_map_clone);
