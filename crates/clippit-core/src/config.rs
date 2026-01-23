@@ -152,7 +152,7 @@ pub struct AdvancedConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutocompleteConfig {
     /// Habilitar autocomplete global
-    #[serde(default = "default_false")]
+    #[serde(default = "default_autocomplete_enabled")]
     pub enabled: bool,
     
     /// Número máximo de sugestões a mostrar
@@ -224,6 +224,7 @@ fn default_focus_search_modifier() -> String { "ctrl".to_string() }
 fn default_focus_search_key() -> String { "p".to_string() }
 
 // Autocomplete defaults
+fn default_autocomplete_enabled() -> bool { true }  // ✅ ATIVADO POR PADRÃO
 fn default_autocomplete_max_suggestions() -> usize { 3 }
 fn default_autocomplete_min_chars() -> usize { 2 }
 fn default_autocomplete_delay_ms() -> u64 { 300 }
@@ -317,7 +318,7 @@ impl Default for Config {
 impl Default for AutocompleteConfig {
     fn default() -> Self {
         Self {
-            enabled: default_false(),
+            enabled: default_autocomplete_enabled(),  // ✅ ATIVADO POR PADRÃO
             max_suggestions: default_autocomplete_max_suggestions(),
             min_chars: default_autocomplete_min_chars(),
             delay_ms: default_autocomplete_delay_ms(),

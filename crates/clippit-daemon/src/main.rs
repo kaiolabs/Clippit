@@ -242,6 +242,42 @@ fn handle_ipc_message(
             // This is handled by the UI, daemon just acknowledges
             IpcResponse::Ok
         }
+
+        // ========== AUTOCOMPLETE GLOBAL MESSAGES ==========
+        IpcMessage::KeystrokeEvent { .. } => {
+            // TODO: Processar keystroke event
+            IpcResponse::Ok
+        }
+
+        IpcMessage::RequestAutocompleteSuggestions {
+            partial_word,
+            context,
+            max_results,
+        } => {
+            // TODO: Usar typing_monitor para gerar sugestões
+            info!(
+                "Autocomplete request: '{}' in {} (max: {})",
+                partial_word, context.app_name, max_results
+            );
+            IpcResponse::AutocompleteSuggestions {
+                suggestions: vec![],
+                query: partial_word,
+            }
+        }
+
+        IpcMessage::AcceptSuggestion {
+            suggestion,
+            partial_word,
+        } => {
+            info!(
+                "Suggestion accepted: '{}' (was: '{}')",
+                suggestion, partial_word
+            );
+            IpcResponse::SuggestionAccepted
+        }
+
+        IpcMessage::ShowAutocompletePopup { .. } => IpcResponse::Ok,
+        IpcMessage::HideAutocompletePopup => IpcResponse::Ok,
     }
 }
 

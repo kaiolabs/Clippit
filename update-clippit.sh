@@ -77,6 +77,26 @@ sudo chmod +x /usr/local/bin/clippit-daemon
 sudo chmod +x /usr/local/bin/clippit-popup
 sudo chmod +x /usr/local/bin/clippit-dashboard
 
+# Instalar IBus Component (Autocomplete Global)
+echo "⌨️  Instalando IBus Component (Autocomplete Global)..."
+if [ -f "target/release/clippit-ibus" ]; then
+    sudo cp target/release/clippit-ibus /usr/local/bin/clippit-ibus
+    sudo chmod +x /usr/local/bin/clippit-ibus
+    
+    # Instalar XML component definition
+    sudo mkdir -p /usr/share/ibus/component
+    sudo cp crates/clippit-ibus/data/clippit.xml /usr/share/ibus/component/
+    
+    # Reiniciar IBus (se estiver rodando)
+    if command -v ibus &> /dev/null; then
+        ibus restart &>/dev/null &
+    fi
+    
+    echo "✅ IBus Component instalado (configure em Settings → Keyboard → Input Sources)"
+else
+    echo "⚠️  clippit-ibus não encontrado, pulando instalação do IBus"
+fi
+
 # Instalar ícone em múltiplos tamanhos (importante para Wayland/GNOME)
 echo "🎨 Instalando ícone..."
 

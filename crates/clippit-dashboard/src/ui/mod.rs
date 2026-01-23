@@ -3,6 +3,7 @@ mod hotkeys;
 mod search;
 mod theme;
 mod privacy;
+mod autocomplete;
 
 use gtk::prelude::*;
 use libadwaita as adw;
@@ -27,6 +28,7 @@ pub fn create_content() -> gtk::Widget {
         (t!("menu.general").to_string(), "preferences-system-symbolic"),
         (t!("menu.hotkeys").to_string(), "input-keyboard-symbolic"),
         ("Pesquisa".to_string(), "edit-find-symbolic"),
+        ("Autocompletar".to_string(), "input-keyboard-symbolic"),
         (t!("menu.theme").to_string(), "applications-graphics-symbolic"),
         (t!("menu.privacy").to_string(), "security-high-symbolic"),
     ];
@@ -60,8 +62,9 @@ pub fn create_content() -> gtk::Widget {
     stack.add_named(&general::create_page(), Some("0"));
     stack.add_named(&hotkeys::create_page(), Some("1"));
     stack.add_named(&search::create_page(), Some("2"));
-    stack.add_named(&theme::create_page(), Some("3"));
-    stack.add_named(&privacy::create_page(), Some("4"));
+    stack.add_named(&autocomplete::create_page(), Some("3"));
+    stack.add_named(&theme::create_page(), Some("4"));
+    stack.add_named(&privacy::create_page(), Some("5"));
 
     // Connect sidebar selection to stack
     let stack_clone = stack.clone();
