@@ -160,6 +160,7 @@ impl FloatingAutocomplete {
     }
 
     /// Esconder popup
+    #[allow(dead_code)]
     pub fn hide(&self) {
         self.window.hide();
     }
