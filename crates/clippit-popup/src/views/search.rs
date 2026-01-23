@@ -247,11 +247,59 @@ pub fn setup_search_filter(
         key_controller.set_propagation_phase(gtk::PropagationPhase::Capture);
         let search_entry_for_keys = search_entry.clone();
         let perform_search_for_keys = perform_search.clone();
+        let list_box_for_keys = list_box.clone();
+        let entry_map_for_keys = entry_map.clone();
+        let window_for_keys = window.clone();
+        let app_for_keys = app.clone();
         
         key_controller.connect_key_pressed(move |_, key, _, _| {
             let popover_visible = suggestions_popover_for_keys.borrow().is_visible();
             
             match key {
+                gtk::gdk::Key::Return | gtk::gdk::Key::KP_Enter => {
+                    eprintln!("🔑 Enter pressed in search_entry");
+                    eprintln!("   Popover visible: {}", popover_visible);
+                    eprintln!("   Search text: '{}'", search_entry_for_keys.text());
+                    
+                    if popover_visible {
+                        // Se popover está visível, deixa o comportamento padrão
+                        eprintln!("   → Popover visible, proceeding");
+                        return gtk::glib::Propagation::Proceed;
+                    }
+                    
+                    // Se popover NÃO está visível E search está vazio, copia o item selecionado
+                    let text = search_entry_for_keys.text();
+                    if text.is_empty() {
+                        eprintln!("   → Empty search, copying selected item directly");
+                        
+                        // Copiar item selecionado diretamente
+                        if let Some(selected_row) = list_box_for_keys.selected_row() {
+                            let row_index = selected_row.index();
+                            eprintln!("   → Selected row index: {}", row_index);
+                            
+                            if let Some(&entry_id) = entry_map_for_keys.borrow().get(&row_index) {
+                                eprintln!("   → Copying entry ID: {}", entry_id);
+                                
+                                use crate::controllers::copy_to_clipboard;
+                                copy_to_clipboard(entry_id);
+                                
+                                eprintln!("   → Closing window after copy");
+                                window_for_keys.close();
+                                app_for_keys.quit();
+                            } else {
+                                eprintln!("   ⚠️  No entry_id found for row index {}", row_index);
+                            }
+                        } else {
+                            eprintln!("   ⚠️  No row selected");
+                        }
+                        
+                        return gtk::glib::Propagation::Stop;
+                    } else {
+                        eprintln!("   → Search text present, proceeding with search");
+                    }
+                    
+                    return gtk::glib::Propagation::Proceed;
+                }
                 gtk::gdk::Key::Tab => {
                     if popover_visible {
                         let word_to_complete = suggestions_popover_for_keys.borrow()
