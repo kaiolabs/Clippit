@@ -20,7 +20,7 @@
 
 - 📋 **Captura Automática** - Monitora e salva tudo que você copia
 - 🖼️ **Suporte a Imagens** - Salva prints e imagens copiadas
-- 🔍 **Busca Inteligente** - Encontre rapidamente o que procura
+- 🔍 **Busca Inteligente** - Encontre rapidamente o que procura com pesquisa em tempo real
 - ⌨️ **Atalho Global** - Pressione `Super+V` para abrir instantaneamente
 - 💾 **Histórico Persistente** - Seus dados salvos em SQLite
 - 🎨 **Interface Moderna** - Design limpo com GTK4 e libadwaita
@@ -28,6 +28,7 @@
 - 🔒 **Baixo Consumo** - Menos de 20MB de RAM
 - 🗑️ **Gerenciamento Fácil** - Delete itens individualmente ou limpe tudo
 - ⚙️ **Configurável** - Dashboard intuitivo para ajustar preferências
+- 🚀 **Autocomplete Global** - 🆕 Sugestões inteligentes enquanto você digita em **qualquer aplicativo**!
 
 ---
 
@@ -40,6 +41,9 @@
 ### Dashboard de Configurações
 ![Clippit Dashboard](docs/screenshot-dashboard.png)
 *Central de controle com todas as opções*
+
+### 🚀 Autocomplete Global (NOVO!)
+Sugestões inteligentes aparecem enquanto você digita em **qualquer aplicativo** - como no celular, mas no desktop! Pressione **Tab** para aceitar a sugestão.
 
 ---
 
@@ -78,7 +82,8 @@ systemctl --user enable --now clippit
 # 1. Instalar dependências
 sudo apt update && sudo apt install -y \
     curl build-essential pkg-config \
-    libgtk-4-dev libadwaita-1-dev libsqlite3-dev
+    libgtk-4-dev libadwaita-1-dev libsqlite3-dev \
+    xdotool yad ibus
 
 # 2. Instalar Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -100,6 +105,7 @@ sudo dpkg -i clippit_*.deb
 
 ### ⌨️ **Atalhos de Teclado**
 
+#### **Histórico de Clipboard:**
 | Atalho | Ação |
 |--------|------|
 | `Super+V` | Abrir popup do histórico |
@@ -109,6 +115,15 @@ sudo dpkg -i clippit_*.deb
 | `Esc` | Fechar popup |
 | `Ctrl+F` | Focar na busca |
 
+#### **Autocomplete Global:** 🆕
+| Ação | Resultado |
+|------|-----------|
+| Digite `"cód"` | Popup com sugestões: "código", "códigos"... |
+| `Tab` | Aceita sugestão e injeta texto completo |
+| `↑` `↓` | Navega entre sugestões |
+| `Esc` | Fecha popup de sugestões |
+| `Ctrl+Shift+A` | Liga/desliga autocomplete (configurável) |
+
 ### 🎛️ **Dashboard de Configurações**
 
 Abra o dashboard para:
@@ -117,6 +132,13 @@ Abra o dashboard para:
 - 📏 Configurar tamanho máximo de imagens
 - 🖼️ Ativar/desativar captura de imagens
 - 🎨 Personalizar aparência
+- 🚀 **Configurar Autocomplete Global**:
+  - Ativar/desativar
+  - Número mínimo de caracteres
+  - Atraso antes de mostrar sugestões
+  - Apps ignorados (ex: campos de senha)
+  - Tecla de atalho para ligar/desligar
+  - Número máximo de sugestões
 
 Abra via menu de aplicativos ou:
 ```bash
@@ -200,6 +222,9 @@ clippit/
 ### **Dependências Runtime:**
 - `GTK4 4.6+` - Interface gráfica
 - `libadwaita 1.2+` - Componentes modernos
+- `xdotool` - Injeção de texto (autocomplete)
+- `yad` ou `zenity` - Popup de sugestões
+- `ibus` - Captura de teclado global
 
 ### **Hardware:**
 - CPU: Qualquer processador x86_64
@@ -294,6 +319,49 @@ systemctl --user restart clippit
 ```
 </details>
 
+<details>
+<summary><b>🚀 Autocomplete não aparece</b></summary>
+
+```bash
+# Verificar se está ativado
+clippit-dashboard  # Aba "Autocompletar"
+
+# Instalar dependências necessárias
+sudo apt install xdotool yad ibus
+
+# Ver logs em tempo real
+journalctl --user -u clippit -f
+
+# Reiniciar daemon
+systemctl --user restart clippit
+```
+</details>
+
+<details>
+<summary><b>💬 Autocomplete rouba foco / não injeta texto</b></summary>
+
+**Popup rouba foco:**
+- O popup deve aparecer como "overlay fantasma" sem roubar foco
+- Certifique-se de ter `yad` instalado e atualizado: `sudo apt upgrade yad`
+- Alternativa: Use `notify-send` (mais discreto, mas menos visual)
+
+**Não injeta texto:**
+```bash
+# Testar xdotool manualmente
+xdotool type "teste"
+
+# Se não funcionar, pode ser limitação do Wayland
+# Apps Wayland-native podem bloquear injeção de texto
+
+# Solução: Force app em modo XWayland
+GDK_BACKEND=x11 nome-do-app
+```
+
+**Compatibilidade:**
+- ✅ Funciona: Firefox, Chrome, VS Code, gedit, LibreOffice
+- ⚠️ Limitado: Apps GNOME Wayland-native (Text Editor, etc.)
+</details>
+
 ---
 
 ## 🗺️ **Roadmap**
@@ -307,21 +375,37 @@ systemctl --user restart clippit
 - [x] Dashboard de configurações
 - [x] Busca no histórico
 - [x] Pacote .deb
+- [x] Suporte nativo a Wayland
 
-### 🚧 **v1.1 - Melhorias** (Em breve)
+### ✅ **v1.9 - Autocomplete Global** 🆕
+- [x] Captura de teclado global (rdev)
+- [x] Sugestões baseadas em histórico
+- [x] Popup overlay "fantasma" (sem roubar foco)
+- [x] Navegação com setas (↑↓)
+- [x] Injeção automática de texto (Tab)
+- [x] Configuração completa via dashboard
+- [x] Filtro de apps ignorados
+- [x] Atalho para ligar/desligar
+- [x] Pesquisa em tempo real
+
+### 🚧 **v2.0 - Melhorias & IA** (Em desenvolvimento)
+- [ ] Sugestões com IA (completar frases, contexto)
+- [ ] Correção ortográfica automática
+- [ ] Tradução em tempo real
+- [ ] Snippets e templates personalizados
 - [ ] Fixar itens favoritos
 - [ ] Categorias/tags
 - [ ] Estatísticas detalhadas
 - [ ] Temas customizados
 - [ ] Importar/exportar histórico
 
-### 🔮 **v2.0 - Futuro**
-- [x] Suporte a Wayland (concluído em v1.1)
+### 🔮 **v3.0 - Futuro**
 - [ ] Sincronização entre máquinas
 - [ ] Aplicativo mobile companion
 - [ ] Plugins/extensões
 - [ ] OCR em imagens
 - [ ] Criptografia de dados sensíveis
+- [ ] Suporte a mais protocolos (X11, Windows, macOS)
 
 ---
 
