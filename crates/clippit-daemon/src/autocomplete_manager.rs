@@ -72,55 +72,63 @@ impl AutocompleteManager {
         Ok((x, y + 20))
     }
 
-    /// Mostra popup flutuante usando yad (mais leve que zenity)
+    /// Mostra popup "fantasma" SEM roubar foco (overlay tooltip-like)
     fn show_floating_popup(&self, suggestions: &[Suggestion], pos: (i32, i32)) -> Result<()> {
-        // Usar yad se disponível, senão fallback para notificação
         let words: Vec<String> = suggestions
             .iter()
             .take(5)
-            .map(|s| s.word.clone())
+            .enumerate()
+            .map(|(i, s)| {
+                if i == 0 {
+                    format!("➜ {}", s.word)
+                } else {
+                    format!("  {}", s.word)
+                }
+            })
             .collect();
 
+        let text = format!("💡 Sugestões (Tab):\n{}", words.join("\n"));
         let (x, y) = pos;
-        let words_clone = words.clone();
         
         // Spawn em thread separada para não bloquear
         std::thread::spawn(move || {
-            // Tentar yad primeiro (mais customizável)
+            // Tentar yad com --no-focus primeiro (overlay sem roubar foco!)
             let yad_result = Command::new("yad")
-                .arg("--list")
-                .arg("--title=💡 Sugestões")
-                .arg("--no-headers")
-                .arg("--column=Palavra")
-                .arg(format!("--width=300"))
-                .arg(format!("--height=180"))
+                .arg("--text-info")
+                .arg("--title=")
+                .arg(format!("--width=280"))
+                .arg(format!("--height=140"))
                 .arg(format!("--posx={}", x))
                 .arg(format!("--posy={}", y))
                 .arg("--no-buttons")
-                .arg("--on-top")
+                .arg("--no-focus")           // 🔑 NÃO ROUBAR FOCO!
                 .arg("--skip-taskbar")
+                .arg("--skip-pager")
+                .arg("--on-top")
                 .arg("--undecorated")
+                .arg("--no-escape")
                 .arg("--timeout=3")
                 .arg("--timeout-indicator=bottom")
-                .args(&words_clone)
-                .output();
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+                .and_then(|mut child| {
+                    use std::io::Write;
+                    if let Some(ref mut stdin) = child.stdin {
+                        let _ = stdin.write_all(text.as_bytes());
+                    }
+                    child.wait()
+                });
 
-            // Se yad falhar, usar zenity
+            // Se yad falhar, usar notify-send (nunca rouba foco)
             if yad_result.is_err() {
-                let mut cmd = Command::new("zenity");
-                cmd.arg("--list")
-                    .arg("--title=💡 Sugestões")
-                    .arg("--text=Pressione Tab para aceitar")
-                    .arg("--column=Palavra")
-                    .arg("--width=300")
-                    .arg("--height=180")
-                    .arg("--hide-header");
-
-                for word in &words_clone {
-                    cmd.arg(word);
-                }
-
-                let _ = cmd.output();
+                let _ = Command::new("notify-send")
+                    .arg("Clippit Autocomplete")
+                    .arg(&text)
+                    .arg("-t")
+                    .arg("2500")
+                    .arg("-u")
+                    .arg("low")
+                    .output();
             }
         });
 
