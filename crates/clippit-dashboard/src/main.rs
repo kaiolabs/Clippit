@@ -66,5 +66,13 @@ fn build_ui(app: &Application) {
     // Ensure window can be closed properly
     window.set_deletable(true);
     
+    // 🔑 FECHAR COMPLETAMENTE ao invés de minimizar
+    let app_clone = app.clone();
+    window.connect_close_request(move |_| {
+        eprintln!("🚪 Dashboard fechando completamente...");
+        app_clone.quit();
+        gtk::glib::Propagation::Proceed
+    });
+    
     window.present();
 }
