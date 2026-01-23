@@ -61,10 +61,10 @@ pub fn copy_to_clipboard(entry_id: i64) -> bool {
                 clippit_ipc::ContentType::Text => {
                     if let Some(text) = &entry.content_text {
                         eprintln!("🔵 Copying {} chars to clipboard using arboard...", text.len());
-                        
+                            
                         match clipboard.set_text(text) {
-                            Ok(_) => {
-                                eprintln!("✅ Text copied to clipboard: {} chars", text.len());
+                                            Ok(_) => {
+                                                        eprintln!("✅ Text copied to clipboard: {} chars", text.len());
                                 // Show preview of copied text (first 80 chars)
                                 let preview = if text.len() > 80 {
                                     format!("{}...", &text[..80])
@@ -74,18 +74,18 @@ pub fn copy_to_clipboard(entry_id: i64) -> bool {
                                 show_notification("Clippit", &format!("Copiado: {}", preview), show_notifications);
                                 true
                             }
-                            Err(e) => {
+                                                    Err(e) => {
                                 eprintln!("❌ Failed to copy text: {}", e);
                                 show_notification("Erro", &format!("Erro ao copiar texto: {}", e), show_notifications);
-                                false
-                            }
-                        }
+                                                        false
+                                                    }
+                                                }
                     } else {
                         eprintln!("❌ Text entry has no content");
                         show_notification("Erro", "Entrada sem conteúdo", show_notifications);
-                        false
-                    }
-                }
+                                                false
+                                            }
+                                        }
                 clippit_ipc::ContentType::Image => {
                     if let Some(image_path) = &entry.image_path {
                         eprintln!("📸 Copying image from file: {}", image_path);
@@ -113,18 +113,18 @@ pub fn copy_to_clipboard(entry_id: i64) -> bool {
                                     }
                                 }
                             }
-                            Err(e) => {
+                              Err(e) => {
                                 eprintln!("❌ Failed to load image: {}", e);
                                 show_notification("Erro", &format!("Erro ao carregar imagem: {}", e), show_notifications);
-                                false
-                            }
-                        }
-                    } else {
-                        eprintln!("❌ Image entry has no image_path!");
+                                  false
+                              }
+                          }
+                      } else {
+                          eprintln!("❌ Image entry has no image_path!");
                         show_notification("Erro", "Imagem sem caminho", show_notifications);
-                        false
-                    }
-                }
+                          false
+                      }
+                  }
             }
         }
         Err(e) => {

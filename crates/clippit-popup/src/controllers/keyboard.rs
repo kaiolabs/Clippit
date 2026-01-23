@@ -31,7 +31,7 @@ pub fn setup_keyboard_navigation(
     let hotkey_str_for_closure = hotkey_str.clone();
     
     let key_controller = gtk::EventControllerKey::new();
-    key_controller.set_propagation_phase(gtk::PropagationPhase::Capture);  // Processa ANTES de qualquer widget
+    key_controller.set_propagation_phase(gtk::PropagationPhase::Bubble);  // Processa DEPOIS dos widgets filhos
     
     // Get focus search hotkey from config
     let focus_search_str = format!("{}+{}", config.search.focus_search_modifier, config.search.focus_search_key);
@@ -73,8 +73,8 @@ pub fn setup_keyboard_navigation(
             gtk::gdk::Key::Up => {
                 // Só navega na lista se o search_entry não tiver foco
                 if !search_entry_for_key.has_focus() {
-                    handle_up_key(&list_box_for_key, &scrolled_for_key);
-                    gtk::glib::Propagation::Stop
+                handle_up_key(&list_box_for_key, &scrolled_for_key);
+                gtk::glib::Propagation::Stop
                 } else {
                     gtk::glib::Propagation::Proceed  // Deixa o popover processar
                 }
@@ -82,8 +82,8 @@ pub fn setup_keyboard_navigation(
             gtk::gdk::Key::Down => {
                 // Só navega na lista se o search_entry não tiver foco
                 if !search_entry_for_key.has_focus() {
-                    handle_down_key(&list_box_for_key, &scrolled_for_key);
-                    gtk::glib::Propagation::Stop
+                handle_down_key(&list_box_for_key, &scrolled_for_key);
+                gtk::glib::Propagation::Stop
                 } else {
                     gtk::glib::Propagation::Proceed  // Deixa o popover processar
                 }
