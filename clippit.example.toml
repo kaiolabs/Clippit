@@ -87,6 +87,36 @@ ignored_apps = [
 # Limpar histórico ao fechar
 clear_on_exit = false
 
+[autocomplete]
+# Habilitar autocomplete global (feature avançada)
+# ⚠️ Desabilitado por padrão - requer IBus configurado
+enabled = false
+
+# Número máximo de sugestões a mostrar
+max_suggestions = 3
+
+# Caracteres mínimos para mostrar sugestões
+min_chars = 2
+
+# Delay antes de mostrar sugestões (ms)
+delay_ms = 300
+
+# Mostrar em campos de senha (não recomendado)
+show_in_passwords = false
+
+# Apps onde autocomplete deve ser ignorado
+ignored_apps = [
+    "gnome-terminal",
+    "tilix",
+    "keepassxc",
+    "bitwarden",
+    "1password",
+]
+
+# Atalho para ativar/desativar temporariamente
+toggle_modifier = "ctrl+shift"
+toggle_key = "kp_end"
+
 [advanced]
 # Nível de log: "error", "warn", "info", "debug", "trace"
 log_level = "info"

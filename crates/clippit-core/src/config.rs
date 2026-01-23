@@ -232,7 +232,7 @@ fn default_focus_search_modifier() -> String { "ctrl".to_string() }
 fn default_focus_search_key() -> String { "p".to_string() }
 
 // Autocomplete defaults
-fn default_autocomplete_enabled() -> bool { true }  // ✅ ATIVADO POR PADRÃO
+fn default_autocomplete_enabled() -> bool { false }  // ⚠️ DESATIVADO POR PADRÃO (feature avançada)
 fn default_autocomplete_max_suggestions() -> usize { 3 }
 fn default_autocomplete_min_chars() -> usize { 2 }
 fn default_autocomplete_delay_ms() -> u64 { 300 }
