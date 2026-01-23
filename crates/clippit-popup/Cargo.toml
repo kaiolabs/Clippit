@@ -9,10 +9,6 @@ license.workspace = true
 name = "clippit-popup"
 path = "src/main.rs"
 
-[[bin]]
-name = "clippit-autocomplete-popup"
-path = "src/autocomplete_main.rs"
-
 [dependencies]
 clippit-ipc = { path = "../clippit-ipc" }
 clippit-core = { path = "../clippit-core" }
@@ -21,6 +17,7 @@ gtk = { version = "0.9", package = "gtk4", features = ["v4_6"] }
 libadwaita = { version = "0.7", features = ["v1_2"] }
 anyhow.workspace = true
 arboard.workspace = true
+tracing.workspace = true
 dirs = "5.0"
 rust-i18n.workspace = true
 image.workspace = true

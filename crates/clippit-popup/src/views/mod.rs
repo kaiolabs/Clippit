@@ -11,4 +11,3 @@ pub use window::create_main_window;
 pub use list_item::{populate_history_list, setup_infinite_scroll};
 pub use search::setup_search_filter;
 pub use suggestions_popover::SuggestionsPopover;
-pub use autocomplete_popup::AutocompletePopup;

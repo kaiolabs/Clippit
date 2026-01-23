@@ -27,13 +27,10 @@ impl AutocompletePopup {
             .default_height(200)
             .build();
 
-        // Tornar janela sempre no topo
-        window.set_keep_above(true);
-        
         // Estilo CSS
         let css = gtk::CssProvider::new();
         css.load_from_data(
-            br#"
+            r#"
             window {
                 background: alpha(@window_bg_color, 0.95);
                 border-radius: 12px;
@@ -71,7 +68,7 @@ impl AutocompletePopup {
         );
         
         gtk::style_context_add_provider_for_display(
-            &window.display(),
+            &gtk::prelude::WidgetExt::display(&window),
             &css,
             gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
