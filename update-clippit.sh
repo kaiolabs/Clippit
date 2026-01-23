@@ -46,15 +46,30 @@ killall -9 clippit-daemon 2>/dev/null || true
 killall -9 clippit-popup 2>/dev/null || true
 killall -9 clippit-dashboard 2>/dev/null || true
 killall -9 clippit-ibus 2>/dev/null || true
+killall -9 clippit-tooltip 2>/dev/null || true
 
 # Aguardar processos terminarem
 sleep 1
 
-# Verificar se ainda há processos rodando
-if ps aux | grep -E "clippit-(daemon|popup|dashboard|ibus)" | grep -v grep > /dev/null; then
+# Verificar se ainda há processos rodando e matar com força
+if ps aux | grep -E "clippit-(daemon|popup|dashboard|ibus|tooltip)" | grep -v grep > /dev/null; then
     echo "⚠️  Ainda há processos rodando, matando com força..."
     pkill -9 clippit-daemon 2>/dev/null || true
     pkill -9 clippit-popup 2>/dev/null || true
+    pkill -9 clippit-dashboard 2>/dev/null || true
+    pkill -9 clippit-ibus 2>/dev/null || true
+    pkill -9 clippit-tooltip 2>/dev/null || true
+    sleep 1
+fi
+
+# Verificar novamente e usar fuser como último recurso
+if ps aux | grep -E "clippit-(daemon|popup|dashboard|ibus|tooltip)" | grep -v grep > /dev/null; then
+    echo "⚠️  Usando fuser para forçar término dos processos..."
+    sudo fuser -k /usr/local/bin/clippit-daemon 2>/dev/null || true
+    sudo fuser -k /usr/local/bin/clippit-popup 2>/dev/null || true
+    sudo fuser -k /usr/local/bin/clippit-dashboard 2>/dev/null || true
+    sudo fuser -k /usr/local/bin/clippit-ibus 2>/dev/null || true
+    sudo fuser -k /usr/local/bin/clippit-tooltip 2>/dev/null || true
     sleep 1
 fi
 
@@ -66,6 +81,16 @@ echo "🗑️  Removendo binários antigos..."
 sudo rm -f /usr/local/bin/clippit-daemon
 sudo rm -f /usr/local/bin/clippit-popup
 sudo rm -f /usr/local/bin/clippit-dashboard
+sudo rm -f /usr/local/bin/clippit-ibus
+sudo rm -f /usr/local/bin/clippit-tooltip
+
+# Verificar se remoção foi bem sucedida
+if [ -f /usr/local/bin/clippit-ibus ]; then
+    echo "⚠️  clippit-ibus ainda está em uso, forçando remoção..."
+    sudo fuser -k /usr/local/bin/clippit-ibus 2>/dev/null || true
+    sleep 1
+    sudo rm -f /usr/local/bin/clippit-ibus
+fi
 
 # Instalar binários novos
 echo "📦 Instalando binários novos..."
@@ -83,7 +108,13 @@ sudo chmod +x /usr/local/bin/clippit-tooltip
 # Instalar IBus Component (Autocomplete Global)
 echo "⌨️  Instalando IBus Component (Autocomplete Global)..."
 if [ -f "target/release/clippit-ibus" ]; then
-    sudo cp target/release/clippit-ibus /usr/local/bin/clippit-ibus
+    # Tentar copiar, se falhar por estar em uso, forçar
+    if ! sudo cp target/release/clippit-ibus /usr/local/bin/clippit-ibus 2>/dev/null; then
+        echo "⚠️  Arquivo em uso, forçando atualização..."
+        sudo fuser -k /usr/local/bin/clippit-ibus 2>/dev/null || true
+        sleep 1
+        sudo cp target/release/clippit-ibus /usr/local/bin/clippit-ibus
+    fi
     sudo chmod +x /usr/local/bin/clippit-ibus
     
     # Instalar XML component definition
