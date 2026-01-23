@@ -18,15 +18,53 @@ impl SuggestionEngine {
     }
     
     pub fn update_history_words(&mut self, entries: &[HistoryEntry]) {
+        eprintln!("📚 Carregando palavras do histórico para sugestões...");
+        eprintln!("📥 Recebidas {} entradas do histórico", entries.len());
+        
+        // Lista de palavras genéricas/lixo para ignorar
+        let blacklist = [
+            "resultado", "resultados", "entry", "entries", "image", "text", 
+            "content", "clipboard", "timestamp", "type", "true", "false",
+            "has", "processing", "created", "removed", "added", "loaded"
+        ];
+        
         // Extrair palavras e contar frequência
         for entry in entries {
             if let Some(ref text) = entry.content_text {
+                // Ignorar textos muito longos (provavelmente logs/stack traces)
+                if text.len() > 1000 {
+                    continue;
+                }
+                
                 for word in text.split_whitespace() {
                     let cleaned = word.trim_matches(|c: char| !c.is_alphabetic());
                     let word_lower = cleaned.to_lowercase();
-                    if word_lower.len() >= 3 {
-                        *self.history_words.entry(word_lower).or_insert(0) += 1;
+                    
+                    // Filtros de qualidade
+                    if word_lower.len() < 3 || word_lower.len() > 30 {
+                        continue; // Muito curta ou muito longa
                     }
+                    
+                    // Ignorar se contém caracteres técnicos (stack traces, paths, etc)
+                    if word.contains("::") || word.contains("->") || word.contains("__") 
+                       || word.contains("()") || word.contains("{}") || word.contains("[]")
+                       || word.contains("/") || word.contains("\\") {
+                        continue;
+                    }
+                    
+                    // Ignorar palavras da blacklist
+                    if blacklist.contains(&word_lower.as_str()) {
+                        continue;
+                    }
+                    
+                    // Ignorar se contém muitos números (provavelmente ID ou hash)
+                    let digit_count = word_lower.chars().filter(|c| c.is_numeric()).count();
+                    if digit_count > word_lower.len() / 2 {
+                        continue;
+                    }
+                    
+                    // ✅ Palavra válida - adicionar ao histórico
+                    *self.history_words.entry(word_lower).or_insert(0) += 1;
                 }
             }
         }
