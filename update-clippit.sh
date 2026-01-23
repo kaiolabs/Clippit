@@ -45,12 +45,13 @@ echo "🧹 Limpando processos antigos..."
 killall -9 clippit-daemon 2>/dev/null || true
 killall -9 clippit-popup 2>/dev/null || true
 killall -9 clippit-dashboard 2>/dev/null || true
+killall -9 clippit-ibus 2>/dev/null || true
 
 # Aguardar processos terminarem
 sleep 1
 
 # Verificar se ainda há processos rodando
-if ps aux | grep -E "clippit-(daemon|popup|dashboard)" | grep -v grep > /dev/null; then
+if ps aux | grep -E "clippit-(daemon|popup|dashboard|ibus)" | grep -v grep > /dev/null; then
     echo "⚠️  Ainda há processos rodando, matando com força..."
     pkill -9 clippit-daemon 2>/dev/null || true
     pkill -9 clippit-popup 2>/dev/null || true
@@ -71,11 +72,33 @@ echo "📦 Instalando binários novos..."
 sudo cp target/release/clippit-daemon /usr/local/bin/clippit-daemon
 sudo cp target/release/clippit-popup /usr/local/bin/clippit-popup
 sudo cp target/release/clippit-dashboard /usr/local/bin/clippit-dashboard
+sudo cp target/release/clippit-tooltip /usr/local/bin/clippit-tooltip
 
 # Dar permissões de execução
 sudo chmod +x /usr/local/bin/clippit-daemon
 sudo chmod +x /usr/local/bin/clippit-popup
 sudo chmod +x /usr/local/bin/clippit-dashboard
+sudo chmod +x /usr/local/bin/clippit-tooltip
+
+# Instalar IBus Component (Autocomplete Global)
+echo "⌨️  Instalando IBus Component (Autocomplete Global)..."
+if [ -f "target/release/clippit-ibus" ]; then
+    sudo cp target/release/clippit-ibus /usr/local/bin/clippit-ibus
+    sudo chmod +x /usr/local/bin/clippit-ibus
+    
+    # Instalar XML component definition
+    sudo mkdir -p /usr/share/ibus/component
+    sudo cp crates/clippit-ibus/data/clippit.xml /usr/share/ibus/component/
+    
+    # Reiniciar IBus (se estiver rodando)
+    if command -v ibus &> /dev/null; then
+        ibus restart &>/dev/null &
+    fi
+    
+    echo "✅ IBus Component instalado (configure em Settings → Keyboard → Input Sources)"
+else
+    echo "⚠️  clippit-ibus não encontrado, pulando instalação do IBus"
+fi
 
 # Instalar ícone em múltiplos tamanhos (importante para Wayland/GNOME)
 echo "🎨 Instalando ícone..."
@@ -118,6 +141,59 @@ ls -lh /usr/local/bin/clippit-* --time-style=+"%Y-%m-%d %H:%M:%S" | awk '{print 
 echo ""
 echo "📌 Versão instalada:"
 /usr/local/bin/clippit-daemon --version 2>/dev/null | head -2 | sed 's/^/   /'
+
+# ========== CONFIGURAR AUTOCOMPLETAR GLOBAL (IBus) ==========
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "⌨️  Configurando Autocompletar Global (IBus)..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Instalar componente IBus se o script existir
+if [ -f "scripts/install-ibus.sh" ]; then
+    echo "📦 Instalando componente IBus..."
+    sudo bash scripts/install-ibus.sh
+else
+    echo "⚠️  Script install-ibus.sh não encontrado, pulando..."
+fi
+
+# Configurar automaticamente as fontes de entrada
+echo "🔧 Configurando fontes de entrada do sistema..."
+
+# Verificar se gsettings está disponível (GNOME/Zorin)
+if command -v gsettings &> /dev/null; then
+    # Obter fontes de entrada atuais
+    CURRENT_SOURCES=$(gsettings get org.gnome.desktop.input-sources sources 2>/dev/null || echo "[]")
+    
+    # Verificar se Clippit já está adicionado
+    if echo "$CURRENT_SOURCES" | grep -q "ibus.*clippit"; then
+        echo "✅ Clippit já está nas fontes de entrada!"
+    else
+        echo "➕ Adicionando Clippit às fontes de entrada..."
+        
+        # Remover os colchetes e adicionar Clippit
+        if [ "$CURRENT_SOURCES" = "[]" ]; then
+            # Nenhuma fonte configurada, adicionar teclado padrão + clippit
+            gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'br'), ('ibus', 'clippit')]"
+        else
+            # Já tem fontes, adicionar Clippit ao final
+            NEW_SOURCES=$(echo "$CURRENT_SOURCES" | sed "s/]$/, ('ibus', 'clippit')]/")
+            gsettings set org.gnome.desktop.input-sources sources "$NEW_SOURCES"
+        fi
+        
+        echo "✅ Clippit adicionado às fontes de entrada!"
+        echo ""
+        echo "💡 Como usar o autocompletar:"
+        echo "   1. Pressione Super+Espaço para alternar para 'Clippit'"
+        echo "   2. Digite em qualquer aplicativo"
+        echo "   3. Sugestões aparecem automaticamente baseadas no seu histórico!"
+    fi
+else
+    echo "⚠️  gsettings não encontrado (sistema não é GNOME/Zorin)"
+    echo "   Configure manualmente: Configurações → Teclado → Fontes de Entrada"
+fi
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
 
 # Criar serviço systemd se não existir
 if [ ! -f ~/.config/systemd/user/clippit.service ]; then
@@ -181,4 +257,5 @@ echo ""
 echo "💡 Dicas:"
 echo "   - Ver logs: journalctl --user -u clippit -f"
 echo "   - Configurar: clippit-dashboard"
+echo "   - Autocompletar: Super+Espaço → Selecione 'Clippit'"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -9,6 +9,13 @@ use crate::views::buttons::{add_delete_button, add_copy_button};
 use crate::views::image_preview::add_image_hover_preview;
 use rust_i18n::t;
 
+// Estrutura para gerenciar o estado de carregamento
+pub struct LoadMoreState {
+    pub items_loaded: usize,
+    pub is_loading: bool,
+    pub has_more: bool,
+}
+
 /// Creates action rows for history entries (text and images)
 /// 
 /// Returns: (list_box, entry_map, search_map)
@@ -20,12 +27,14 @@ pub fn populate_history_list(
     search_map: &Rc<RefCell<std::collections::HashMap<i32, String>>>,
 ) {
     // OPTIMIZED: Use metadata query (fast, no image data loaded)
-    match IpcClient::query_history_metadata(20) {
+    // Initial load: 30 items
+    match IpcClient::query_history_metadata(30) {
         Ok(entries) => {
             eprintln!("✅ Got {} metadata entries from history (images without data)", entries.len());
             for (index, entry) in entries.iter().enumerate() {
                 eprintln!("📋 Entry {}: id={}, type={:?}", index, entry.id, entry.content_type);
                 let row = adw::ActionRow::new();
+                row.set_activatable(true);  // 🔥 Tornar a linha clicável
                 
                 // Format content and add prefix based on type
                 match entry.content_type {
@@ -165,3 +174,98 @@ fn create_image_row(row: &adw::ActionRow, entry: &clippit_ipc::HistoryEntry) {
     }
 }
 
+/// Configura infinite scroll para carregar mais itens sob demanda
+pub fn setup_infinite_scroll(
+    scrolled: &gtk::ScrolledWindow,
+    list_box: &gtk::ListBox,
+    window: &adw::ApplicationWindow,
+    app: &gtk::Application,
+    entry_map: &Rc<RefCell<std::collections::HashMap<i32, i64>>>,
+    search_map: &Rc<RefCell<std::collections::HashMap<i32, String>>>,
+) {
+    let load_state = Rc::new(RefCell::new(LoadMoreState {
+        items_loaded: 30,  // Já carregamos 30 inicialmente
+        is_loading: false,
+        has_more: true,
+    }));
+    
+    let adjustment = scrolled.vadjustment();
+    let list_box_clone = list_box.clone();
+    let window_clone = window.clone();
+    let app_clone = app.clone();
+    let entry_map_clone = entry_map.clone();
+    let search_map_clone = search_map.clone();
+    let load_state_clone = load_state.clone();
+    
+    adjustment.connect_value_changed(move |adj| {
+        let value = adj.value();
+        let upper = adj.upper();
+        let page_size = adj.page_size();
+        
+        // Carregar mais quando estiver a 200px do final
+        if value + page_size >= upper - 200.0 {
+            let mut state = load_state_clone.borrow_mut();
+            
+            if !state.is_loading && state.has_more {
+                state.is_loading = true;
+                let offset = state.items_loaded;
+                drop(state);  // Libera o borrow
+                
+                eprintln!("📜 Loading more items from offset {}...", offset);
+                
+                // Carregar mais 20 itens
+                match IpcClient::query_history_metadata_with_offset(20, offset) {
+                    Ok(entries) => {
+                        if entries.is_empty() {
+                            load_state_clone.borrow_mut().has_more = false;
+                            eprintln!("✅ No more items to load");
+                        } else {
+                            eprintln!("✅ Loaded {} more items", entries.len());
+                            
+                            let current_count = list_box_clone.observe_children().n_items() as usize;
+                            
+                            for (i, entry) in entries.iter().enumerate() {
+                                let row = adw::ActionRow::new();
+                                row.set_activatable(true);  // 🔥 Tornar a linha clicável
+                                
+                                match entry.content_type {
+                                    clippit_ipc::ContentType::Text => {
+                                        create_text_row(&row, entry);
+                                    }
+                                    clippit_ipc::ContentType::Image => {
+                                        create_image_row(&row, entry);
+                                    }
+                                }
+                                
+                                row.set_subtitle(&entry.timestamp.format("%d/%m/%Y %H:%M:%S").to_string());
+                                
+                                let index = (current_count + i) as i32;
+                                entry_map_clone.borrow_mut().insert(index, entry.id);
+                                
+                                let title_text = row.title().to_string();
+                                let subtitle_text = row.subtitle().map(|s| s.to_string()).unwrap_or_default();
+                                let search_content = format!("{} {}", title_text, subtitle_text);
+                                search_map_clone.borrow_mut().insert(index, search_content);
+                                
+                                add_delete_button(&row, entry.id, &list_box_clone);
+                                add_copy_button(&row, entry.id, &window_clone, &app_clone);
+                                
+                                list_box_clone.append(&row);
+                            }
+                            
+                            let mut state = load_state_clone.borrow_mut();
+                            state.items_loaded += entries.len();
+                            state.is_loading = false;
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Error loading more items: {}", e);
+                        load_state_clone.borrow_mut().is_loading = false;
+                    }
+                }
+            }
+        }
+    });
+    
+    eprintln!("✅ Infinite scroll configured");
+}

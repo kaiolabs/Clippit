@@ -45,8 +45,26 @@ impl IpcClient {
 
     /// Query history metadata without loading image data (optimized for listing)
     pub fn query_history_metadata(limit: usize) -> Result<Vec<crate::protocol::HistoryEntry>> {
-        match Self::send_message(IpcMessage::QueryHistoryMetadata { limit })? {
+        match Self::send_message(IpcMessage::QueryHistoryMetadata { limit, offset: 0 })? {
             IpcResponse::HistoryMetadataResponse { entries } => Ok(entries),
+            IpcResponse::Error { message } => Err(anyhow::anyhow!("Server error: {}", message)),
+            _ => Err(anyhow::anyhow!("Unexpected response")),
+        }
+    }
+
+    /// Query history metadata with offset (for infinite scroll)
+    pub fn query_history_metadata_with_offset(limit: usize, offset: usize) -> Result<Vec<crate::protocol::HistoryEntry>> {
+        match Self::send_message(IpcMessage::QueryHistoryMetadata { limit, offset })? {
+            IpcResponse::HistoryMetadataResponse { entries} => Ok(entries),
+            IpcResponse::Error { message } => Err(anyhow::anyhow!("Server error: {}", message)),
+            _ => Err(anyhow::anyhow!("Unexpected response")),
+        }
+    }
+
+    /// Search history (NO LIMIT - searches ALL entries in database)
+    pub fn search_history(query: String) -> Result<Vec<crate::protocol::HistoryEntry>> {
+        match Self::send_message(IpcMessage::SearchHistory { query })? {
+            IpcResponse::SearchHistoryResponse { entries } => Ok(entries),
             IpcResponse::Error { message } => Err(anyhow::anyhow!("Server error: {}", message)),
             _ => Err(anyhow::anyhow!("Unexpected response")),
         }
@@ -63,6 +81,38 @@ impl IpcClient {
 
     pub fn select_item(id: i64) -> Result<()> {
         match Self::send_message(IpcMessage::SelectItem { id })? {
+            IpcResponse::Ok => Ok(()),
+            IpcResponse::Error { message } => Err(anyhow::anyhow!("Server error: {}", message)),
+            _ => Err(anyhow::anyhow!("Unexpected response")),
+        }
+    }
+
+    // ========== AUTOCOMPLETE GLOBAL METHODS ==========
+
+    /// Request autocomplete suggestions
+    pub fn request_autocomplete_suggestions(
+        partial_word: String,
+        context: crate::protocol::AppContext,
+        max_results: usize,
+    ) -> Result<Vec<crate::protocol::Suggestion>> {
+        match Self::send_message(IpcMessage::RequestAutocompleteSuggestions {
+            partial_word,
+            context,
+            max_results,
+        })? {
+            IpcResponse::AutocompleteSuggestions { suggestions, .. } => Ok(suggestions),
+            IpcResponse::Error { message } => Err(anyhow::anyhow!("Server error: {}", message)),
+            _ => Err(anyhow::anyhow!("Unexpected response")),
+        }
+    }
+
+    /// Accept a suggestion (for tracking/learning)
+    pub fn accept_suggestion(suggestion: String, partial_word: String) -> Result<()> {
+        match Self::send_message(IpcMessage::AcceptSuggestion {
+            suggestion,
+            partial_word,
+        })? {
+            IpcResponse::SuggestionAccepted => Ok(()),
             IpcResponse::Ok => Ok(()),
             IpcResponse::Error { message } => Err(anyhow::anyhow!("Server error: {}", message)),
             _ => Err(anyhow::anyhow!("Unexpected response")),

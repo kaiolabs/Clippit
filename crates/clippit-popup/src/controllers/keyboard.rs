@@ -14,12 +14,14 @@ pub fn setup_keyboard_navigation(
     list_box: &gtk::ListBox,
     scrolled: &gtk::ScrolledWindow,
     entry_map: &EntryMap,
+    search_entry: &gtk::SearchEntry,
 ) {
     let window_nav = window.clone();
     let app_nav = app.clone();
     let entry_map_for_key = entry_map.clone();
     let scrolled_for_key = scrolled.clone();
     let list_box_for_key = list_box.clone();
+    let search_entry_for_key = search_entry.clone();
     
     // Load config to get the hotkey
     let config = Config::load().unwrap_or_default();
@@ -29,13 +31,25 @@ pub fn setup_keyboard_navigation(
     let hotkey_str_for_closure = hotkey_str.clone();
     
     let key_controller = gtk::EventControllerKey::new();
-    key_controller.set_propagation_phase(gtk::PropagationPhase::Capture);
+    key_controller.set_propagation_phase(gtk::PropagationPhase::Bubble);  // Processa DEPOIS dos widgets filhos
+    
+    // Get focus search hotkey from config
+    let focus_search_str = format!("{}+{}", config.search.focus_search_modifier, config.search.focus_search_key);
+    eprintln!("🔵 Focus search hotkey configured: {}", focus_search_str);
+    let focus_search_str_for_closure = focus_search_str.clone();
     
     key_controller.connect_key_pressed(move |_, key, _, modifiers| {
         // Check if this is the configured hotkey (for toggle)
         if is_configured_hotkey(key, modifiers, &hotkey_str_for_closure) {
             eprintln!("🔵 Configured hotkey pressed while popup open - closing (toggle)");
             window_nav.close();
+            return gtk::glib::Propagation::Stop;
+        }
+        
+        // Check if this is the focus search hotkey
+        if is_configured_hotkey(key, modifiers, &focus_search_str_for_closure) {
+            eprintln!("🔵 Focus search hotkey pressed - setting focus to search entry");
+            search_entry_for_key.grab_focus();
             return gtk::glib::Propagation::Stop;
         }
         
@@ -46,16 +60,41 @@ pub fn setup_keyboard_navigation(
                 gtk::glib::Propagation::Stop
             }
             gtk::gdk::Key::Return | gtk::gdk::Key::KP_Enter => {
+                // Se search_entry tem foco, não processa Enter (deixa o campo processar)
+                if search_entry_for_key.has_focus() {
+                    eprintln!("🔑 Enter pressed but search_entry has focus - ignoring");
+                    return gtk::glib::Propagation::Proceed;
+                }
+                
+                eprintln!("🔑 Enter key detected - calling handle_enter_key");
                 handle_enter_key(&list_box_for_key, &entry_map_for_key, &window_nav, &app_nav);
                 gtk::glib::Propagation::Stop
             }
             gtk::gdk::Key::Up => {
+                // Só navega na lista se o search_entry não tiver foco
+                if !search_entry_for_key.has_focus() {
                 handle_up_key(&list_box_for_key, &scrolled_for_key);
                 gtk::glib::Propagation::Stop
+                } else {
+                    gtk::glib::Propagation::Proceed  // Deixa o popover processar
+                }
             }
             gtk::gdk::Key::Down => {
+                // Só navega na lista se o search_entry não tiver foco
+                if !search_entry_for_key.has_focus() {
                 handle_down_key(&list_box_for_key, &scrolled_for_key);
                 gtk::glib::Propagation::Stop
+                } else {
+                    gtk::glib::Propagation::Proceed  // Deixa o popover processar
+                }
+            }
+            gtk::gdk::Key::Tab => {
+                // Se search_entry tem foco, deixa o autocomplete processar
+                if search_entry_for_key.has_focus() {
+                    gtk::glib::Propagation::Proceed
+                } else {
+                    gtk::glib::Propagation::Proceed
+                }
             }
             _ => gtk::glib::Propagation::Proceed
         }
@@ -95,6 +134,9 @@ fn is_configured_hotkey(key: gtk::gdk::Key, modifiers: gtk::gdk::ModifierType, h
             "kp_0" | "numpad0" => required_key = gtk::gdk::Key::KP_0,
             "v" => required_key = gtk::gdk::Key::v,
             "c" => required_key = gtk::gdk::Key::c,
+            "p" => required_key = gtk::gdk::Key::p,
+            "f" => required_key = gtk::gdk::Key::f,
+            "s" => required_key = gtk::gdk::Key::s,
             _ => {}
         }
     }
@@ -148,8 +190,11 @@ fn handle_enter_key(
     window: &adw::ApplicationWindow,
     app: &gtk::Application,
 ) {
+    eprintln!("🔑 handle_enter_key called");
+    
     if let Some(selected) = list_box.selected_row() {
         let row_index = selected.index();
+        eprintln!("🔑 Selected row index: {}", row_index);
         
         if let Some(&entry_id) = entry_map.borrow().get(&row_index) {
             eprintln!("🔵 Enter pressed - copying entry ID: {}", entry_id);
@@ -161,12 +206,11 @@ fn handle_enter_key(
             eprintln!("🔵 Closing window (notification sent)...");
             window.close();
             app.quit();
-            
-            // Close window immediately
-            eprintln!("🔵 Closing window immediately...");
-            window.close();
-            app.quit();
+        } else {
+            eprintln!("⚠️  No entry_id found for row index {}", row_index);
         }
+    } else {
+        eprintln!("⚠️  No row selected");
     }
 }
 

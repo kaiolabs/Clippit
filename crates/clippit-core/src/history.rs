@@ -124,6 +124,11 @@ impl HistoryManager {
         self.storage.get_recent_metadata(limit)
     }
 
+    /// Get recent entries with offset (for infinite scroll)
+    pub fn get_recent_metadata_with_offset(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardEntry>> {
+        self.storage.get_recent_metadata_with_offset(limit, offset)
+    }
+
     pub fn get_by_id(&self, id: i64) -> Result<Option<ClipboardEntry>> {
         self.storage.get_by_id(id)
     }
@@ -142,6 +147,11 @@ impl HistoryManager {
     
     pub fn clear(&self) -> Result<usize> {
         self.storage.clear()
+    }
+
+    /// Search in ALL history (no limit) - returns metadata only for images
+    pub fn search(&self, query: &str) -> Result<Vec<ClipboardEntry>> {
+        self.storage.search(query)
     }
 }
 

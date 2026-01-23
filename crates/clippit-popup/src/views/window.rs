@@ -20,7 +20,7 @@ pub fn create_main_window(
     list_box.set_selection_mode(gtk::SelectionMode::Single);
     list_box.set_can_focus(true);
     list_box.set_focus_on_click(false);
-    list_box.set_activate_on_single_click(false);
+    list_box.set_activate_on_single_click(true);  // 🔥 SINGLE CLICK para copiar!
     
     // Create scrolled window
     let scrolled = ScrolledWindow::new();
@@ -48,15 +48,15 @@ pub fn create_main_window(
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title(&t!("popup.title").to_string())
-        .default_width(500)
-        .default_height(400)
+        .default_width(700)
+        .default_height(550)
         .content(&main_box)
         .build();
     
     // Auto-close on focus loss with intelligent delay
     setup_auto_close(&window);
     
-    eprintln!("🔵 Window: adw::ApplicationWindow, 500x400 (auto-close inteligente 500ms + system notifications)");
+    eprintln!("🔵 Window: adw::ApplicationWindow, 700x550 (auto-close inteligente 500ms + system notifications)");
     
     (window, list_box, scrolled, search_entry)
 }

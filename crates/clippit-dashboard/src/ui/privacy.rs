@@ -31,6 +31,20 @@ pub fn create_page() -> gtk::Widget {
     let ignore_switch = gtk::Switch::new();
     ignore_switch.set_active(config.privacy.ignore_sensitive_apps);
     ignore_switch.set_valign(gtk::Align::Center);
+    
+    // Auto-save on toggle
+    ignore_switch.connect_state_set(|_, state| {
+        if let Ok(mut cfg) = Config::load() {
+            cfg.privacy.ignore_sensitive_apps = state;
+            if let Err(e) = cfg.save() {
+                eprintln!("❌ Erro ao salvar: {}", e);
+            } else {
+                eprintln!("✅ Ignorar apps sensíveis atualizado: {}", state);
+            }
+        }
+        gtk::glib::Propagation::Proceed
+    });
+    
     ignore_row.set_activatable_widget(Some(&ignore_switch));
     ignore_row.add_suffix(&ignore_switch);
     
@@ -65,16 +79,20 @@ pub fn create_page() -> gtk::Widget {
     
     page.add(&ignored_group);
 
-    // Buttons at the end
-    let button_box = gtk::Box::new(gtk::Orientation::Horizontal, 12);
-    button_box.set_halign(gtk::Align::Center);
-    button_box.set_margin_start(12);
-    button_box.set_margin_end(12);
-    button_box.set_margin_top(24);
-    button_box.set_margin_bottom(12);
+    // Edit config button group
+    let button_group = adw::PreferencesGroup::new();
+    button_group.set_margin_top(12);
     
-    // Edit config button
-    let edit_button = gtk::Button::with_label(&t!("privacy.edit_list"));
+    let edit_row = adw::ActionRow::new();
+    edit_row.set_title(&t!("privacy.edit_list"));
+    edit_row.set_subtitle("Editar manualmente o arquivo de configuração");
+    
+    let icon = gtk::Image::from_icon_name("document-edit-symbolic");
+    edit_row.add_prefix(&icon);
+    
+    let edit_button = gtk::Button::from_icon_name("go-next-symbolic");
+    edit_button.set_valign(gtk::Align::Center);
+    edit_button.add_css_class("flat");
     
     edit_button.connect_clicked(|_| {
         let config_path = dirs::config_dir()
@@ -87,80 +105,29 @@ pub fn create_page() -> gtk::Widget {
             .spawn();
     });
     
-    // Save button
-    let save_button = gtk::Button::with_label(&t!("privacy.save"));
-    save_button.add_css_class("suggested-action");
-    
-    let ignore_row_clone = ignore_switch.clone();
-    
-    save_button.connect_clicked(move |btn| {
-        // Desabilitar botão e mostrar loading
-        btn.set_sensitive(false);
-        let original_label = btn.label().unwrap_or_default();
+    edit_row.add_suffix(&edit_button);
+    edit_row.set_activatable(true);
+    edit_row.connect_activated(move |_| {
+        let config_path = dirs::config_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("~/.config"))
+            .join("clippit")
+            .join("config.toml");
         
-        // Criar spinner
-        let spinner = gtk::Spinner::new();
-        spinner.start();
-        spinner.set_size_request(16, 16);
-        
-        let loading_box = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        loading_box.set_halign(gtk::Align::Center);
-        loading_box.append(&spinner);
-        loading_box.append(&gtk::Label::new(Some("Salvando...")));
-        
-        btn.set_child(Some(&loading_box));
-        
-        // Processar em background
-        let btn_clone = btn.clone();
-        let ignore_row_for_save = ignore_row_clone.clone();
-        
-        gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(100), move || {
-            let mut config = Config::load().unwrap_or_default();
-            config.privacy.ignore_sensitive_apps = ignore_row_for_save.is_active();
-            
-            if config.save().is_ok() {
-                eprintln!("✅ Configurações de privacidade salvas!");
-                
-                // Reiniciar daemon para aplicar alterações de captura de imagem
-                std::process::Command::new("systemctl")
-                    .args(&["--user", "restart", "clippit"])
-                    .spawn()
-                    .ok();
-                eprintln!("🔄 Daemon reiniciado para aplicar mudanças de captura de imagem");
-                
-                // Mostrar sucesso
-                btn_clone.set_child(Some(&gtk::Label::new(Some("✓ Salvo!"))));
-                btn_clone.add_css_class("success");
-                
-                // Restaurar botão após 2 segundos
-                let btn_final = btn_clone.clone();
-                let label_final = original_label.clone();
-                gtk::glib::timeout_add_local_once(std::time::Duration::from_secs(2), move || {
-                    btn_final.set_child(None::<&gtk::Widget>);
-                    btn_final.set_label(&label_final);
-                    btn_final.remove_css_class("success");
-                    btn_final.set_sensitive(true);
-                });
-            } else {
-                // Erro ao salvar
-                btn_clone.set_label("✗ Erro!");
-                btn_clone.set_sensitive(true);
-            }
-        });
+        let _ = std::process::Command::new("xdg-open")
+            .arg(config_path)
+            .spawn();
     });
     
-    button_box.append(&edit_button);
-    button_box.append(&save_button);
+    button_group.add(&edit_row);
+    page.add(&button_group);
 
-    let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    container.append(&page);
-    container.append(&button_box);
-    container.set_margin_start(12);
-    container.set_margin_end(12);
-    container.set_margin_top(12);
-    container.set_margin_bottom(12);
+    // No need for save button - auto-save enabled
+    page.set_margin_start(12);
+    page.set_margin_end(12);
+    page.set_margin_top(12);
+    page.set_margin_bottom(12);
     
-    scrolled.set_child(Some(&container));
+    scrolled.set_child(Some(&page));
 
     scrolled.upcast()
 }

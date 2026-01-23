@@ -170,6 +170,54 @@ impl Storage {
         Ok(result)
     }
 
+    /// Get recent entries with offset (for infinite scroll)
+    pub fn get_recent_metadata_with_offset(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, content_type, content_text, 
+                    CASE 
+                        WHEN content_type = 'image' THEN NULL 
+                        ELSE content_data 
+                    END as content_data,
+                    image_path,
+                    thumbnail_data,
+                    timestamp
+             FROM clipboard_history
+             ORDER BY timestamp DESC
+             LIMIT ?1 OFFSET ?2",
+        )?;
+
+        let entries = stmt.query_map([limit, offset], |row| {
+            let content_type_str: String = row.get(1)?;
+            let content_type = match content_type_str.as_str() {
+                "text" => ContentType::Text,
+                "image" => ContentType::Image,
+                _ => ContentType::Text,
+            };
+
+            let timestamp_str: String = row.get(6)?;
+            let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
+                .unwrap_or_else(|_| Utc::now().into())
+                .with_timezone(&Utc);
+
+            Ok(ClipboardEntry {
+                id: row.get(0)?,
+                content_type,
+                content_text: row.get(2)?,
+                content_data: row.get(3)?,
+                image_path: row.get(4)?,
+                thumbnail_data: row.get(5)?,
+                timestamp,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for entry in entries {
+            result.push(entry?);
+        }
+
+        Ok(result)
+    }
+
     pub fn get_by_id(&self, id: i64) -> Result<Option<ClipboardEntry>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, content_type, content_text, content_data, image_path, thumbnail_data, timestamp
@@ -267,6 +315,57 @@ impl Storage {
             .conn
             .execute("DELETE FROM clipboard_history", [])?;
         Ok(deleted)
+    }
+
+    /// Search in ALL history entries (no limit) - metadata only for images
+    pub fn search(&self, query: &str) -> Result<Vec<ClipboardEntry>> {
+        let search_pattern = format!("%{}%", query);
+        
+        let mut stmt = self.conn.prepare(
+            "SELECT id, content_type, content_text,
+                    CASE
+                        WHEN content_type = 'image' THEN NULL
+                        ELSE content_data
+                    END as content_data,
+                    image_path,
+                    thumbnail_data,
+                    timestamp
+             FROM clipboard_history
+             WHERE content_text LIKE ?1
+                OR image_path LIKE ?1
+             ORDER BY timestamp DESC",
+        )?;
+
+        let entries = stmt.query_map([&search_pattern], |row| {
+            let content_type_str: String = row.get(1)?;
+            let content_type = match content_type_str.as_str() {
+                "text" => ContentType::Text,
+                "image" => ContentType::Image,
+                _ => ContentType::Text,
+            };
+
+            let timestamp_str: String = row.get(6)?;
+            let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
+                .unwrap_or_else(|_| Utc::now().into())
+                .with_timezone(&Utc);
+
+            Ok(ClipboardEntry {
+                id: row.get(0)?,
+                content_type,
+                content_text: row.get(2)?,
+                content_data: row.get(3)?, // Will be None for images due to CASE
+                image_path: row.get(4)?,
+                thumbnail_data: row.get(5)?,
+                timestamp,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for entry in entries {
+            result.push(entry?);
+        }
+
+        Ok(result)
     }
 }
 

@@ -3,7 +3,11 @@ pub mod list_item;
 pub mod search;
 pub mod buttons;
 pub mod image_preview;
+pub mod suggestions_popover;
+pub mod floating_autocomplete;
+pub mod autocomplete_popup;
 
 pub use window::create_main_window;
-pub use list_item::populate_history_list;
+pub use list_item::{populate_history_list, setup_infinite_scroll};
 pub use search::setup_search_filter;
+pub use suggestions_popover::SuggestionsPopover;

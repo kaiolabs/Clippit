@@ -1,5 +1,7 @@
 mod hotkey;
 mod monitor;
+mod typing_monitor;
+mod autocomplete_manager;
 
 use anyhow::Result;
 use clippit_core::HistoryManager;
@@ -38,6 +40,19 @@ async fn main() -> Result<()> {
             error!("Clipboard monitor error: {}", e);
         }
     });
+
+    // Clone for typing monitor (autocompletar)
+    let history_clone_typing = Arc::clone(&history_manager);
+
+    // Start typing monitor (autocompletar global)
+    let typing_monitor = Arc::new(typing_monitor::TypingMonitor::new(history_clone_typing));
+    let typing_monitor_clone = Arc::clone(&typing_monitor);
+    let _typing_handle = task::spawn(async move {
+        if let Err(e) = typing_monitor_clone.run().await {
+            error!("Typing monitor error: {}", e);
+        }
+    });
+    info!("✅ Typing monitor (autocomplete) started");
 
     // Clone for hotkey handler
     let history_clone = Arc::clone(&history_manager);
@@ -106,9 +121,9 @@ fn handle_ipc_message(
             }
         }
 
-        IpcMessage::QueryHistoryMetadata { limit } => {
+        IpcMessage::QueryHistoryMetadata { limit, offset } => {
             let manager = history_manager.lock().unwrap();
-            match manager.get_recent_metadata(limit) {
+            match manager.get_recent_metadata_with_offset(limit, offset) {
                 Ok(entries) => {
                     let ipc_entries: Vec<HistoryEntry> = entries
                         .into_iter()
@@ -132,6 +147,36 @@ fn handle_ipc_message(
                 }
                 Err(e) => IpcResponse::Error {
                     message: format!("Failed to get history metadata: {}", e),
+                },
+            }
+        }
+
+        IpcMessage::SearchHistory { query } => {
+            let manager = history_manager.lock().unwrap();
+            match manager.search(&query) {
+                Ok(entries) => {
+                    let ipc_entries: Vec<HistoryEntry> = entries
+                        .into_iter()
+                        .map(|e| HistoryEntry {
+                            id: e.id,
+                            content_type: match e.content_type {
+                                clippit_core::ContentType::Text => ContentType::Text,
+                                clippit_core::ContentType::Image => ContentType::Image,
+                            },
+                            content_text: e.content_text,
+                            content_data: e.content_data,
+                            image_path: e.image_path,
+                            thumbnail_data: e.thumbnail_data,
+                            timestamp: e.timestamp,
+                        })
+                        .collect();
+                    info!("Search '{}' returned {} results (NO LIMIT)", query, ipc_entries.len());
+                    IpcResponse::SearchHistoryResponse {
+                        entries: ipc_entries,
+                    }
+                }
+                Err(e) => IpcResponse::Error {
+                    message: format!("Failed to search history: {}", e),
                 },
             }
         }
@@ -212,6 +257,42 @@ fn handle_ipc_message(
             // This is handled by the UI, daemon just acknowledges
             IpcResponse::Ok
         }
+
+        // ========== AUTOCOMPLETE GLOBAL MESSAGES ==========
+        IpcMessage::KeystrokeEvent { .. } => {
+            // TODO: Processar keystroke event
+            IpcResponse::Ok
+        }
+
+        IpcMessage::RequestAutocompleteSuggestions {
+            partial_word,
+            context,
+            max_results,
+        } => {
+            // TODO: Usar typing_monitor para gerar sugestões
+            info!(
+                "Autocomplete request: '{}' in {} (max: {})",
+                partial_word, context.app_name, max_results
+            );
+            IpcResponse::AutocompleteSuggestions {
+                suggestions: vec![],
+                query: partial_word,
+            }
+        }
+
+        IpcMessage::AcceptSuggestion {
+            suggestion,
+            partial_word,
+        } => {
+            info!(
+                "Suggestion accepted: '{}' (was: '{}')",
+                suggestion, partial_word
+            );
+            IpcResponse::SuggestionAccepted
+        }
+
+        IpcMessage::ShowAutocompletePopup { .. } => IpcResponse::Ok,
+        IpcMessage::HideAutocompletePopup => IpcResponse::Ok,
     }
 }
 

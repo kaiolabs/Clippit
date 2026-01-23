@@ -10,7 +10,7 @@ mod views;
 mod models;
 
 use utils::{apply_theme, load_custom_css};
-use views::{create_main_window, populate_history_list, setup_search_filter};
+use views::{create_main_window, populate_history_list, setup_search_filter, setup_infinite_scroll};
 use controllers::{setup_keyboard_navigation, setup_row_activation};
 use models::{new_entry_map, new_search_content_map};
 
@@ -129,10 +129,11 @@ fn build_ui(app: &Application) {
     window.set_focus_visible(true);
     
     // Setup keyboard navigation first (so ESC works immediately)
-    setup_keyboard_navigation(&window, app, &list_box, &scrolled, &entry_map);
+    setup_keyboard_navigation(&window, app, &list_box, &scrolled, &entry_map, &search_entry);
     
     // Load data asynchronously using idle_add (more efficient than timeout)
     let list_box_clone = list_box.clone();
+    let scrolled_clone = scrolled.clone();
     let window_clone = window.clone();
     let app_clone = app.clone();
     let entry_map_clone = entry_map.clone();
@@ -146,11 +147,14 @@ fn build_ui(app: &Application) {
         // Populate history list with entries
         populate_history_list(&list_box_clone, &window_clone, &app_clone, &entry_map_clone, &search_map_clone);
         
-        // Setup search filtering
-        setup_search_filter(&list_box_clone, &search_entry_clone, &search_map_clone);
+        // Setup search filtering (with ability to reload list)
+        setup_search_filter(&list_box_clone, &search_entry_clone, &search_map_clone, &window_clone, &app_clone, &entry_map_clone);
         
         // Setup row activation (click)
         setup_row_activation(&list_box_clone, &entry_map_clone, &window_clone, &app_clone);
+        
+        // Setup infinite scroll
+        setup_infinite_scroll(&scrolled_clone, &list_box_clone, &window_clone, &app_clone, &entry_map_clone, &search_map_clone);
     });
 }
 

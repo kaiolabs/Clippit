@@ -31,8 +31,20 @@ pub fn create_page() -> gtk::Widget {
     let max_items_spin = gtk::SpinButton::with_range(10.0, 10000.0, 1.0);
     max_items_spin.set_value(config.general.max_history_items as f64);
     max_items_spin.set_valign(gtk::Align::Center);
-    max_items_row.add_suffix(&max_items_spin);
     
+    // Auto-save on value change
+    max_items_spin.connect_value_changed(|spin| {
+        if let Ok(mut cfg) = Config::load() {
+            cfg.general.max_history_items = spin.value() as usize;
+            if let Err(e) = cfg.save() {
+                eprintln!("❌ Erro ao salvar: {}", e);
+            } else {
+                eprintln!("✅ Max items atualizado: {}", spin.value());
+            }
+        }
+    });
+    
+    max_items_row.add_suffix(&max_items_spin);
     group.add(&max_items_row);
 
     // Poll Interval
@@ -46,9 +58,49 @@ pub fn create_page() -> gtk::Widget {
     let poll_interval_spin = gtk::SpinButton::with_range(50.0, 5000.0, 10.0);
     poll_interval_spin.set_value(config.general.poll_interval_ms as f64);
     poll_interval_spin.set_valign(gtk::Align::Center);
-    poll_interval_row.add_suffix(&poll_interval_spin);
     
+    // Auto-save on value change
+    poll_interval_spin.connect_value_changed(|spin| {
+        if let Ok(mut cfg) = Config::load() {
+            cfg.general.poll_interval_ms = spin.value() as u64;
+            if let Err(e) = cfg.save() {
+                eprintln!("❌ Erro ao salvar: {}", e);
+            } else {
+                eprintln!("✅ Poll interval atualizado: {}", spin.value());
+            }
+        }
+    });
+    
+    poll_interval_row.add_suffix(&poll_interval_spin);
     group.add(&poll_interval_row);
+    
+    // Show Notifications
+    let notifications_row = adw::ActionRow::new();
+    notifications_row.set_title("Mostrar Notificações");
+    notifications_row.set_subtitle("Exibir notificações ao copiar itens");
+    
+    let icon3 = gtk::Image::from_icon_name("preferences-system-notifications-symbolic");
+    notifications_row.add_prefix(&icon3);
+    
+    let notifications_switch = gtk::Switch::new();
+    notifications_switch.set_active(config.ui.show_notifications);
+    notifications_switch.set_valign(gtk::Align::Center);
+    
+    // Auto-save on toggle
+    notifications_switch.connect_active_notify(|switch| {
+        if let Ok(mut cfg) = Config::load() {
+            cfg.ui.show_notifications = switch.is_active();
+            if let Err(e) = cfg.save() {
+                eprintln!("❌ Erro ao salvar: {}", e);
+            } else {
+                eprintln!("✅ Notificações {}", if switch.is_active() { "habilitadas" } else { "desabilitadas" });
+            }
+        }
+    });
+    
+    notifications_row.add_suffix(&notifications_switch);
+    notifications_row.set_activatable_widget(Some(&notifications_switch));
+    group.add(&notifications_row);
 
     page.add(&group);
     
@@ -112,6 +164,20 @@ pub fn create_page() -> gtk::Widget {
     let enable_image_switch = gtk::Switch::new();
     enable_image_switch.set_active(config.privacy.enable_image_capture);
     enable_image_switch.set_valign(gtk::Align::Center);
+    
+    // Auto-save on toggle
+    enable_image_switch.connect_state_set(|_, state| {
+        if let Ok(mut cfg) = Config::load() {
+            cfg.privacy.enable_image_capture = state;
+            if let Err(e) = cfg.save() {
+                eprintln!("❌ Erro ao salvar: {}", e);
+            } else {
+                eprintln!("✅ Image capture atualizado: {}", state);
+            }
+        }
+        gtk::glib::Propagation::Proceed
+    });
+    
     enable_image_row.set_activatable_widget(Some(&enable_image_switch));
     enable_image_row.add_suffix(&enable_image_switch);
     
@@ -139,7 +205,18 @@ pub fn create_page() -> gtk::Widget {
     
     let size_label_clone = size_label.clone();
     size_scale.connect_value_changed(move |scale| {
-        size_label_clone.set_text(&format!("{} MB", scale.value() as u32));
+        let value = scale.value() as u32;
+        size_label_clone.set_text(&format!("{} MB", value));
+        
+        // Auto-save on slider change
+        if let Ok(mut cfg) = Config::load() {
+            cfg.privacy.max_image_size_mb = value;
+            if let Err(e) = cfg.save() {
+                eprintln!("❌ Erro ao salvar: {}", e);
+            } else {
+                eprintln!("✅ Max image size atualizado: {} MB", value);
+            }
+        }
     });
     
     slider_box.append(&size_scale);
@@ -150,104 +227,13 @@ pub fn create_page() -> gtk::Widget {
     
     page.add(&image_group);
     
-    // Save button group at the end
-    let button_group = adw::PreferencesGroup::new();
-    button_group.set_margin_top(24);
+    // No need for save button - auto-save enabled
+    page.set_margin_start(12);
+    page.set_margin_end(12);
+    page.set_margin_top(12);
+    page.set_margin_bottom(12);
     
-    let save_button = gtk::Button::with_label(&t!("general.save"));
-    save_button.add_css_class("suggested-action");
-    save_button.add_css_class("pill");
-    save_button.set_halign(gtk::Align::Center);
-    save_button.set_size_request(300, -1);
-    
-    let max_items_clone = max_items_spin.clone();
-    let poll_interval_clone = poll_interval_spin.clone();
-    let size_scale_clone = size_scale.clone();
-    let enable_image_clone = enable_image_switch.clone();
-    
-    save_button.connect_clicked(move |btn| {
-        // Desabilitar botão e mostrar loading
-        btn.set_sensitive(false);
-        let original_label = btn.label().unwrap_or_default();
-        
-        // Criar spinner
-        let spinner = gtk::Spinner::new();
-        spinner.start();
-        spinner.set_size_request(16, 16);
-        
-        let loading_box = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        loading_box.set_halign(gtk::Align::Center);
-        loading_box.append(&spinner);
-        loading_box.append(&gtk::Label::new(Some("Salvando...")));
-        
-        btn.set_child(Some(&loading_box));
-        
-        // Processar em background
-        let btn_clone = btn.clone();
-        let max_items_for_save = max_items_clone.clone();
-        let poll_interval_for_save = poll_interval_clone.clone();
-        let size_scale_for_save = size_scale_clone.clone();
-        let enable_image_for_save = enable_image_clone.clone();
-        
-        gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(100), move || {
-            let mut config = Config::load().unwrap_or_default();
-            config.general.max_history_items = max_items_for_save.value() as usize;
-            config.general.poll_interval_ms = poll_interval_for_save.value() as u64;
-            config.privacy.max_image_size_mb = size_scale_for_save.value() as u32;
-            config.privacy.enable_image_capture = enable_image_for_save.is_active();
-            
-            if config.save().is_ok() {
-                eprintln!("✅ Configurações salvas!");
-                eprintln!("🔄 Reiniciando daemon para aplicar mudanças...");
-                
-                let _restart_result = std::process::Command::new("systemctl")
-                    .args(&["--user", "restart", "clippit"])
-                    .output();
-                
-                // Mostrar sucesso
-                btn_clone.set_child(Some(&gtk::Label::new(Some("✓ Salvo!"))));
-                btn_clone.add_css_class("success");
-                
-                // Restaurar botão após 2 segundos
-                let btn_final = btn_clone.clone();
-                let label_final = original_label.clone();
-                gtk::glib::timeout_add_local_once(std::time::Duration::from_secs(2), move || {
-                    btn_final.set_child(None::<&gtk::Widget>);
-                    btn_final.set_label(&label_final);
-                    btn_final.remove_css_class("success");
-                    btn_final.set_sensitive(true);
-                });
-            } else {
-                // Erro ao salvar
-                btn_clone.set_label("✗ Erro!");
-                btn_clone.set_sensitive(true);
-            }
-        });
-    });
-    
-    // Create a box for the button
-    let button_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    button_box.set_margin_start(12);
-    button_box.set_margin_end(12);
-    button_box.set_margin_top(12);
-    button_box.set_margin_bottom(12);
-    button_box.append(&save_button);
-    
-    let button_row = gtk::ListBoxRow::new();
-    button_row.set_activatable(false);
-    button_row.set_selectable(false);
-    button_row.set_child(Some(&button_box));
-    
-    // We need to add the button after the page in a container
-    let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    container.append(&page);
-    container.append(&button_box);
-    container.set_margin_start(12);
-    container.set_margin_end(12);
-    container.set_margin_top(12);
-    container.set_margin_bottom(12);
-    
-    scrolled.set_child(Some(&container));
+    scrolled.set_child(Some(&page));
 
     scrolled.upcast()
 }

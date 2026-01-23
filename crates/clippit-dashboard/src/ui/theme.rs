@@ -38,6 +38,29 @@ pub fn create_page() -> gtk::Widget {
         _ => theme_row.set_selected(0),
     }
     
+    // Auto-save on theme change
+    theme_row.connect_selected_notify(|row| {
+        if let Ok(mut cfg) = Config::load() {
+            cfg.ui.theme = match row.selected() {
+                0 => "system".to_string(),
+                1 => "dark".to_string(),
+                2 => "light".to_string(),
+                _ => "system".to_string(),
+            };
+            
+            if cfg.save().is_ok() {
+                // Apply theme immediately
+                let style_manager = adw::StyleManager::default();
+                match cfg.ui.theme.as_str() {
+                    "dark" => style_manager.set_color_scheme(adw::ColorScheme::ForceDark),
+                    "light" => style_manager.set_color_scheme(adw::ColorScheme::ForceLight),
+                    "system" | _ => style_manager.set_color_scheme(adw::ColorScheme::Default),
+                }
+                eprintln!("✅ Tema atualizado: {}", cfg.ui.theme);
+            }
+        }
+    });
+    
     group.add(&theme_row);
 
     // Language selection
@@ -56,6 +79,33 @@ pub fn create_page() -> gtk::Widget {
         "pt" => lang_row.set_selected(1),
         _ => lang_row.set_selected(0),
     }
+    
+    // Auto-save on language change (will reload dashboard)
+    lang_row.connect_selected_notify(|row| {
+        if let Ok(mut cfg) = Config::load() {
+            let new_language = match row.selected() {
+                0 => "en".to_string(),
+                1 => "pt".to_string(),
+                _ => "en".to_string(),
+            };
+            
+            let old_language = cfg.ui.language.clone();
+            cfg.ui.language = new_language.clone();
+            
+            if cfg.save().is_ok() && old_language != new_language {
+                set_language(&new_language);
+                eprintln!("✅ Idioma atualizado: {} (recarregando dashboard...)", new_language);
+                
+                // Restart dashboard to apply language
+                gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(500), move || {
+                    std::process::Command::new("clippit-dashboard").spawn().ok();
+                    gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(200), move || {
+                        std::process::exit(0);
+                    });
+                });
+            }
+        }
+    });
     
     group.add(&lang_row);
 
@@ -85,6 +135,30 @@ pub fn create_page() -> gtk::Widget {
         font_button.set_font_desc(&initial_font_desc);
     }
     
+    // Auto-save on font change (will reload dashboard)
+    font_button.connect_font_set(|btn| {
+        if let Ok(mut cfg) = Config::load() {
+            let font_family = btn.font_desc()
+                .and_then(|desc| desc.family().map(|f| f.to_string()))
+                .unwrap_or_else(|| "Nunito".to_string());
+            
+            let old_font = cfg.ui.font_family.clone();
+            cfg.ui.font_family = font_family.clone();
+            
+            if cfg.save().is_ok() && old_font != font_family {
+                eprintln!("✅ Fonte atualizada: {} (recarregando dashboard...)", font_family);
+                
+                // Restart dashboard to apply font
+                gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(500), move || {
+                    std::process::Command::new("clippit-dashboard").spawn().ok();
+                    gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(200), move || {
+                        std::process::exit(0);
+                    });
+                });
+            }
+        }
+    });
+    
     font_row.add_suffix(&font_button);
     font_row.set_activatable_widget(Some(&font_button));
     
@@ -101,160 +175,32 @@ pub fn create_page() -> gtk::Widget {
     let font_size_spin = gtk::SpinButton::with_range(8.0, 32.0, 1.0);
     font_size_spin.set_value(config.ui.font_size as f64);
     font_size_spin.set_valign(gtk::Align::Center);
-    font_size_row.add_suffix(&font_size_spin);
     
+    // Auto-save on font size change
+    font_size_spin.connect_value_changed(|spin| {
+        if let Ok(mut cfg) = Config::load() {
+            cfg.ui.font_size = spin.value() as u32;
+            if let Err(e) = cfg.save() {
+                eprintln!("❌ Erro ao salvar: {}", e);
+            } else {
+                eprintln!("✅ Tamanho de fonte atualizado: {}", spin.value());
+            }
+        }
+    });
+    
+    font_size_row.add_suffix(&font_size_spin);
     group.add(&font_size_row);
 
     page.add(&group);
-
-    // Save button at the end
-    let save_button = gtk::Button::with_label(&t!("general.save"));
-    save_button.add_css_class("suggested-action");
-    save_button.add_css_class("pill");
-    save_button.set_halign(gtk::Align::Center);
-    save_button.set_size_request(300, -1);
     
-    let theme_row_clone = theme_row.clone();
-    let lang_row_clone = lang_row.clone();
-    let font_button_clone = font_button.clone();
-    let font_size_clone = font_size_spin.clone();
+    // No need for save button - auto-save enabled
+    // Note: Language and Font changes will automatically reload the dashboard
+    page.set_margin_start(12);
+    page.set_margin_end(12);
+    page.set_margin_top(12);
+    page.set_margin_bottom(12);
     
-    save_button.connect_clicked(move |btn| {
-        // Desabilitar botão e mostrar loading
-        btn.set_sensitive(false);
-        let original_label = btn.label().unwrap_or_default();
-        
-        // Criar spinner
-        let spinner = gtk::Spinner::new();
-        spinner.start();
-        spinner.set_size_request(16, 16);
-        
-        let loading_box = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        loading_box.set_halign(gtk::Align::Center);
-        loading_box.append(&spinner);
-        loading_box.append(&gtk::Label::new(Some("Salvando...")));
-        
-        btn.set_child(Some(&loading_box));
-        
-        // Processar em background
-        let btn_clone = btn.clone();
-        let theme_row_for_save = theme_row_clone.clone();
-        let lang_row_for_save = lang_row_clone.clone();
-        let font_button_for_save = font_button_clone.clone();
-        let font_size_for_save = font_size_clone.clone();
-        
-        gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(100), move || {
-            let mut config = Config::load().unwrap_or_default();
-            
-            config.ui.theme = match theme_row_for_save.selected() {
-                0 => "system".to_string(),
-                1 => "dark".to_string(),
-                2 => "light".to_string(),
-                _ => "system".to_string(),
-            };
-            
-            let new_language = match lang_row_for_save.selected() {
-                0 => "en".to_string(),
-                1 => "pt".to_string(),
-                _ => "en".to_string(),
-            };
-            
-            config.ui.language = new_language.clone();
-            
-            // Obter família de fonte selecionada (compatível com FontButton)
-            let font_family = font_button_for_save.font_desc()
-                .and_then(|desc| desc.family().map(|f| f.to_string()))
-                .unwrap_or_else(|| "Nunito".to_string());
-            config.ui.font_family = font_family;
-            
-            config.ui.font_size = font_size_for_save.value() as u32;
-            
-            // Verificar se idioma OU fonte mudaram
-            let old_config = Config::load().unwrap_or_default();
-            let language_changed = old_config.ui.language != new_language;
-            let font_changed = old_config.ui.font_family != config.ui.font_family;
-            let needs_reload = language_changed || font_changed;
-            
-            if config.save().is_ok() {
-                // Aplicar tema imediatamente
-                let style_manager = adw::StyleManager::default();
-                match config.ui.theme.as_str() {
-                    "dark" => style_manager.set_color_scheme(adw::ColorScheme::ForceDark),
-                    "light" => style_manager.set_color_scheme(adw::ColorScheme::ForceLight),
-                    "system" | _ => style_manager.set_color_scheme(adw::ColorScheme::Default),
-                }
-                
-                // Aplicar idioma imediatamente
-                set_language(&new_language);
-                
-                eprintln!("✅ {}", t!("messages.saved"));
-                
-                // Reiniciar daemon
-                let _restart_result = std::process::Command::new("systemctl")
-                    .args(&["--user", "restart", "clippit"])
-                    .output();
-                
-                // Mostrar sucesso
-                btn_clone.set_child(Some(&gtk::Label::new(Some("✓ Salvo!"))));
-                btn_clone.add_css_class("success");
-                
-                // Se idioma OU fonte mudaram, recarregar o dashboard
-                if needs_reload {
-                    if language_changed {
-                        eprintln!("🔄 Idioma alterado, recarregando dashboard...");
-                    }
-                    if font_changed {
-                        eprintln!("🔄 Fonte alterada, recarregando dashboard...");
-                    }
-                    
-                    gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(800), move || {
-                        // Iniciar nova instância do dashboard
-                        std::process::Command::new("clippit-dashboard")
-                            .spawn()
-                            .ok();
-                        
-                        // Fechar janela atual após pequeno delay
-                        gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(200), move || {
-                            if let Some(window) = btn_clone.root().and_downcast::<gtk::Window>() {
-                                window.close();
-                            }
-                        });
-                    });
-                } else {
-                    // Apenas tema mudou, restaurar botão
-                    let btn_final = btn_clone.clone();
-                    let label_final = original_label.clone();
-                    gtk::glib::timeout_add_local_once(std::time::Duration::from_secs(2), move || {
-                        btn_final.set_child(None::<&gtk::Widget>);
-                        btn_final.set_label(&label_final);
-                        btn_final.remove_css_class("success");
-                        btn_final.set_sensitive(true);
-                    });
-                }
-            } else {
-                // Erro ao salvar
-                btn_clone.set_label("✗ Erro!");
-                btn_clone.set_sensitive(true);
-            }
-        });
-    });
-    
-    let button_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    button_box.set_margin_start(12);
-    button_box.set_margin_end(12);
-    button_box.set_margin_top(24);
-    button_box.set_margin_bottom(12);
-    button_box.append(&save_button);
-
-    let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    container.append(&page);
-    container.append(&button_box);
-    container.set_margin_start(12);
-    container.set_margin_end(12);
-    container.set_margin_top(12);
-    container.set_margin_bottom(12);
-    
-    scrolled.set_child(Some(&container));
+    scrolled.set_child(Some(&page));
 
     scrolled.upcast()
 }

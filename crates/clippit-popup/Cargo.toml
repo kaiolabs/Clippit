@@ -17,8 +17,10 @@ gtk = { version = "0.9", package = "gtk4", features = ["v4_6"] }
 libadwaita = { version = "0.7", features = ["v1_2"] }
 anyhow.workspace = true
 arboard.workspace = true
+tracing.workspace = true
 dirs = "5.0"
 rust-i18n.workspace = true
 image.workspace = true
 gdk-pixbuf = "0.20"
 signal-hook = "0.3"
+fuzzy-matcher = "0.3"

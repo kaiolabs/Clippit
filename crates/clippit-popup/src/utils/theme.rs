@@ -58,6 +58,58 @@ pub fn load_custom_css() {
         
         .skeleton-pulse {
             animation: skeleton-pulse 1.8s ease-in-out infinite;
+        }
+        
+        /* Popover de sugestões de autocompletar */
+        .suggestions-popover {
+            padding: 4px;
+            background-color: @window_bg_color;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        .suggestions-list {
+            background-color: transparent;
+        }
+        
+        .suggestion-row {
+            padding: 8px 12px;
+            border-radius: 6px;
+            transition: background-color 0.15s ease;
+        }
+        
+        .suggestion-row:hover {
+            background-color: alpha(@accent_color, 0.1);
+        }
+        
+        .suggestion-row:selected {
+            background-color: @accent_color;
+            color: @accent_fg_color;
+        }
+        
+        .suggestion-word {
+            font-weight: 500;
+            font-size: 14px;
+        }
+        
+        .suggestion-history-icon {
+            color: @success_color;
+            opacity: 0.9;
+        }
+        
+        .suggestion-row:selected .suggestion-history-icon {
+            color: @accent_fg_color;
+            opacity: 1;
+        }
+        
+        /* Garante que botões de ação sejam visíveis em qualquer tema */
+        button.flat.circular {
+            opacity: 0.7;
+            transition: opacity 0.2s ease;
+        }
+        
+        button.flat.circular:hover {
+            opacity: 1;
         }"
     );
     
