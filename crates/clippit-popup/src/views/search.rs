@@ -58,33 +58,35 @@ pub fn setup_search_filter(
     
     // NO filter_func needed - we'll reload the list with search results from DB
     
-    // Conectar mudanças no campo de busca
-    let suggestion_engine_for_changed = suggestion_engine.clone();
-    let suggestions_popover_for_changed = suggestions_popover.clone();
-    
-    search_entry.connect_changed(move |entry| {
-        let text = entry.text().to_string();
+    // Função para executar busca (pode ser chamada de vários lugares)
+    let perform_search = {
+        let list_box_clone = list_box_for_search.clone();
+        let window_clone = window_for_search.clone();
+        let app_clone = app_for_search.clone();
+        let entry_map_clone = entry_map_for_search.clone();
+        let search_map_clone = search_map_for_search.clone();
         
-        // 🔍 BUSCA REAL NO BANCO DE DADOS (sem limite)
-        if text.is_empty() {
-            // TODO: Recarregar lista normal (primeiros 30 itens)
-            eprintln!("🔍 Busca vazia - deveria recarregar lista normal");
-        } else {
-            // Buscar TUDO no banco de dados
-            eprintln!("🔍 Buscando no banco: '{}'", text);
+        Rc::new(move |query: String| {
+            if query.is_empty() {
+                eprintln!("🔍 Busca vazia - mantendo lista atual");
+                return;
+            }
             
-            match IpcClient::search_history(text.clone()) {
+            // Buscar TUDO no banco de dados
+            eprintln!("🔍 Buscando no banco: '{}'", query);
+            
+            match IpcClient::search_history(query.clone()) {
                 Ok(entries) => {
                     eprintln!("✅ Busca retornou {} resultados", entries.len());
                     
                     // Limpar lista atual
-                    while let Some(child) = list_box_for_search.first_child() {
-                        list_box_for_search.remove(&child);
+                    while let Some(child) = list_box_clone.first_child() {
+                        list_box_clone.remove(&child);
                     }
                     
                     // Limpar mapas
-                    entry_map_for_search.borrow_mut().clear();
-                    search_map_for_search.borrow_mut().clear();
+                    entry_map_clone.borrow_mut().clear();
+                    search_map_clone.borrow_mut().clear();
                     
                     // Repovoar com resultados da busca
                     for (index, hist_entry) in entries.iter().enumerate() {
@@ -148,28 +150,40 @@ pub fn setup_search_filter(
                         row.set_subtitle(&hist_entry.timestamp.format("%d/%m/%Y %H:%M:%S").to_string());
                         
                         // Store entry ID and search content
-                        entry_map_for_search.borrow_mut().insert(index as i32, hist_entry.id);
+                        entry_map_clone.borrow_mut().insert(index as i32, hist_entry.id);
                         let title_text = row.title().to_string();
                         let subtitle_text = row.subtitle().map(|s| s.to_string()).unwrap_or_default();
-                        search_map_for_search.borrow_mut().insert(index as i32, format!("{} {}", title_text, subtitle_text));
+                        search_map_clone.borrow_mut().insert(index as i32, format!("{} {}", title_text, subtitle_text));
                         
                         // Add buttons
-                        add_delete_button(&row, hist_entry.id, &list_box_for_search);
-                        add_copy_button(&row, hist_entry.id, &window_for_search, &app_for_search);
+                        add_delete_button(&row, hist_entry.id, &list_box_clone);
+                        add_copy_button(&row, hist_entry.id, &window_clone, &app_clone);
                         
-                        list_box_for_search.append(&row);
+                        list_box_clone.append(&row);
                     }
                     
                     // Auto-select first result
-                    if let Some(first_row) = list_box_for_search.row_at_index(0) {
-                        list_box_for_search.select_row(Some(&first_row));
+                    if let Some(first_row) = list_box_clone.row_at_index(0) {
+                        list_box_clone.select_row(Some(&first_row));
                     }
                 }
                 Err(e) => {
                     eprintln!("❌ Erro na busca: {}", e);
                 }
             }
-        }
+        })
+    };
+    
+    // Conectar mudanças no campo de busca
+    let suggestion_engine_for_changed = suggestion_engine.clone();
+    let suggestions_popover_for_changed = suggestions_popover.clone();
+    let perform_search_for_changed = perform_search.clone();
+    
+    search_entry.connect_changed(move |entry| {
+        let text = entry.text().to_string();
+        
+        // 🔍 BUSCA EM TEMPO REAL
+        perform_search_for_changed(text.clone());
         
         // Autocompletar (só se habilitado)
         if let (Some(ref engine), Some(ref popover)) = (&suggestion_engine_for_changed, &suggestions_popover_for_changed) {
@@ -198,6 +212,7 @@ pub fn setup_search_filter(
         let key_controller = gtk::EventControllerKey::new();
         key_controller.set_propagation_phase(gtk::PropagationPhase::Capture);
         let search_entry_for_keys = search_entry.clone();
+        let perform_search_for_keys = perform_search.clone();
         
         key_controller.connect_key_pressed(move |_, key, _, _| {
             let popover_visible = suggestions_popover_for_keys.borrow().is_visible();
@@ -213,6 +228,11 @@ pub fn setup_search_filter(
                             eprintln!("🔍 Completing with: {}", word);
                             complete_current_word(&search_entry_for_keys, &word);
                             suggestions_popover_for_keys.borrow().hide();
+                            
+                            // 🔍 BUSCAR EM TEMPO REAL após completar
+                            let new_text = search_entry_for_keys.text().to_string();
+                            perform_search_for_keys(new_text);
+                            
                             return gtk::glib::Propagation::Stop;
                         }
                     }
@@ -220,12 +240,32 @@ pub fn setup_search_filter(
                 gtk::gdk::Key::Up => {
                     if popover_visible {
                         suggestions_popover_for_keys.borrow_mut().navigate_up();
+                        
+                        // 🔍 BUSCAR EM TEMPO REAL ao navegar nas sugestões
+                        let selected = suggestions_popover_for_keys.borrow()
+                            .get_selected_suggestion()
+                            .map(|s| s.word.clone());
+                        
+                        if let Some(word) = selected {
+                            perform_search_for_keys(word);
+                        }
+                        
                         return gtk::glib::Propagation::Stop;
                     }
                 }
                 gtk::gdk::Key::Down => {
                     if popover_visible {
                         suggestions_popover_for_keys.borrow_mut().navigate_down();
+                        
+                        // 🔍 BUSCAR EM TEMPO REAL ao navegar nas sugestões
+                        let selected = suggestions_popover_for_keys.borrow()
+                            .get_selected_suggestion()
+                            .map(|s| s.word.clone());
+                        
+                        if let Some(word) = selected {
+                            perform_search_for_keys(word);
+                        }
+                        
                         return gtk::glib::Propagation::Stop;
                     }
                 }
@@ -241,9 +281,9 @@ pub fn setup_search_filter(
         });
         
         search_entry.add_controller(key_controller);
-        eprintln!("✅ Search filter with autocomplete setup complete!");
+        eprintln!("✅ Search filter with REAL-TIME database search + autocomplete setup complete!");
     } else {
-        eprintln!("✅ Search filter setup complete (suggestions disabled)!");
+        eprintln!("✅ Search filter with REAL-TIME database search setup complete (suggestions disabled)!");
     }
 }
 
