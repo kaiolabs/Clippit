@@ -89,19 +89,28 @@ pub fn setup_search_filter(
                     
                     if entries.is_empty() {
                         eprintln!("⚠️  NENHUM RESULTADO ENCONTRADO PARA: '{}'", query);
+                    } else {
+                        eprintln!("📋 Vou adicionar {} resultados na lista...", entries.len());
                     }
                     
                     // Limpar lista atual
+                    eprintln!("🗑️  Limpando lista atual...");
+                    let mut removed_count = 0;
                     while let Some(child) = list_box_clone.first_child() {
                         list_box_clone.remove(&child);
+                        removed_count += 1;
                     }
+                    eprintln!("🗑️  Removidos {} itens", removed_count);
                     
                     // Limpar mapas
                     entry_map_clone.borrow_mut().clear();
                     search_map_clone.borrow_mut().clear();
+                    eprintln!("🗑️  Mapas limpos");
                     
                     // Repovoar com resultados da busca
+                    eprintln!("➕ Começando a adicionar resultados...");
                     for (index, hist_entry) in entries.iter().enumerate() {
+                        eprintln!("  ➕ Adicionando item {}/{}: id={}", index+1, entries.len(), hist_entry.id);
                         let row = adw::ActionRow::new();
                         
                         // Format based on type
@@ -172,11 +181,17 @@ pub fn setup_search_filter(
                         add_copy_button(&row, hist_entry.id, &window_clone, &app_clone);
                         
                         list_box_clone.append(&row);
+                        eprintln!("  ✅ Item {} adicionado à lista", index+1);
                     }
+                    
+                    eprintln!("🎉 TODOS OS {} RESULTADOS FORAM ADICIONADOS!", entries.len());
                     
                     // Auto-select first result
                     if let Some(first_row) = list_box_clone.row_at_index(0) {
                         list_box_clone.select_row(Some(&first_row));
+                        eprintln!("✅ Primeiro item selecionado");
+                    } else {
+                        eprintln!("⚠️  Nenhum item para selecionar (lista vazia?)");
                     }
                 }
                 Err(e) => {
