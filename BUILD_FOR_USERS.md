@@ -25,8 +25,13 @@ sudo apt update && sudo apt install -y \
     libadwaita-1-dev \
     libsqlite3-dev \
     libdbus-1-dev \
-    libnotify-bin
+    libnotify-bin \
+    xdotool \
+    yad \
+    ibus
 ```
+
+**Nota:** `xdotool`, `yad` e `ibus` são necessários para o **autocomplete global**.
 
 ### **2. Instalar Rust:**
 
@@ -73,6 +78,33 @@ systemctl --user enable --now clippit
 # Testar o atalho
 # Pressione Ctrl+Numpad1 para abrir o histórico (padrão)
 # Ou configure outro atalho com: clippit-dashboard
+```
+
+### **🎯 Recursos Disponíveis**
+
+#### **1. Histórico de Clipboard**
+- Pressione o atalho configurado (padrão: `Ctrl+Numpad1`)
+- Navegue com setas ou digite para pesquisar
+- Clique ou pressione Enter para copiar
+
+#### **2. Autocomplete Global do Sistema 🚀 NOVO!**
+O Clippit agora oferece **autocomplete global** baseado no seu histórico, funcionando em **qualquer aplicativo**!
+
+**Como funciona:**
+1. Digite qualquer palavra em qualquer aplicativo (gedit, navegador, terminal, etc.)
+2. Um popup "fantasma" aparece com sugestões do seu histórico
+3. Pressione **Tab** para aceitar a sugestão → texto completo é digitado automaticamente!
+4. Continue digitando normalmente (o popup não rouba o foco)
+
+**Exemplos:**
+- Digite `"cód"` → sugere `"código"`, `"códigos"`, etc.
+- Digite `"dese"` → sugere `"desenvolvimento"`, `"desempenho"`, etc.
+
+**Configuração:**
+```bash
+clippit-dashboard
+# Vá na aba "Autocompletar"
+# Configure: mínimo de caracteres, atraso, apps ignorados, etc.
 ```
 
 ---
@@ -138,6 +170,33 @@ sudo apt install libnotify-bin
 - Configure outro atalho usando `clippit-dashboard`
 - No Wayland, alguns atalhos podem precisar de permissão via portal
 
+### Autocomplete não aparece
+```bash
+# Verificar se xdotool e yad estão instalados
+sudo apt install xdotool yad
+
+# Verificar se o recurso está ativado
+clippit-dashboard  # Aba "Autocompletar" → ativar
+
+# Ver logs para diagnóstico
+journalctl --user -u clippit -f
+```
+
+### Popup do autocomplete rouba o foco
+- O popup deve aparecer como "fantasma" (overlay)
+- Certifique-se de que `yad` está atualizado: `sudo apt upgrade yad`
+- Alternativa: desative notificações visuais e use apenas Tab
+
+### Autocomplete não injeta texto
+```bash
+# Verificar se xdotool funciona
+xdotool type "teste"
+
+# Se não funcionar, pode ser limitação do Wayland
+# Algumas apps Wayland-native podem bloquear injeção de texto
+# Funciona melhor em apps X11/XWayland
+```
+
 ---
 
 ## 📝 **Resumo - Instalação Completa**
@@ -148,7 +207,7 @@ sudo apt update && sudo apt install -y \
     curl build-essential pkg-config \
     libgtk-4-dev libadwaita-1-dev \
     libsqlite3-dev libdbus-1-dev \
-    libnotify-bin
+    libnotify-bin xdotool yad ibus
 
 # 2. Instalar Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -188,3 +247,29 @@ O Clippit agora é **nativo do Wayland**, o que significa:
 - ✅ Funciona nativamente sem X11
 - ⚠️ Não tem auto-paste (limitação de segurança do Wayland)
 - 💡 Use `Ctrl+V` para colar após selecionar um item
+
+### **🎯 Autocomplete Global no Wayland**
+
+O **autocomplete global** funciona tanto em **X11** quanto em **Wayland**, mas com algumas diferenças:
+
+#### **✅ Em X11/XWayland:**
+- Injeção de texto funciona perfeitamente
+- Popup posicionado precisamente no cursor
+- Funciona em 100% dos aplicativos
+
+#### **⚠️ Em Wayland puro:**
+- Injeção de texto pode não funcionar em apps Wayland-native (limitação de segurança)
+- Funciona bem em apps XWayland (maioria dos apps)
+- Popup pode não ser posicionado exatamente no cursor
+- **Solução:** Use apps via XWayland ou aguarde suporte nativo do Wayland
+
+**Apps testados que funcionam:**
+- ✅ gedit, Firefox, Chrome, VS Code, Terminal GNOME
+- ✅ LibreOffice, Thunderbird, Discord
+- ⚠️ GNOME Text Editor (Wayland-native) - limitado
+
+**Dica:** Para melhor compatibilidade, force apps em modo XWayland:
+```bash
+# Exemplo: forçar gedit em XWayland
+GDK_BACKEND=x11 gedit
+```
