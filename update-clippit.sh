@@ -72,11 +72,13 @@ echo "📦 Instalando binários novos..."
 sudo cp target/release/clippit-daemon /usr/local/bin/clippit-daemon
 sudo cp target/release/clippit-popup /usr/local/bin/clippit-popup
 sudo cp target/release/clippit-dashboard /usr/local/bin/clippit-dashboard
+sudo cp target/release/clippit-tooltip /usr/local/bin/clippit-tooltip
 
 # Dar permissões de execução
 sudo chmod +x /usr/local/bin/clippit-daemon
 sudo chmod +x /usr/local/bin/clippit-popup
 sudo chmod +x /usr/local/bin/clippit-dashboard
+sudo chmod +x /usr/local/bin/clippit-tooltip
 
 # Instalar IBus Component (Autocomplete Global)
 echo "⌨️  Instalando IBus Component (Autocomplete Global)..."
