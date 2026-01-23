@@ -25,7 +25,7 @@ impl AutocompleteManager {
         }
     }
 
-    /// Atualiza sugestões e mostra notificação
+    /// Atualiza sugestões e mostra popup flutuante
     pub fn show_suggestions(&self, suggestions: Vec<Suggestion>, partial_word: String) -> Result<()> {
         if suggestions.is_empty() {
             return Ok(());
@@ -39,34 +39,79 @@ impl AutocompleteManager {
         // Salvar em arquivo temporário para acesso externo
         self.save_suggestions_file(&suggestions, &partial_word)?;
 
-        // Mostrar notificação
-        let text = suggestions
-            .iter()
-            .take(5)
-            .enumerate()
-            .map(|(i, s)| {
-                if i == 0 {
-                    format!("➜ {}", s.word)
-                } else {
-                    format!("  {}", s.word)
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+        // Obter posição do cursor
+        let cursor_pos = self.get_cursor_position()?;
 
-        let hint = format!("💡 Sugestões (Tab para aceitar)\n{}", text);
-
-        Command::new("notify-send")
-            .arg("Clippit Autocomplete")
-            .arg(&hint)
-            .arg("-t")
-            .arg("3000")
-            .arg("-u")
-            .arg("low")
-            .spawn()
-            .ok();
+        // Mostrar popup flutuante próximo ao cursor
+        self.show_floating_popup(&suggestions, cursor_pos)?;
 
         info!("📋 {} sugestões mostradas para '{}'", suggestions.len(), partial_word);
+        Ok(())
+    }
+
+    /// Obtém a posição do cursor na tela
+    fn get_cursor_position(&self) -> Result<(i32, i32)> {
+        let output = Command::new("xdotool")
+            .arg("getmouselocation")
+            .arg("--shell")
+            .output()?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut x = 0;
+        let mut y = 0;
+
+        for line in stdout.lines() {
+            if line.starts_with("X=") {
+                x = line.trim_start_matches("X=").parse().unwrap_or(0);
+            } else if line.starts_with("Y=") {
+                y = line.trim_start_matches("Y=").parse().unwrap_or(0);
+            }
+        }
+
+        // Offset para aparecer abaixo do cursor
+        Ok((x, y + 20))
+    }
+
+    /// Mostra popup flutuante com rofi
+    fn show_floating_popup(&self, suggestions: &[Suggestion], pos: (i32, i32)) -> Result<()> {
+        // Preparar lista de sugestões
+        let items: Vec<String> = suggestions
+            .iter()
+            .take(5)
+            .map(|s| s.word.clone())
+            .collect();
+
+        // Criar entrada rofi
+        let input = items.join("\n");
+
+        // Spawn rofi como daemon (non-blocking)
+        let (x, y) = pos;
+        std::thread::spawn(move || {
+            let _ = Command::new("rofi")
+                .arg("-dmenu")
+                .arg("-p")
+                .arg("💡")
+                .arg("-theme-str")
+                .arg(format!(
+                    "window {{ location: north west; x-offset: {}px; y-offset: {}px; width: 300px; }}",
+                    x, y
+                ))
+                .arg("-theme-str")
+                .arg("listview { lines: 5; }")
+                .arg("-no-custom")
+                .arg("-format")
+                .arg("s")
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+                .and_then(|mut child| {
+                    use std::io::Write;
+                    if let Some(ref mut stdin) = child.stdin {
+                        stdin.write_all(input.as_bytes())?;
+                    }
+                    child.wait()
+                });
+        });
+
         Ok(())
     }
 
