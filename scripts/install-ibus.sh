@@ -14,10 +14,25 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Compilar o crate clippit-ibus
-echo "📦 Compilando clippit-ibus..."
+# Navegar para o diretório do projeto
 cd "$(dirname "$0")/.."
-cargo build --release --package clippit-ibus
+
+# Verificar se o binário já foi compilado
+if [ ! -f "target/release/clippit-ibus" ]; then
+    echo "📦 Binário não encontrado, tentando compilar..."
+    
+    # Verificar se cargo está disponível
+    if ! command -v cargo &> /dev/null; then
+        echo "❌ ERRO: cargo não encontrado!"
+        echo "   Execute este script SEM sudo ou compile antes:"
+        echo "   cargo build --release --package clippit-ibus"
+        exit 1
+    fi
+    
+    cargo build --release --package clippit-ibus
+else
+    echo "✅ Binário clippit-ibus já compilado, usando existente..."
+fi
 
 # Copiar binário
 echo "📋 Instalando binário..."
