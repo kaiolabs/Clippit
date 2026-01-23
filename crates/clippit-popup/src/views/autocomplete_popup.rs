@@ -7,6 +7,8 @@ use clippit_ipc::protocol::Suggestion;
 use tracing::{debug, info};
 
 /// Popup flutuante de autocomplete (estilo Android/iOS)
+/// Código preparado para uso futuro quando implementarmos popup GTK4 nativo
+#[allow(dead_code)]
 pub struct AutocompletePopup {
     window: gtk::Window,
     list_box: gtk::ListBox,
@@ -15,6 +17,7 @@ pub struct AutocompletePopup {
     on_accept: Arc<Mutex<Option<Box<dyn Fn(String) + Send>>>>,
 }
 
+#[allow(dead_code)]
 impl AutocompletePopup {
     pub fn new(app: &gtk::Application) -> Rc<RefCell<Self>> {
         // Janela flutuante (sem decoração)
