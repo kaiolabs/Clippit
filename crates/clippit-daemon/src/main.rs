@@ -1,6 +1,7 @@
 mod hotkey;
 mod monitor;
 mod typing_monitor;
+mod autocomplete_manager;
 
 use anyhow::Result;
 use clippit_core::HistoryManager;

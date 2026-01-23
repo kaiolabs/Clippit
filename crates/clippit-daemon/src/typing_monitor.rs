@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info};
 
+use crate::autocomplete_manager::AutocompleteManager;
+
 /// Buffer de digitação atual
 #[derive(Debug, Clone)]
 struct TypingBuffer {
@@ -64,6 +66,7 @@ pub struct TypingMonitor {
     history_manager: Arc<Mutex<HistoryManager>>,
     typing_buffer: Arc<Mutex<TypingBuffer>>,
     config: Arc<Mutex<Config>>,
+    autocomplete_manager: Arc<AutocompleteManager>,
 }
 
 impl TypingMonitor {
@@ -74,6 +77,7 @@ impl TypingMonitor {
             history_manager,
             typing_buffer: Arc::new(Mutex::new(TypingBuffer::new())),
             config: Arc::new(Mutex::new(config)),
+            autocomplete_manager: Arc::new(AutocompleteManager::new()),
         }
     }
 
@@ -182,9 +186,29 @@ impl TypingMonitor {
                 buffer.pop_char();
             }
             
+            // Tab - aceitar sugestão
+            Key::Tab => {
+                drop(buffer);
+                if let Err(e) = self.autocomplete_manager.accept_current_suggestion() {
+                    error!("❌ Erro ao aceitar sugestão: {}", e);
+                }
+                return;
+            }
+            
+            // Setas - navegar sugestões
+            Key::DownArrow => {
+                self.autocomplete_manager.next_suggestion();
+                return;
+            }
+            Key::UpArrow => {
+                self.autocomplete_manager.previous_suggestion();
+                return;
+            }
+            
             // Enter (nova linha = nova palavra)
             Key::Return | Key::ControlLeft | Key::ControlRight => {
                 buffer.clear();
+                self.autocomplete_manager.clear_suggestions();
             }
             
             _ => {
@@ -210,9 +234,13 @@ impl TypingMonitor {
             if let Ok(suggestions) = self.get_suggestions(&current_word, max_suggestions) {
                 if !suggestions.is_empty() {
                     info!("💡 Encontradas {} sugestões para '{}'", suggestions.len(), current_word);
-                    // TODO: Enviar sugestões para popup via IPC
-                    self.show_suggestions(suggestions);
+                    self.show_suggestions(suggestions, current_word.clone());
+                } else {
+                    // Limpar sugestões se não houver nenhuma
+                    self.autocomplete_manager.clear_suggestions();
                 }
+            } else {
+                self.autocomplete_manager.clear_suggestions();
             }
         }
     }
@@ -269,33 +297,16 @@ impl TypingMonitor {
         Ok(suggestions)
     }
 
-    /// Mostra sugestões (via notificação - temporário)
-    fn show_suggestions(&self, suggestions: Vec<Suggestion>) {
+    /// Mostra sugestões via gerenciador
+    fn show_suggestions(&self, suggestions: Vec<Suggestion>, partial_word: String) {
         // Log para debug
         for (i, sugg) in suggestions.iter().enumerate() {
             debug!("  {}. {} (score: {})", i + 1, sugg.word, sugg.score);
         }
 
-        // Mostrar notificação com as primeiras 3 sugestões
-        if !suggestions.is_empty() {
-            let text = suggestions
-                .iter()
-                .take(3)
-                .enumerate()
-                .map(|(i, s)| format!("{}. {}", i + 1, s.word))
-                .collect::<Vec<_>>()
-                .join("\n");
-
-            // Usar notify-send para mostrar notificação (temporário)
-            std::process::Command::new("notify-send")
-                .arg("💡 Sugestões Clippit")
-                .arg(&text)
-                .arg("-t")
-                .arg("2000") // 2 segundos
-                .arg("-u")
-                .arg("low")
-                .spawn()
-                .ok();
+        // Usar gerenciador de autocomplete
+        if let Err(e) = self.autocomplete_manager.show_suggestions(suggestions, partial_word) {
+            error!("❌ Erro ao mostrar sugestões: {}", e);
         }
     }
 }
