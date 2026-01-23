@@ -60,6 +60,13 @@ pub fn setup_keyboard_navigation(
                 gtk::glib::Propagation::Stop
             }
             gtk::gdk::Key::Return | gtk::gdk::Key::KP_Enter => {
+                // Se search_entry tem foco, não processa Enter (deixa o campo processar)
+                if search_entry_for_key.has_focus() {
+                    eprintln!("🔑 Enter pressed but search_entry has focus - ignoring");
+                    return gtk::glib::Propagation::Proceed;
+                }
+                
+                eprintln!("🔑 Enter key detected - calling handle_enter_key");
                 handle_enter_key(&list_box_for_key, &entry_map_for_key, &window_nav, &app_nav);
                 gtk::glib::Propagation::Stop
             }
@@ -183,8 +190,11 @@ fn handle_enter_key(
     window: &adw::ApplicationWindow,
     app: &gtk::Application,
 ) {
+    eprintln!("🔑 handle_enter_key called");
+    
     if let Some(selected) = list_box.selected_row() {
         let row_index = selected.index();
+        eprintln!("🔑 Selected row index: {}", row_index);
         
         if let Some(&entry_id) = entry_map.borrow().get(&row_index) {
             eprintln!("🔵 Enter pressed - copying entry ID: {}", entry_id);
@@ -196,12 +206,11 @@ fn handle_enter_key(
             eprintln!("🔵 Closing window (notification sent)...");
             window.close();
             app.quit();
-            
-            // Close window immediately
-            eprintln!("🔵 Closing window immediately...");
-            window.close();
-            app.quit();
+        } else {
+            eprintln!("⚠️  No entry_id found for row index {}", row_index);
         }
+    } else {
+        eprintln!("⚠️  No row selected");
     }
 }
 

@@ -20,7 +20,7 @@ pub fn create_main_window(
     list_box.set_selection_mode(gtk::SelectionMode::Single);
     list_box.set_can_focus(true);
     list_box.set_focus_on_click(false);
-    list_box.set_activate_on_single_click(false);
+    list_box.set_activate_on_single_click(true);  // 🔥 SINGLE CLICK para copiar!
     
     // Create scrolled window
     let scrolled = ScrolledWindow::new();
