@@ -31,7 +31,7 @@ pub fn setup_keyboard_navigation(
     let hotkey_str_for_closure = hotkey_str.clone();
     
     let key_controller = gtk::EventControllerKey::new();
-    key_controller.set_propagation_phase(gtk::PropagationPhase::Bubble);  // Processa DEPOIS do search_entry
+    key_controller.set_propagation_phase(gtk::PropagationPhase::Capture);  // Processa ANTES de qualquer widget
     
     // Get focus search hotkey from config
     let focus_search_str = format!("{}+{}", config.search.focus_search_modifier, config.search.focus_search_key);
