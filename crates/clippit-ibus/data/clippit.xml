@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 
+    Clippit IBus Component Definition
+    
+    Este arquivo define o componente IBus para o Clippit Autocomplete Global.
+    Deve ser instalado em /usr/share/ibus/component/ ou ~/.local/share/ibus/component/
+-->
+<component>
+    <name>org.clippit.IBus.Clippit</name>
+    <description>Clippit Global Autocomplete</description>
+    <exec>/usr/local/bin/clippit-ibus</exec>
+    <version>1.7.1</version>
+    <author>Clippit Contributors</author>
+    <license>MIT</license>
+    <homepage>https://github.com/clippit/clippit</homepage>
+    <textdomain>clippit</textdomain>
+    
+    <engines>
+        <engine>
+            <name>clippit</name>
+            <language>en</language>
+            <license>MIT</license>
+            <author>Clippit Contributors</author>
+            <icon>/usr/local/share/clippit/logo_clippit.png</icon>
+            <layout>us</layout>
+            <longname>Clippit Autocomplete</longname>
+            <description>Global autocomplete engine powered by Clippit clipboard history</description>
+            <rank>50</rank>
+            <symbol>📋</symbol>
+            <setup>/usr/local/bin/clippit-dashboard</setup>
+        </engine>
+    </engines>
+</component>

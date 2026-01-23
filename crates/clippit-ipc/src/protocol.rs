@@ -20,6 +20,30 @@ pub struct HistoryEntry {
     pub timestamp: DateTime<Utc>,
 }
 
+/// Contexto da aplicação onde a digitação está ocorrendo
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppContext {
+    pub app_name: String,
+    pub window_title: String,
+    pub input_field_type: Option<String>, // password, email, text, etc.
+}
+
+/// Sugestão de autocompletar
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Suggestion {
+    pub word: String,
+    pub score: i64,
+    pub source: SuggestionSource,
+}
+
+/// Origem da sugestão
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SuggestionSource {
+    History,       // Do histórico do clipboard
+    Frequency,     // Palavras frequentes
+    AI,            // Gerado por IA (futuro)
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum IpcMessage {
     ShowPopup,
@@ -29,6 +53,33 @@ pub enum IpcMessage {
     GetEntryData { id: i64 },                // Get full data for specific entry
     SelectItem { id: i64 },
     Ping,
+    
+    // ========== AUTOCOMPLETE GLOBAL ==========
+    /// Evento de keystroke do IBus engine
+    KeystrokeEvent {
+        key: String,
+        timestamp: DateTime<Utc>,
+        app_context: AppContext,
+    },
+    /// Solicita sugestões de autocomplete
+    RequestAutocompleteSuggestions {
+        partial_word: String,
+        context: AppContext,
+        max_results: usize,
+    },
+    /// Usuário aceitou uma sugestão
+    AcceptSuggestion {
+        suggestion: String,
+        partial_word: String,
+    },
+    /// Mostra o popup de autocomplete flutuante
+    ShowAutocompletePopup {
+        suggestions: Vec<Suggestion>,
+        cursor_x: i32,
+        cursor_y: i32,
+    },
+    /// Fecha o popup de autocomplete
+    HideAutocompletePopup,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -41,4 +92,13 @@ pub enum IpcResponse {
     ItemContent { entry: HistoryEntry },
     Error { message: String },
     Pong,
+    
+    // ========== AUTOCOMPLETE GLOBAL ==========
+    /// Resposta com sugestões de autocomplete
+    AutocompleteSuggestions {
+        suggestions: Vec<Suggestion>,
+        query: String,
+    },
+    /// Confirmação de que sugestão foi aceita
+    SuggestionAccepted,
 }

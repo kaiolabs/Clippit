@@ -11,6 +11,8 @@ pub struct Config {
     pub features: FeaturesConfig,
     pub privacy: PrivacyConfig,
     pub advanced: AdvancedConfig,
+    #[serde(default)]
+    pub autocomplete: AutocompleteConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,6 +149,55 @@ pub struct AdvancedConfig {
     pub ipc_socket: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutocompleteConfig {
+    /// Habilitar autocomplete global
+    #[serde(default = "default_false")]
+    pub enabled: bool,
+    
+    /// Número máximo de sugestões a mostrar
+    #[serde(default = "default_autocomplete_max_suggestions")]
+    pub max_suggestions: usize,
+    
+    /// Número mínimo de caracteres para acionar autocomplete
+    #[serde(default = "default_autocomplete_min_chars")]
+    pub min_chars: usize,
+    
+    /// Delay em ms antes de mostrar sugestões
+    #[serde(default = "default_autocomplete_delay_ms")]
+    pub delay_ms: u64,
+    
+    /// Mostrar autocomplete em campos de senha
+    #[serde(default = "default_false")]
+    pub show_in_passwords: bool,
+    
+    /// Apps onde autocomplete deve ser ignorado
+    #[serde(default = "default_autocomplete_ignored_apps")]
+    pub ignored_apps: Vec<String>,
+    
+    /// Configurações de IA (Fase 2 - futuro)
+    #[serde(default)]
+    pub ai: AutocompleteAIConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutocompleteAIConfig {
+    /// Habilitar sugestões via IA
+    #[serde(default = "default_false")]
+    pub enabled: bool,
+    
+    /// Provider de IA (local, openai, anthropic)
+    #[serde(default = "default_ai_provider")]
+    pub provider: String,
+    
+    /// Modelo de IA
+    #[serde(default = "default_ai_model")]
+    pub model: String,
+    
+    /// API Key (se necessário)
+    pub api_key: Option<String>,
+}
+
 // Default functions
 fn default_max_history() -> usize { 100 }
 fn default_poll_interval() -> u64 { 200 }
@@ -171,6 +222,22 @@ fn default_enable_suggestions() -> bool { true }
 fn default_max_suggestions() -> usize { 3 }
 fn default_focus_search_modifier() -> String { "ctrl".to_string() }
 fn default_focus_search_key() -> String { "p".to_string() }
+
+// Autocomplete defaults
+fn default_autocomplete_max_suggestions() -> usize { 3 }
+fn default_autocomplete_min_chars() -> usize { 2 }
+fn default_autocomplete_delay_ms() -> u64 { 300 }
+fn default_autocomplete_ignored_apps() -> Vec<String> {
+    vec![
+        "gnome-terminal".to_string(),
+        "tilix".to_string(),
+        "keepassxc".to_string(),
+        "bitwarden".to_string(),
+        "1password".to_string(),
+    ]
+}
+fn default_ai_provider() -> String { "local".to_string() }
+fn default_ai_model() -> String { "gpt-4".to_string() }
 
 impl Default for Config {
     fn default() -> Self {
@@ -242,6 +309,32 @@ impl Default for Config {
                 database_path: None,
                 ipc_socket: None,
             },
+            autocomplete: AutocompleteConfig::default(),
+        }
+    }
+}
+
+impl Default for AutocompleteConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_false(),
+            max_suggestions: default_autocomplete_max_suggestions(),
+            min_chars: default_autocomplete_min_chars(),
+            delay_ms: default_autocomplete_delay_ms(),
+            show_in_passwords: default_false(),
+            ignored_apps: default_autocomplete_ignored_apps(),
+            ai: AutocompleteAIConfig::default(),
+        }
+    }
+}
+
+impl Default for AutocompleteAIConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_false(),
+            provider: default_ai_provider(),
+            model: default_ai_model(),
+            api_key: None,
         }
     }
 }

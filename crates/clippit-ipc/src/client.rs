@@ -86,4 +86,36 @@ impl IpcClient {
             _ => Err(anyhow::anyhow!("Unexpected response")),
         }
     }
+
+    // ========== AUTOCOMPLETE GLOBAL METHODS ==========
+
+    /// Request autocomplete suggestions
+    pub fn request_autocomplete_suggestions(
+        partial_word: String,
+        context: crate::protocol::AppContext,
+        max_results: usize,
+    ) -> Result<Vec<crate::protocol::Suggestion>> {
+        match Self::send_message(IpcMessage::RequestAutocompleteSuggestions {
+            partial_word,
+            context,
+            max_results,
+        })? {
+            IpcResponse::AutocompleteSuggestions { suggestions, .. } => Ok(suggestions),
+            IpcResponse::Error { message } => Err(anyhow::anyhow!("Server error: {}", message)),
+            _ => Err(anyhow::anyhow!("Unexpected response")),
+        }
+    }
+
+    /// Accept a suggestion (for tracking/learning)
+    pub fn accept_suggestion(suggestion: String, partial_word: String) -> Result<()> {
+        match Self::send_message(IpcMessage::AcceptSuggestion {
+            suggestion,
+            partial_word,
+        })? {
+            IpcResponse::SuggestionAccepted => Ok(()),
+            IpcResponse::Ok => Ok(()),
+            IpcResponse::Error { message } => Err(anyhow::anyhow!("Server error: {}", message)),
+            _ => Err(anyhow::anyhow!("Unexpected response")),
+        }
+    }
 }
