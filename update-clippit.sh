@@ -139,6 +139,59 @@ echo ""
 echo "📌 Versão instalada:"
 /usr/local/bin/clippit-daemon --version 2>/dev/null | head -2 | sed 's/^/   /'
 
+# ========== CONFIGURAR AUTOCOMPLETAR GLOBAL (IBus) ==========
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "⌨️  Configurando Autocompletar Global (IBus)..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Instalar componente IBus se o script existir
+if [ -f "scripts/install-ibus.sh" ]; then
+    echo "📦 Instalando componente IBus..."
+    sudo bash scripts/install-ibus.sh
+else
+    echo "⚠️  Script install-ibus.sh não encontrado, pulando..."
+fi
+
+# Configurar automaticamente as fontes de entrada
+echo "🔧 Configurando fontes de entrada do sistema..."
+
+# Verificar se gsettings está disponível (GNOME/Zorin)
+if command -v gsettings &> /dev/null; then
+    # Obter fontes de entrada atuais
+    CURRENT_SOURCES=$(gsettings get org.gnome.desktop.input-sources sources 2>/dev/null || echo "[]")
+    
+    # Verificar se Clippit já está adicionado
+    if echo "$CURRENT_SOURCES" | grep -q "ibus.*clippit"; then
+        echo "✅ Clippit já está nas fontes de entrada!"
+    else
+        echo "➕ Adicionando Clippit às fontes de entrada..."
+        
+        # Remover os colchetes e adicionar Clippit
+        if [ "$CURRENT_SOURCES" = "[]" ]; then
+            # Nenhuma fonte configurada, adicionar teclado padrão + clippit
+            gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'br'), ('ibus', 'clippit')]"
+        else
+            # Já tem fontes, adicionar Clippit ao final
+            NEW_SOURCES=$(echo "$CURRENT_SOURCES" | sed "s/]$/, ('ibus', 'clippit')]/")
+            gsettings set org.gnome.desktop.input-sources sources "$NEW_SOURCES"
+        fi
+        
+        echo "✅ Clippit adicionado às fontes de entrada!"
+        echo ""
+        echo "💡 Como usar o autocompletar:"
+        echo "   1. Pressione Super+Espaço para alternar para 'Clippit'"
+        echo "   2. Digite em qualquer aplicativo"
+        echo "   3. Sugestões aparecem automaticamente baseadas no seu histórico!"
+    fi
+else
+    echo "⚠️  gsettings não encontrado (sistema não é GNOME/Zorin)"
+    echo "   Configure manualmente: Configurações → Teclado → Fontes de Entrada"
+fi
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
 # Criar serviço systemd se não existir
 if [ ! -f ~/.config/systemd/user/clippit.service ]; then
     echo "📦 Criando serviço systemd..."
@@ -201,4 +254,5 @@ echo ""
 echo "💡 Dicas:"
 echo "   - Ver logs: journalctl --user -u clippit -f"
 echo "   - Configurar: clippit-dashboard"
+echo "   - Autocompletar: Super+Espaço → Selecione 'Clippit'"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
