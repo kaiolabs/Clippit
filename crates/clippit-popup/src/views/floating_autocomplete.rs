@@ -7,6 +7,7 @@ use std::rc::Rc;
 
 /// Popup flutuante de autocomplete global
 /// Aparece próximo ao cursor com sugestões de palavras
+#[allow(dead_code)] // Código preparado para uso futuro
 pub struct FloatingAutocomplete {
     window: gtk::Window,
     list_box: gtk::ListBox,
@@ -15,6 +16,7 @@ pub struct FloatingAutocomplete {
     on_accept: Rc<RefCell<Option<Box<dyn Fn(String)>>>>,
 }
 
+#[allow(dead_code)] // Código preparado para uso futuro
 #[derive(Clone, Debug)]
 pub struct Suggestion {
     pub word: String,
@@ -115,7 +117,8 @@ impl FloatingAutocomplete {
     }
 
     /// Mostrar popup com sugestões próximo à posição do cursor
-    pub fn show_at(&self, x: i32, y: i32, suggestions: Vec<Suggestion>) {
+    #[allow(dead_code)] // Será usado quando integrar com IBus
+    pub fn show_at(&self, _x: i32, _y: i32, suggestions: Vec<Suggestion>) {
         // Limpar lista anterior
         while let Some(child) = self.list_box.first_child() {
             self.list_box.remove(&child);
@@ -162,6 +165,7 @@ impl FloatingAutocomplete {
     }
 
     /// Definir callback quando aceitar sugestão
+    #[allow(dead_code)] // Será usado quando integrar com IBus
     pub fn on_accept<F>(&self, callback: F)
     where
         F: Fn(String) + 'static,
@@ -170,6 +174,7 @@ impl FloatingAutocomplete {
     }
 
     /// Aplicar estilos CSS
+    #[allow(dead_code)] // Será usado quando integrar com IBus
     pub fn apply_styles(&self) {
         let css = "
         .floating-autocomplete {
@@ -212,6 +217,7 @@ impl FloatingAutocomplete {
 }
 
 // Função auxiliar para criar popup flutuante
+#[allow(dead_code)] // Será usado quando integrar com IBus
 pub fn create_floating_autocomplete(app: &adw::Application) -> FloatingAutocomplete {
     let popup = FloatingAutocomplete::new(app);
     popup.apply_styles();

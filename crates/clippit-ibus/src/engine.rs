@@ -1,10 +1,8 @@
 use anyhow::Result;
-use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info, warn};
-use zbus::{Connection, InterfaceRef, ObjectServer, SignalContext};
-use zbus::zvariant::{ObjectPath, Value};
+use tracing::{debug, info};
+use zbus::Connection;
 
 use crate::typing_buffer::TypingBuffer;
 use clippit_ipc::IpcClient;
@@ -62,6 +60,7 @@ impl ClippitEngine {
     }
 
     /// Processa um evento de tecla pressionada
+    #[allow(dead_code)] // Será usado quando integrar com IBus
     pub async fn process_key_press(&self, keyval: u32, keycode: u32, state: u32) -> Result<bool> {
         let enabled = *self.enabled.lock().await;
         
@@ -117,6 +116,7 @@ impl ClippitEngine {
     }
 
     /// Habilita o engine
+    #[allow(dead_code)] // Será usado quando integrar com IBus
     pub async fn enable(&self) {
         info!("Enabling Clippit IBus Engine");
         let mut enabled = self.enabled.lock().await;
@@ -124,6 +124,7 @@ impl ClippitEngine {
     }
 
     /// Desabilita o engine
+    #[allow(dead_code)] // Será usado quando integrar com IBus
     pub async fn disable(&self) {
         info!("Disabling Clippit IBus Engine");
         let mut enabled = self.enabled.lock().await;

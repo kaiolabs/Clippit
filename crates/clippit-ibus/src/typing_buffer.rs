@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 /// Buffer que mantém o contexto de digitação atual
+#[allow(dead_code)] // Código preparado para uso futuro
 #[derive(Debug, Clone)]
 pub struct TypingBuffer {
     /// Texto atualmente sendo digitado
