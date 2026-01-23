@@ -192,32 +192,61 @@ pub fn create_page() -> gtk::Widget {
     // Botão de verificação
     let row_check = adw::ActionRow::new();
     row_check.set_title("Verificar Instalação");
+    row_check.set_subtitle("Verifica se o IBus component está instalado");
     
     let btn_check = gtk::Button::with_label("Verificar");
     btn_check.add_css_class("suggested-action");
     btn_check.set_valign(gtk::Align::Center);
     
-    btn_check.connect_clicked(|_btn| {
+    let row_check_clone = row_check.clone();
+    btn_check.connect_clicked(move |btn| {
+        // Desabilitar botão durante verificação
+        btn.set_sensitive(false);
+        btn.set_label("Verificando...");
+        
         // Verificar se IBus está instalado
         use std::process::Command;
         
-        let output = Command::new("ibus")
+        let result = Command::new("ibus")
             .arg("list-engine")
             .output();
         
-        match output {
+        let message = match result {
             Ok(out) => {
                 let stdout = String::from_utf8_lossy(&out.stdout);
                 if stdout.contains("clippit") {
-                    eprintln!("✅ Clippit IBus engine está instalado!");
+                    "✅ Clippit IBus engine está instalado e pronto para uso!"
                 } else {
-                    eprintln!("⚠️ Clippit IBus engine NÃO encontrado. Execute: sudo bash scripts/install-ibus.sh");
+                    "⚠️ Clippit IBus engine NÃO encontrado.\n\nExecute no terminal:\nsudo bash scripts/install-ibus.sh"
                 }
             }
             Err(_) => {
-                eprintln!("❌ IBus não está instalado no sistema!");
+                "❌ IBus não está instalado no sistema.\n\nInstale com:\nsudo apt install ibus"
             }
-        }
+        };
+        
+        // Criar diálogo de resultado
+        let parent_window = btn.root().and_downcast::<gtk::Window>();
+        let dialog = adw::MessageDialog::new(
+            parent_window.as_ref(),
+            Some("Verificação do IBus"),
+            Some(message),
+        );
+        dialog.add_response("ok", "OK");
+        dialog.set_default_response(Some("ok"));
+        dialog.set_close_response("ok");
+        
+        let btn_clone = btn.clone();
+        dialog.connect_response(None, move |dialog, _| {
+            dialog.close();
+            btn_clone.set_sensitive(true);
+            btn_clone.set_label("Verificar");
+        });
+        
+        dialog.present();
+        
+        // Também atualizar o subtitle da row
+        row_check_clone.set_subtitle(message);
     });
     
     row_check.add_suffix(&btn_check);
