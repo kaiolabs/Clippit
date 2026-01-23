@@ -34,6 +34,7 @@ pub fn populate_history_list(
             for (index, entry) in entries.iter().enumerate() {
                 eprintln!("📋 Entry {}: id={}, type={:?}", index, entry.id, entry.content_type);
                 let row = adw::ActionRow::new();
+                row.set_activatable(true);  // 🔥 Tornar a linha clicável
                 
                 // Format content and add prefix based on type
                 match entry.content_type {
@@ -225,6 +226,7 @@ pub fn setup_infinite_scroll(
                             
                             for (i, entry) in entries.iter().enumerate() {
                                 let row = adw::ActionRow::new();
+                                row.set_activatable(true);  // 🔥 Tornar a linha clicável
                                 
                                 match entry.content_type {
                                     clippit_ipc::ContentType::Text => {

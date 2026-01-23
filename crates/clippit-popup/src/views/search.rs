@@ -112,6 +112,7 @@ pub fn setup_search_filter(
                     for (index, hist_entry) in entries.iter().enumerate() {
                         eprintln!("  ➕ Adicionando item {}/{}: id={}", index+1, entries.len(), hist_entry.id);
                         let row = adw::ActionRow::new();
+                        row.set_activatable(true);  // 🔥 Tornar a linha clicável
                         
                         // Format based on type
                         match hist_entry.content_type {
