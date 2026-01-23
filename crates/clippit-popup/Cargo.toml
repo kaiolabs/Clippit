@@ -9,6 +9,10 @@ license.workspace = true
 name = "clippit-popup"
 path = "src/main.rs"
 
+[[bin]]
+name = "clippit-autocomplete-popup"
+path = "src/autocomplete_main.rs"
+
 [dependencies]
 clippit-ipc = { path = "../clippit-ipc" }
 clippit-core = { path = "../clippit-core" }
