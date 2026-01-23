@@ -26,6 +26,24 @@ sudo apt install -f
 systemctl --user enable --now clippit
 ```
 
+### 4. Configurar Atalho Global (Wayland) ⚠️ IMPORTANTE
+
+**No Wayland, hotkeys globais devem ser configurados pelo sistema operacional.**
+
+Execute o script automático:
+
+```bash
+./scripts/setup-wayland-hotkey.sh
+```
+
+Ou configure manualmente:
+1. Abra **Configurações** → **Teclado** → **Atalhos**
+2. Clique em **+** para adicionar
+3. Configure:
+   - Nome: `Clippit - Show History`
+   - Comando: `/usr/local/bin/clippit-popup`
+   - Atalho: Pressione a combinação desejada (ex: `Super+V`)
+
 ---
 
 ## ✅ Verificar Instalação
@@ -48,7 +66,9 @@ echo $XDG_SESSION_TYPE  # Deve mostrar "wayland"
 
 ### Abrir Histórico
 
-Pressione **`Super + V`** (tecla Windows + V)
+Pressione o **atalho que você configurou** (ex: `Super + V` ou `Ctrl + Numpad1`)
+
+⚠️ **Lembre-se**: No Wayland, você precisa ter configurado o atalho nas Configurações do Sistema primeiro!
 
 ### Navegar
 
