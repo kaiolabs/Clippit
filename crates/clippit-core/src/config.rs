@@ -7,6 +7,7 @@ pub struct Config {
     pub general: GeneralConfig,
     pub hotkeys: HotkeyConfig,
     pub ui: UiConfig,
+    pub search: SearchConfig,
     pub features: FeaturesConfig,
     pub privacy: PrivacyConfig,
     pub advanced: AdvancedConfig,
@@ -87,6 +88,21 @@ pub struct WindowConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchConfig {
+    #[serde(default = "default_enable_suggestions")]
+    pub enable_suggestions: bool,
+    
+    #[serde(default = "default_max_suggestions")]
+    pub max_suggestions: usize,
+    
+    #[serde(default = "default_focus_search_modifier")]
+    pub focus_search_modifier: String,
+    
+    #[serde(default = "default_focus_search_key")]
+    pub focus_search_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeaturesConfig {
     #[serde(default = "default_true")]
     pub capture_text: bool,
@@ -148,6 +164,10 @@ fn default_true() -> bool { true }
 fn default_false() -> bool { false }
 fn default_enable_image_capture() -> bool { true }
 fn default_max_image_size_mb() -> u32 { 10 }
+fn default_enable_suggestions() -> bool { true }
+fn default_max_suggestions() -> usize { 3 }
+fn default_focus_search_modifier() -> String { "ctrl".to_string() }
+fn default_focus_search_key() -> String { "p".to_string() }
 
 impl Default for Config {
     fn default() -> Self {
@@ -189,6 +209,12 @@ impl Default for Config {
                     position: default_window_position(),
                     opacity: default_window_opacity(),
                 },
+            },
+            search: SearchConfig {
+                enable_suggestions: default_enable_suggestions(),
+                max_suggestions: default_max_suggestions(),
+                focus_search_modifier: default_focus_search_modifier(),
+                focus_search_key: default_focus_search_key(),
             },
             features: FeaturesConfig {
                 capture_text: true,

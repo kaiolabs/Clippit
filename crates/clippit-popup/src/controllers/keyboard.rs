@@ -33,11 +33,23 @@ pub fn setup_keyboard_navigation(
     let key_controller = gtk::EventControllerKey::new();
     key_controller.set_propagation_phase(gtk::PropagationPhase::Bubble);  // Processa DEPOIS do search_entry
     
+    // Get focus search hotkey from config
+    let focus_search_str = format!("{}+{}", config.search.focus_search_modifier, config.search.focus_search_key);
+    eprintln!("🔵 Focus search hotkey configured: {}", focus_search_str);
+    let focus_search_str_for_closure = focus_search_str.clone();
+    
     key_controller.connect_key_pressed(move |_, key, _, modifiers| {
         // Check if this is the configured hotkey (for toggle)
         if is_configured_hotkey(key, modifiers, &hotkey_str_for_closure) {
             eprintln!("🔵 Configured hotkey pressed while popup open - closing (toggle)");
             window_nav.close();
+            return gtk::glib::Propagation::Stop;
+        }
+        
+        // Check if this is the focus search hotkey
+        if is_configured_hotkey(key, modifiers, &focus_search_str_for_closure) {
+            eprintln!("🔵 Focus search hotkey pressed - setting focus to search entry");
+            search_entry_for_key.grab_focus();
             return gtk::glib::Propagation::Stop;
         }
         
@@ -115,6 +127,9 @@ fn is_configured_hotkey(key: gtk::gdk::Key, modifiers: gtk::gdk::ModifierType, h
             "kp_0" | "numpad0" => required_key = gtk::gdk::Key::KP_0,
             "v" => required_key = gtk::gdk::Key::v,
             "c" => required_key = gtk::gdk::Key::c,
+            "p" => required_key = gtk::gdk::Key::p,
+            "f" => required_key = gtk::gdk::Key::f,
+            "s" => required_key = gtk::gdk::Key::s,
             _ => {}
         }
     }

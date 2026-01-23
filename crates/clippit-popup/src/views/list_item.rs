@@ -173,7 +173,6 @@ fn create_image_row(row: &adw::ActionRow, entry: &clippit_ipc::HistoryEntry) {
     }
 }
 
-
 /// Configura infinite scroll para carregar mais itens sob demanda
 pub fn setup_infinite_scroll(
     scrolled: &gtk::ScrolledWindow,
@@ -184,7 +183,7 @@ pub fn setup_infinite_scroll(
     search_map: &Rc<RefCell<std::collections::HashMap<i32, String>>>,
 ) {
     let load_state = Rc::new(RefCell::new(LoadMoreState {
-        items_loaded: 30,
+        items_loaded: 30,  // Já carregamos 30 inicialmente
         is_loading: false,
         has_more: true,
     }));
@@ -202,16 +201,18 @@ pub fn setup_infinite_scroll(
         let upper = adj.upper();
         let page_size = adj.page_size();
         
+        // Carregar mais quando estiver a 200px do final
         if value + page_size >= upper - 200.0 {
             let mut state = load_state_clone.borrow_mut();
             
             if !state.is_loading && state.has_more {
                 state.is_loading = true;
                 let offset = state.items_loaded;
-                drop(state);
+                drop(state);  // Libera o borrow
                 
                 eprintln!("📜 Loading more items from offset {}...", offset);
                 
+                // Carregar mais 20 itens
                 match IpcClient::query_history_metadata_with_offset(20, offset) {
                     Ok(entries) => {
                         if entries.is_empty() {

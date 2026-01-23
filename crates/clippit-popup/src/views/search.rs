@@ -8,6 +8,7 @@ use crate::models::SearchContentMap;
 use crate::utils::SuggestionEngine;
 use crate::views::SuggestionsPopover;
 use clippit_ipc::IpcClient;
+use clippit_core::Config;
 
 /// Sets up the search filter on the list box with autocomplete
 pub fn setup_search_filter(
@@ -20,17 +21,33 @@ pub fn setup_search_filter(
     let search_text_clone = search_text_ref.clone();
     let search_content_clone = search_map.clone();
     
-    // Criar suggestion engine e popover
-    let suggestion_engine = Rc::new(RefCell::new(SuggestionEngine::new()));
-    let suggestions_popover = Rc::new(RefCell::new(SuggestionsPopover::new(search_entry)));
+    // Carregar configurações
+    let config = Config::load().unwrap_or_default();
+    let suggestions_enabled = config.search.enable_suggestions;
+    let max_suggestions = config.search.max_suggestions;
     
-    // Popular histórico no engine
-    match IpcClient::query_history_metadata(100) {
-        Ok(entries) => {
-            suggestion_engine.borrow_mut().update_history_words(&entries);
-            eprintln!("✅ {} entradas carregadas para sugestões", entries.len());
+    // Criar suggestion engine e popover (só se habilitado)
+    let suggestion_engine = if suggestions_enabled {
+        Some(Rc::new(RefCell::new(SuggestionEngine::new())))
+    } else {
+        None
+    };
+    
+    let suggestions_popover = if suggestions_enabled {
+        Some(Rc::new(RefCell::new(SuggestionsPopover::new(search_entry))))
+    } else {
+        None
+    };
+    
+    // Popular histórico no engine (só se habilitado)
+    if let Some(ref engine) = suggestion_engine {
+        match IpcClient::query_history_metadata(100) {
+            Ok(entries) => {
+                engine.borrow_mut().update_history_words(&entries);
+                eprintln!("✅ {} entradas carregadas para sugestões", entries.len());
+            }
+            Err(e) => eprintln!("⚠️  Erro ao carregar histórico: {}", e),
         }
-        Err(e) => eprintln!("⚠️  Erro ao carregar histórico: {}", e),
     }
     
     list_box.set_filter_func(move |row: &gtk::ListBoxRow| {
@@ -78,85 +95,80 @@ pub fn setup_search_filter(
         *search_text_ref.borrow_mut() = text.to_lowercase();
         list_box_for_search.invalidate_filter();
         
-        // NOVO: Autocompletar
-        if let Some(current_word) = extract_current_word(&text, entry.position()) {
-            if current_word.len() >= 2 {
-                let suggestions = suggestion_engine_for_changed.borrow()
-                    .get_suggestions(&current_word, 3);  // Máximo 3 sugestões
-                
-                if !suggestions.is_empty() {
-                    suggestions_popover_for_changed.borrow_mut().update_suggestions(suggestions);
-                    suggestions_popover_for_changed.borrow().show();
-                } else {
-                    suggestions_popover_for_changed.borrow().hide();
-                }
-            } else {
-                suggestions_popover_for_changed.borrow().hide();
-            }
-        } else {
-            suggestions_popover_for_changed.borrow().hide();
-        }
-    });
-    
-    // Adicionar EventController para Tab e navegação
-    let key_controller = gtk::EventControllerKey::new();
-    key_controller.set_propagation_phase(gtk::PropagationPhase::Capture);  // Processar ANTES da janela
-    let search_entry_for_keys = search_entry.clone();
-    let suggestions_popover_for_keys = suggestions_popover.clone();
-    
-    key_controller.connect_key_pressed(move |_, key, _, _| {
-        let popover_visible = suggestions_popover_for_keys.borrow().is_visible();
-        
-        match key {
-            gtk::gdk::Key::Tab => {
-                eprintln!("🔍 Tab pressed - popover_visible: {}", popover_visible);
-                // Completar palavra selecionada (só se popover visível)
-                if popover_visible {
-                    // Clone word ANTES de chamar complete_current_word para evitar "RefCell already borrowed"
-                    let word_to_complete = suggestions_popover_for_keys.borrow()
-                        .get_selected_suggestion()
-                        .map(|s| s.word.clone());
+        // NOVO: Autocompletar (só se habilitado)
+        if let (Some(ref engine), Some(ref popover)) = (&suggestion_engine_for_changed, &suggestions_popover_for_changed) {
+            if let Some(current_word) = extract_current_word(&text, entry.position()) {
+                if current_word.len() >= 2 {
+                    let suggestions = engine.borrow()
+                        .get_suggestions(&current_word, max_suggestions);
                     
-                    if let Some(word) = word_to_complete {
-                        eprintln!("🔍 Completing with: {}", word);
-                        complete_current_word(&search_entry_for_keys, &word);
-                        suggestions_popover_for_keys.borrow().hide();
-                        return gtk::glib::Propagation::Stop;
+                    if !suggestions.is_empty() {
+                        popover.borrow_mut().update_suggestions(suggestions);
+                        popover.borrow().show();
                     } else {
-                        eprintln!("🔍 No suggestion selected");
+                        popover.borrow().hide();
                     }
                 } else {
-                    eprintln!("🔍 Popover not visible");
+                    popover.borrow().hide();
                 }
+            } else {
+                popover.borrow().hide();
             }
-            gtk::gdk::Key::Up => {
-                // Só navega nas sugestões se popover visível
-                if popover_visible {
-                    suggestions_popover_for_keys.borrow_mut().navigate_up();
-                    return gtk::glib::Propagation::Stop;
-                }
-            }
-            gtk::gdk::Key::Down => {
-                // Só navega nas sugestões se popover visível
-                if popover_visible {
-                    suggestions_popover_for_keys.borrow_mut().navigate_down();
-                    return gtk::glib::Propagation::Stop;
-                }
-            }
-            gtk::gdk::Key::Escape => {
-                if popover_visible {
-                    suggestions_popover_for_keys.borrow().hide();
-                    return gtk::glib::Propagation::Stop;
-                }
-            }
-            _ => {}
         }
-        gtk::glib::Propagation::Proceed
     });
     
-    search_entry.add_controller(key_controller);
-    
-    eprintln!("✅ Search filter with autocomplete setup complete!");
+    // Adicionar EventController para Tab e navegação (só se sugestões habilitadas)
+    if let Some(suggestions_popover_for_keys) = suggestions_popover {
+        let key_controller = gtk::EventControllerKey::new();
+        key_controller.set_propagation_phase(gtk::PropagationPhase::Capture);
+        let search_entry_for_keys = search_entry.clone();
+        
+        key_controller.connect_key_pressed(move |_, key, _, _| {
+            let popover_visible = suggestions_popover_for_keys.borrow().is_visible();
+            
+            match key {
+                gtk::gdk::Key::Tab => {
+                    if popover_visible {
+                        let word_to_complete = suggestions_popover_for_keys.borrow()
+                            .get_selected_suggestion()
+                            .map(|s| s.word.clone());
+                        
+                        if let Some(word) = word_to_complete {
+                            eprintln!("🔍 Completing with: {}", word);
+                            complete_current_word(&search_entry_for_keys, &word);
+                            suggestions_popover_for_keys.borrow().hide();
+                            return gtk::glib::Propagation::Stop;
+                        }
+                    }
+                }
+                gtk::gdk::Key::Up => {
+                    if popover_visible {
+                        suggestions_popover_for_keys.borrow_mut().navigate_up();
+                        return gtk::glib::Propagation::Stop;
+                    }
+                }
+                gtk::gdk::Key::Down => {
+                    if popover_visible {
+                        suggestions_popover_for_keys.borrow_mut().navigate_down();
+                        return gtk::glib::Propagation::Stop;
+                    }
+                }
+                gtk::gdk::Key::Escape => {
+                    if popover_visible {
+                        suggestions_popover_for_keys.borrow().hide();
+                        return gtk::glib::Propagation::Stop;
+                    }
+                }
+                _ => {}
+            }
+            gtk::glib::Propagation::Proceed
+        });
+        
+        search_entry.add_controller(key_controller);
+        eprintln!("✅ Search filter with autocomplete setup complete!");
+    } else {
+        eprintln!("✅ Search filter setup complete (suggestions disabled)!");
+    }
 }
 
 /// Extrair a palavra sendo digitada na posição do cursor
