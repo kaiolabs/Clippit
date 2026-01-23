@@ -47,12 +47,17 @@ pub fn setup_search_filter(
     
     // Popular histórico no engine (só se habilitado)
     if let Some(ref engine) = suggestion_engine {
+        eprintln!("📚 Carregando palavras do histórico para sugestões...");
         match IpcClient::query_history_metadata(100) {
             Ok(entries) => {
+                eprintln!("📥 Recebidas {} entradas do histórico", entries.len());
                 engine.borrow_mut().update_history_words(&entries);
                 eprintln!("✅ {} entradas carregadas para sugestões", entries.len());
             }
-            Err(e) => eprintln!("⚠️  Erro ao carregar histórico: {}", e),
+            Err(e) => {
+                eprintln!("❌ ERRO ao carregar histórico para sugestões: {}", e);
+                eprintln!("❌ Detalhes: {:?}", e);
+            }
         }
     }
     
@@ -67,17 +72,24 @@ pub fn setup_search_filter(
         let search_map_clone = search_map_for_search.clone();
         
         Rc::new(move |query: String| {
-            if query.is_empty() {
+            if query.trim().is_empty() {
                 eprintln!("🔍 Busca vazia - mantendo lista atual");
                 return;
             }
             
             // Buscar TUDO no banco de dados
-            eprintln!("🔍 Buscando no banco: '{}'", query);
+            eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            eprintln!("🔍 BUSCANDO NO BANCO: '{}'", query);
+            eprintln!("🔍 Query length: {} chars", query.len());
+            eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             
             match IpcClient::search_history(query.clone()) {
                 Ok(entries) => {
-                    eprintln!("✅ Busca retornou {} resultados", entries.len());
+                    eprintln!("✅ BUSCA RETORNOU {} RESULTADOS", entries.len());
+                    
+                    if entries.is_empty() {
+                        eprintln!("⚠️  NENHUM RESULTADO ENCONTRADO PARA: '{}'", query);
+                    }
                     
                     // Limpar lista atual
                     while let Some(child) = list_box_clone.first_child() {
@@ -189,8 +201,14 @@ pub fn setup_search_filter(
         if let (Some(ref engine), Some(ref popover)) = (&suggestion_engine_for_changed, &suggestions_popover_for_changed) {
             if let Some(current_word) = extract_current_word(&text, entry.position()) {
                 if current_word.len() >= 2 {
+                    eprintln!("💡 Buscando sugestões para palavra: '{}'", current_word);
                     let suggestions = engine.borrow()
                         .get_suggestions(&current_word, max_suggestions as usize);
+                    
+                    eprintln!("💡 Encontradas {} sugestões", suggestions.len());
+                    for (i, sug) in suggestions.iter().enumerate() {
+                        eprintln!("   {}. '{}' (score: {})", i+1, sug.word, sug.score);
+                    }
                     
                     if !suggestions.is_empty() {
                         popover.borrow_mut().update_suggestions(suggestions);
