@@ -45,6 +45,9 @@ arboard = { version = "3.6", features = ["wayland-data-control"] }
 # Global hotkey
 global-hotkey = "0.7"
 
+# Keyboard events (para autocompletar)
+rdev = "0.5"
+
 # IPC
 interprocess = "2.0"
 

@@ -1,211 +1,301 @@
 use anyhow::Result;
 use clippit_core::{Config, HistoryManager};
-use clippit_ipc::{AppContext, Suggestion, SuggestionSource};
-use std::collections::HashMap;
+use clippit_ipc::protocol::{Suggestion, SuggestionSource};
+use rdev::{listen, Event, EventType, Key};
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tokio::time::sleep;
 use tracing::{debug, error, info};
 
-/// Buffer de digitação por aplicação
-struct TypingState {
-    current_word: String,
+/// Buffer de digitação atual
+#[derive(Debug, Clone)]
+struct TypingBuffer {
+    chars: VecDeque<char>,
     last_update: Instant,
-    app_context: AppContext,
+    max_size: usize,
 }
 
-/// Monitor de eventos de digitação do IBus
+impl TypingBuffer {
+    fn new() -> Self {
+        Self {
+            chars: VecDeque::new(),
+            last_update: Instant::now(),
+            max_size: 50, // Máximo de 50 caracteres no buffer
+        }
+    }
+
+    fn push_char(&mut self, c: char) {
+        if self.chars.len() >= self.max_size {
+            self.chars.pop_front();
+        }
+        self.chars.push_back(c);
+        self.last_update = Instant::now();
+    }
+
+    fn pop_char(&mut self) {
+        self.chars.pop_back();
+        self.last_update = Instant::now();
+    }
+
+    fn clear(&mut self) {
+        self.chars.clear();
+        self.last_update = Instant::now();
+    }
+
+    /// Obtém a palavra atual (últimos caracteres até encontrar espaço)
+    fn current_word(&self) -> String {
+        self.chars
+            .iter()
+            .rev()
+            .take_while(|&&c| !c.is_whitespace())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect()
+    }
+
+    fn is_stale(&self) -> bool {
+        self.last_update.elapsed() > Duration::from_secs(5)
+    }
+}
+
+/// Monitor de eventos de teclado global usando rdev
 pub struct TypingMonitor {
     history_manager: Arc<Mutex<HistoryManager>>,
-    /// Buffers de digitação por app (app_name -> estado)
-    typing_states: Arc<Mutex<HashMap<String, TypingState>>>,
-    /// Cache de palavras frequentes
-    frequent_words_cache: Arc<Mutex<HashMap<String, i64>>>,
+    typing_buffer: Arc<Mutex<TypingBuffer>>,
+    config: Arc<Mutex<Config>>,
 }
 
 impl TypingMonitor {
     pub fn new(history_manager: Arc<Mutex<HistoryManager>>) -> Self {
+        let config = Config::load().unwrap_or_default();
+        
         Self {
             history_manager,
-            typing_states: Arc::new(Mutex::new(HashMap::new())),
-            frequent_words_cache: Arc::new(Mutex::new(HashMap::new())),
+            typing_buffer: Arc::new(Mutex::new(TypingBuffer::new())),
+            config: Arc::new(Mutex::new(config)),
         }
     }
 
-    /// Inicia o monitor
-    pub async fn run(&mut self) -> Result<()> {
-        info!("Starting typing monitor...");
+    /// Inicia o monitor de teclado
+    pub async fn run(self: Arc<Self>) -> Result<()> {
+        info!("🎹 Iniciando monitor de teclado para autocompletar...");
 
-        // Carregar palavras frequentes do histórico para cache
-        self.load_frequent_words_cache().await?;
+        // Verificar se autocompletar está habilitado
+        let config = self.config.lock().unwrap();
+        if !config.autocomplete.enabled {
+            info!("⚠️  Autocompletar desabilitado na configuração");
+            return Ok(());
+        }
+        drop(config);
 
-        // Task de limpeza de buffers antigos
-        let typing_states = Arc::clone(&self.typing_states);
+        // Task de limpeza de buffer antigo
+        let buffer_clone = Arc::clone(&self.typing_buffer);
         tokio::spawn(async move {
             loop {
-                sleep(Duration::from_secs(5)).await;
+                tokio::time::sleep(Duration::from_secs(2)).await;
                 
-                let mut states = typing_states.lock().unwrap();
-                states.retain(|_, state| {
-                    state.last_update.elapsed() < Duration::from_secs(10)
-                });
+                let mut buffer = buffer_clone.lock().unwrap();
+                if buffer.is_stale() && !buffer.chars.is_empty() {
+                    debug!("🧹 Limpando buffer antigo");
+                    buffer.clear();
+                }
             }
         });
 
-        info!("Typing monitor ready");
-        
-        // O monitor responde via IPC (será integrado no daemon main)
+        // Capturar eventos de teclado em thread separada (rdev é blocking)
+        let self_clone = Arc::clone(&self);
+        std::thread::spawn(move || {
+            if let Err(e) = listen(move |event| {
+                self_clone.handle_keyboard_event(event);
+            }) {
+                error!("❌ Erro no monitor de teclado: {:?}", e);
+            }
+        });
+
+        info!("✅ Monitor de teclado iniciado!");
         Ok(())
     }
 
-    /// Processa uma palavra parcial e retorna sugestões
-    pub async fn get_suggestions(
-        &self,
-        partial_word: &str,
-        context: &AppContext,
-        max_results: usize,
-    ) -> Result<Vec<Suggestion>> {
-        let config = Config::load().unwrap_or_default();
-
-        // Verificar se autocomplete está habilitado
-        if !config.autocomplete.enabled {
-            return Ok(vec![]);
+    /// Processa evento de teclado
+    fn handle_keyboard_event(&self, event: Event) {
+        // Apenas processar eventos de tecla pressionada
+        if let EventType::KeyPress(key) = event.event_type {
+            self.process_key_press(key);
         }
+    }
 
-        // Verificar caracteres mínimos
-        if partial_word.len() < config.autocomplete.min_chars {
-            return Ok(vec![]);
-        }
-
-        // Verificar se app está na lista de ignorados
-        if config.autocomplete.ignored_apps.contains(&context.app_name) {
-            debug!("App {} is in ignored list", context.app_name);
-            return Ok(vec![]);
-        }
-
-        // Verificar se é campo de senha
-        if !config.autocomplete.show_in_passwords {
-            if let Some(field_type) = &context.input_field_type {
-                if field_type == "password" {
-                    debug!("Password field detected, skipping autocomplete");
-                    return Ok(vec![]);
-                }
+    /// Processa tecla pressionada
+    fn process_key_press(&self, key: Key) {
+        let mut buffer = self.typing_buffer.lock().unwrap();
+        
+        match key {
+            // Caracteres alfanuméricos
+            Key::KeyA => buffer.push_char('a'),
+            Key::KeyB => buffer.push_char('b'),
+            Key::KeyC => buffer.push_char('c'),
+            Key::KeyD => buffer.push_char('d'),
+            Key::KeyE => buffer.push_char('e'),
+            Key::KeyF => buffer.push_char('f'),
+            Key::KeyG => buffer.push_char('g'),
+            Key::KeyH => buffer.push_char('h'),
+            Key::KeyI => buffer.push_char('i'),
+            Key::KeyJ => buffer.push_char('j'),
+            Key::KeyK => buffer.push_char('k'),
+            Key::KeyL => buffer.push_char('l'),
+            Key::KeyM => buffer.push_char('m'),
+            Key::KeyN => buffer.push_char('n'),
+            Key::KeyO => buffer.push_char('o'),
+            Key::KeyP => buffer.push_char('p'),
+            Key::KeyQ => buffer.push_char('q'),
+            Key::KeyR => buffer.push_char('r'),
+            Key::KeyS => buffer.push_char('s'),
+            Key::KeyT => buffer.push_char('t'),
+            Key::KeyU => buffer.push_char('u'),
+            Key::KeyV => buffer.push_char('v'),
+            Key::KeyW => buffer.push_char('w'),
+            Key::KeyX => buffer.push_char('x'),
+            Key::KeyY => buffer.push_char('y'),
+            Key::KeyZ => buffer.push_char('z'),
+            
+            // Números
+            Key::Num0 => buffer.push_char('0'),
+            Key::Num1 => buffer.push_char('1'),
+            Key::Num2 => buffer.push_char('2'),
+            Key::Num3 => buffer.push_char('3'),
+            Key::Num4 => buffer.push_char('4'),
+            Key::Num5 => buffer.push_char('5'),
+            Key::Num6 => buffer.push_char('6'),
+            Key::Num7 => buffer.push_char('7'),
+            Key::Num8 => buffer.push_char('8'),
+            Key::Num9 => buffer.push_char('9'),
+            
+            // Espaço e caracteres especiais
+            Key::Space => {
+                buffer.push_char(' ');
+                // Limpar buffer após espaço (nova palavra)
+                buffer.clear();
+            }
+            
+            // Backspace
+            Key::Backspace => {
+                buffer.pop_char();
+            }
+            
+            // Enter (nova linha = nova palavra)
+            Key::Return | Key::ControlLeft | Key::ControlRight => {
+                buffer.clear();
+            }
+            
+            _ => {
+                // Outras teclas não nos interessam para autocompletar
+                return;
             }
         }
 
-        debug!("Getting suggestions for: {}", partial_word);
+        // Obter palavra atual
+        let current_word = buffer.current_word();
+        drop(buffer); // Liberar lock antes de chamar async
 
-        let mut suggestions = Vec::new();
+        // Verificar se deve buscar sugestões
+        let config = self.config.lock().unwrap();
+        let min_chars = config.autocomplete.min_chars;
+        let max_suggestions = config.autocomplete.max_suggestions;
+        drop(config);
 
-        // 1. Buscar no histórico
-        suggestions.extend(self.get_history_suggestions(partial_word).await?);
-
-        // 2. Buscar no cache de palavras frequentes
-        suggestions.extend(self.get_frequent_suggestions(partial_word).await);
-
-        // 3. Ordenar por score (decrescente)
-        suggestions.sort_by(|a, b| b.score.cmp(&a.score));
-
-        // 4. Remover duplicatas (manter o de maior score)
-        let mut seen = std::collections::HashSet::new();
-        suggestions.retain(|s| seen.insert(s.word.clone()));
-
-        // 5. Limitar ao máximo
-        suggestions.truncate(max_results.min(config.autocomplete.max_suggestions));
-
-        info!("Returning {} suggestions for '{}'", suggestions.len(), partial_word);
-        Ok(suggestions)
+        if current_word.len() >= min_chars {
+            debug!("🔍 Buscando sugestões para: '{}'", current_word);
+            
+            // Buscar sugestões do histórico
+            if let Ok(suggestions) = self.get_suggestions(&current_word, max_suggestions) {
+                if !suggestions.is_empty() {
+                    info!("💡 Encontradas {} sugestões para '{}'", suggestions.len(), current_word);
+                    // TODO: Enviar sugestões para popup via IPC
+                    self.show_suggestions(suggestions);
+                }
+            }
+        }
     }
 
-    /// Busca sugestões no histórico do clipboard
-    async fn get_history_suggestions(&self, partial: &str) -> Result<Vec<Suggestion>> {
+    /// Busca sugestões do histórico
+    fn get_suggestions(&self, partial_word: &str, max_results: usize) -> Result<Vec<Suggestion>> {
         let manager = self.history_manager.lock().unwrap();
-        
-        // Buscar entradas de texto que começam com a palavra parcial
-        let entries = manager.search(partial.to_string())?;
+        let entries = manager.search(partial_word)?;
 
-        let mut suggestions = Vec::new();
-        let mut word_scores: HashMap<String, i64> = HashMap::new();
+        let mut suggestions: Vec<Suggestion> = Vec::new();
+        let partial_lower = partial_word.to_lowercase();
 
-        for entry in entries.iter().take(100) {
+        for entry in entries.iter().take(max_results * 3) {
             if let Some(text) = &entry.content_text {
                 // Extrair palavras do texto
                 for word in text.split_whitespace() {
                     let word_lower = word.to_lowercase();
-                    if word_lower.starts_with(&partial.to_lowercase()) && word_lower.len() > partial.len() {
-                        // Score baseado em frequência e recência
-                        let score = word_scores.entry(word.to_string()).or_insert(0);
-                        *score += 10; // +10 por cada aparição
+                    
+                    // Filtrar palavras muito curtas ou que não começam com o prefixo
+                    if word.len() < 3 || !word_lower.starts_with(&partial_lower) {
+                        continue;
                     }
+                    
+                    // Filtrar palavras técnicas/lixo
+                    if word.contains("::") || word.contains("->") || 
+                       word.contains("__") || word.len() > 30 {
+                        continue;
+                    }
+                    
+                    // Calcular score (quanto mais próximo do início, maior o score)
+                    let score = 100 - (word.len() as i64 - partial_word.len() as i64).abs();
+                    
+                    suggestions.push(Suggestion {
+                        word: word.to_string(),
+                        score,
+                        source: SuggestionSource::History,
+                    });
+                    
+                    if suggestions.len() >= max_results {
+                        break;
+                    }
+                }
+                
+                if suggestions.len() >= max_results {
+                    break;
                 }
             }
         }
 
-        for (word, score) in word_scores {
-            suggestions.push(Suggestion {
-                word,
-                score,
-                source: SuggestionSource::History,
-            });
-        }
+        // Ordenar por score
+        suggestions.sort_by(|a, b| b.score.cmp(&a.score));
+        suggestions.truncate(max_results);
 
         Ok(suggestions)
     }
 
-    /// Busca sugestões no cache de palavras frequentes
-    async fn get_frequent_suggestions(&self, partial: &str) -> Vec<Suggestion> {
-        let cache = self.frequent_words_cache.lock().unwrap();
-        let partial_lower = partial.to_lowercase();
-
-        cache
-            .iter()
-            .filter(|(word, _)| word.to_lowercase().starts_with(&partial_lower))
-            .map(|(word, &count)| Suggestion {
-                word: word.clone(),
-                score: count,
-                source: SuggestionSource::Frequency,
-            })
-            .collect()
-    }
-
-    /// Carrega palavras frequentes do histórico para cache
-    async fn load_frequent_words_cache(&mut self) -> Result<()> {
-        info!("Loading frequent words cache...");
-
-        let manager = self.history_manager.lock().unwrap();
-        let entries = manager.get_recent(1000)?;
-
-        let mut word_counts: HashMap<String, i64> = HashMap::new();
-
-        for entry in entries {
-            if let Some(text) = entry.content_text {
-                for word in text.split_whitespace() {
-                    if word.len() >= 3 && word.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
-                        *word_counts.entry(word.to_string()).or_insert(0) += 1;
-                    }
-                }
-            }
+    /// Mostra sugestões (via notificação - temporário)
+    fn show_suggestions(&self, suggestions: Vec<Suggestion>) {
+        // Log para debug
+        for (i, sugg) in suggestions.iter().enumerate() {
+            debug!("  {}. {} (score: {})", i + 1, sugg.word, sugg.score);
         }
 
-        // Manter apenas as 1000 mais frequentes
-        let mut sorted: Vec<_> = word_counts.into_iter().collect();
-        sorted.sort_by(|a, b| b.1.cmp(&a.1));
-        sorted.truncate(1000);
+        // Mostrar notificação com as primeiras 3 sugestões
+        if !suggestions.is_empty() {
+            let text = suggestions
+                .iter()
+                .take(3)
+                .enumerate()
+                .map(|(i, s)| format!("{}. {}", i + 1, s.word))
+                .collect::<Vec<_>>()
+                .join("\n");
 
-        let mut cache = self.frequent_words_cache.lock().unwrap();
-        *cache = sorted.into_iter().collect();
-
-        info!("Loaded {} frequent words into cache", cache.len());
-        Ok(())
-    }
-
-    /// Registra que uma sugestão foi aceita (para aprendizado futuro)
-    pub async fn record_suggestion_accepted(&self, suggestion: String, partial: String) {
-        debug!("Suggestion accepted: {} (was: {})", suggestion, partial);
-        
-        // TODO: Implementar aprendizado/tracking
-        // - Incrementar contador de uso dessa palavra
-        // - Associar com contexto de app
-        // - Atualizar cache de frequentes
+            // Usar notify-send para mostrar notificação (temporário)
+            std::process::Command::new("notify-send")
+                .arg("💡 Sugestões Clippit")
+                .arg(&text)
+                .arg("-t")
+                .arg("2000") // 2 segundos
+                .arg("-u")
+                .arg("low")
+                .spawn()
+                .ok();
+        }
     }
 }
