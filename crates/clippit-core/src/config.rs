@@ -54,6 +54,9 @@ pub struct UiConfig {
     #[serde(default = "default_font_size")]
     pub font_size: u32,
     
+    #[serde(default = "default_true")]
+    pub show_notifications: bool,
+    
     pub colors: UiColors,
     pub window: WindowConfig,
 }
@@ -189,6 +192,7 @@ impl Default for Config {
                 language: default_language(),
                 font_family: default_font_family(),
                 font_size: default_font_size(),
+                show_notifications: default_true(),
                 colors: UiColors {
                     dark: ThemeColors {
                         background: "#1e1e1e".to_string(),

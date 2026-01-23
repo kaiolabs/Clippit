@@ -1,4 +1,5 @@
 use arboard::{Clipboard, ImageData};
+use clippit_core::Config;
 
 /// Copies an entry to the clipboard and shows a system notification
 /// 
@@ -18,6 +19,11 @@ pub fn copy_to_clipboard(entry_id: i64) -> bool {
     eprintln!("🔵 copy_to_clipboard() START");
     eprintln!("   entry_id: {}", entry_id);
     eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    
+    // Load config to check if notifications are enabled
+    let config = Config::load().unwrap_or_default();
+    let show_notifications = config.ui.show_notifications;
+    eprintln!("🔔 Notifications enabled: {}", show_notifications);
     
     // Get entry data from daemon via IPC
     eprintln!("📡 Getting full data for entry ID {}...", entry_id);
@@ -45,7 +51,7 @@ pub fn copy_to_clipboard(entry_id: i64) -> bool {
                 Ok(cb) => cb,
                 Err(e) => {
                     eprintln!("❌ Failed to create clipboard: {}", e);
-                    show_notification("Erro", &format!("Erro ao acessar clipboard: {}", e));
+                    show_notification("Erro", &format!("Erro ao acessar clipboard: {}", e), show_notifications);
                     return false;
                 }
             };
@@ -65,18 +71,18 @@ pub fn copy_to_clipboard(entry_id: i64) -> bool {
                                 } else {
                                     text.clone()
                                 };
-                                show_notification("Clippit", &format!("Copiado: {}", preview));
+                                show_notification("Clippit", &format!("Copiado: {}", preview), show_notifications);
                                 true
                             }
                             Err(e) => {
                                 eprintln!("❌ Failed to copy text: {}", e);
-                                show_notification("Erro", &format!("Erro ao copiar texto: {}", e));
+                                show_notification("Erro", &format!("Erro ao copiar texto: {}", e), show_notifications);
                                 false
                             }
                         }
                     } else {
                         eprintln!("❌ Text entry has no content");
-                        show_notification("Erro", "Entrada sem conteúdo");
+                        show_notification("Erro", "Entrada sem conteúdo", show_notifications);
                         false
                     }
                 }
@@ -97,25 +103,25 @@ pub fn copy_to_clipboard(entry_id: i64) -> bool {
                                 match clipboard.set_image(img_data) {
                                     Ok(_) => {
                                         eprintln!("✅ Image copied to clipboard from file: {}", image_path);
-                                        show_notification("Clippit", &format!("Imagem copiada ({}x{})", rgba.width(), rgba.height()));
+                                        show_notification("Clippit", &format!("Imagem copiada ({}x{})", rgba.width(), rgba.height()), show_notifications);
                                         true
                                     }
                                     Err(e) => {
                                         eprintln!("❌ Failed to copy image: {}", e);
-                                        show_notification("Erro", &format!("Erro ao copiar imagem: {}", e));
+                                        show_notification("Erro", &format!("Erro ao copiar imagem: {}", e), show_notifications);
                                         false
                                     }
                                 }
                             }
                             Err(e) => {
                                 eprintln!("❌ Failed to load image: {}", e);
-                                show_notification("Erro", &format!("Erro ao carregar imagem: {}", e));
+                                show_notification("Erro", &format!("Erro ao carregar imagem: {}", e), show_notifications);
                                 false
                             }
                         }
                     } else {
                         eprintln!("❌ Image entry has no image_path!");
-                        show_notification("Erro", "Imagem sem caminho");
+                        show_notification("Erro", "Imagem sem caminho", show_notifications);
                         false
                     }
                 }
@@ -125,7 +131,7 @@ pub fn copy_to_clipboard(entry_id: i64) -> bool {
             eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             eprintln!("❌ FAILED: Could not get entry data for ID {}: {}", entry_id, e);
             eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            show_notification("Erro", &format!("Erro: {}", e));
+            show_notification("Erro", &format!("Erro: {}", e), show_notifications);
             false
         }
     };
@@ -144,7 +150,12 @@ pub fn copy_to_clipboard(entry_id: i64) -> bool {
 }
 
 /// Show a system notification using notify-send (reliable and blocking)
-fn show_notification(summary: &str, body: &str) {
+fn show_notification(summary: &str, body: &str, enabled: bool) {
+    if !enabled {
+        eprintln!("🔕 Notificações desabilitadas - pulando notificação");
+        return;
+    }
+    
     eprintln!("🔔 Enviando notificação via notify-send...");
     eprintln!("   Summary: {}", summary);
     eprintln!("   Body: {}", body);

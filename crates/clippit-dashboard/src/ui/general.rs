@@ -73,6 +73,34 @@ pub fn create_page() -> gtk::Widget {
     
     poll_interval_row.add_suffix(&poll_interval_spin);
     group.add(&poll_interval_row);
+    
+    // Show Notifications
+    let notifications_row = adw::ActionRow::new();
+    notifications_row.set_title("Mostrar Notificações");
+    notifications_row.set_subtitle("Exibir notificações ao copiar itens");
+    
+    let icon3 = gtk::Image::from_icon_name("preferences-system-notifications-symbolic");
+    notifications_row.add_prefix(&icon3);
+    
+    let notifications_switch = gtk::Switch::new();
+    notifications_switch.set_active(config.ui.show_notifications);
+    notifications_switch.set_valign(gtk::Align::Center);
+    
+    // Auto-save on toggle
+    notifications_switch.connect_active_notify(|switch| {
+        if let Ok(mut cfg) = Config::load() {
+            cfg.ui.show_notifications = switch.is_active();
+            if let Err(e) = cfg.save() {
+                eprintln!("❌ Erro ao salvar: {}", e);
+            } else {
+                eprintln!("✅ Notificações {}", if switch.is_active() { "habilitadas" } else { "desabilitadas" });
+            }
+        }
+    });
+    
+    notifications_row.add_suffix(&notifications_switch);
+    notifications_row.set_activatable_widget(Some(&notifications_switch));
+    group.add(&notifications_row);
 
     page.add(&group);
     
