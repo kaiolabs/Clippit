@@ -72,44 +72,33 @@ impl AutocompleteManager {
         Ok((x, y + 20))
     }
 
-    /// Mostra popup flutuante com rofi
-    fn show_floating_popup(&self, suggestions: &[Suggestion], pos: (i32, i32)) -> Result<()> {
-        // Preparar lista de sugestões
-        let items: Vec<String> = suggestions
-            .iter()
-            .take(5)
-            .map(|s| s.word.clone())
-            .collect();
+    /// Mostra popup flutuante com zenity
+    fn show_floating_popup(&self, suggestions: &[Suggestion], _pos: (i32, i32)) -> Result<()> {
+        // Preparar lista de sugestões para zenity
+        let mut items: Vec<String> = Vec::new();
+        
+        for sugg in suggestions.iter().take(5) {
+            items.push(sugg.word.clone());
+        }
 
-        // Criar entrada rofi
-        let input = items.join("\n");
-
-        // Spawn rofi como daemon (non-blocking)
-        let (x, y) = pos;
+        // Spawn zenity como popup não-modal
+        let items_clone = items.clone();
         std::thread::spawn(move || {
-            let _ = Command::new("rofi")
-                .arg("-dmenu")
-                .arg("-p")
-                .arg("💡")
-                .arg("-theme-str")
-                .arg(format!(
-                    "window {{ location: north west; x-offset: {}px; y-offset: {}px; width: 300px; }}",
-                    x, y
-                ))
-                .arg("-theme-str")
-                .arg("listview { lines: 5; }")
-                .arg("-no-custom")
-                .arg("-format")
-                .arg("s")
-                .stdin(std::process::Stdio::piped())
-                .spawn()
-                .and_then(|mut child| {
-                    use std::io::Write;
-                    if let Some(ref mut stdin) = child.stdin {
-                        stdin.write_all(input.as_bytes())?;
-                    }
-                    child.wait()
-                });
+            let mut cmd = Command::new("zenity");
+            cmd.arg("--list")
+                .arg("--title=Clippit Autocomplete")
+                .arg("--text=Pressione Tab para aceitar")
+                .arg("--column=Sugestão")
+                .arg("--width=300")
+                .arg("--height=200")
+                .arg("--hide-header");
+
+            // Adicionar itens
+            for item in items_clone {
+                cmd.arg(&item);
+            }
+
+            let _ = cmd.output();
         });
 
         Ok(())
