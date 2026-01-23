@@ -126,17 +126,17 @@ impl AutocompleteManager {
                 return; // Sucesso com yad!
             }
 
-            // 2️⃣ Fallback: zenity com --notification (tooltip-like)
+            // 2️⃣ Fallback: zenity --info (janela pequena flutuante)
             let zenity_result = Command::new("zenity")
-                .arg("--notification")
-                .arg(format!("--text={}", text.replace('\n', " | ")))
+                .arg("--info")
+                .arg("--title=Clippit")
+                .arg(format!("--text={}", text))
+                .arg("--width=300")
+                .arg("--height=150")
+                .arg("--timeout=3")
+                .arg("--no-wrap")
                 .spawn()
-                .and_then(|mut child| {
-                    // Auto-matar após 3 segundos
-                    std::thread::sleep(std::time::Duration::from_secs(3));
-                    let _ = child.kill();
-                    Ok(())
-                });
+                .and_then(|child| child.wait_with_output());
 
             if zenity_result.is_ok() {
                 return; // Sucesso com zenity!
@@ -334,16 +334,17 @@ impl AutocompleteManager {
                 return;
             }
 
-            // 2️⃣ Fallback: zenity --notification
+            // 2️⃣ Fallback: zenity --info (janela pequena flutuante)
             let zenity_result = Command::new("zenity")
-                .arg("--notification")
-                .arg(format!("--text={}", text.replace('\n', " | ")))
+                .arg("--info")
+                .arg("--title=Clippit")
+                .arg(format!("--text={}", text))
+                .arg("--width=300")
+                .arg("--height=150")
+                .arg("--timeout=3")
+                .arg("--no-wrap")
                 .spawn()
-                .and_then(|mut child| {
-                    std::thread::sleep(std::time::Duration::from_secs(3));
-                    let _ = child.kill();
-                    Ok(())
-                });
+                .and_then(|child| child.wait_with_output());
 
             if zenity_result.is_ok() {
                 return;
