@@ -1,6 +1,7 @@
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 use libadwaita as adw;
+use libadwaita::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -47,9 +48,9 @@ impl FloatingAutocomplete {
 
         window.set_child(Some(&scrolled));
 
-        let suggestions = Rc::new(RefCell::new(Vec::new()));
+        let suggestions: Rc<RefCell<Vec<Suggestion>>> = Rc::new(RefCell::new(Vec::new()));
         let selected_index = Rc::new(RefCell::new(0));
-        let on_accept = Rc::new(RefCell::new(None));
+        let on_accept: Rc<RefCell<Option<Box<dyn Fn(String)>>>> = Rc::new(RefCell::new(None));
 
         // Keyboard navigation
         let key_controller = gtk::EventControllerKey::new();
