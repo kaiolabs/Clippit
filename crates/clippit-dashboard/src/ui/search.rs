@@ -1,7 +1,10 @@
 use gtk::prelude::*;
+use gtk::gdk;
 use libadwaita as adw;
 use adw::prelude::*;
 use clippit_core::Config;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub fn create_page() -> gtk::Widget {
     let config = Config::load().unwrap_or_default();
@@ -58,53 +61,47 @@ pub fn create_page() -> gtk::Widget {
     hotkey_group.set_description(Some("Configure os atalhos para voltar ao campo de pesquisa"));
     hotkey_group.set_margin_top(12);
 
-    // Focus search modifier
-    let modifier_row = adw::ComboRow::new();
-    modifier_row.set_title("Modificador");
-    modifier_row.set_subtitle("Tecla modificadora para focar no campo de pesquisa");
+    // Hotkey row with edit button (same pattern as Shortcuts page)
+    let focus_hotkey_row = adw::ActionRow::new();
+    focus_hotkey_row.set_title("Focar no campo de pesquisa");
+    focus_hotkey_row.set_subtitle("Atalho para voltar o foco ao campo de pesquisa");
     
     let icon3 = gtk::Image::from_icon_name("input-keyboard-symbolic");
-    modifier_row.add_prefix(&icon3);
+    focus_hotkey_row.add_prefix(&icon3);
     
-    let modifier_model = gtk::StringList::new(&["ctrl", "alt", "super", "shift"]);
-    modifier_row.set_model(Some(&modifier_model));
+    // Current hotkey label
+    let focus_hotkey_label = gtk::Label::new(Some(&format!(
+        "{} + {}",
+        config.search.focus_search_modifier.to_uppercase(),
+        config.search.focus_search_key.to_uppercase()
+    )));
+    focus_hotkey_label.add_css_class("dim-label");
+    focus_hotkey_label.add_css_class("caption");
+    focus_hotkey_label.add_css_class("monospace");
     
-    let current_modifier = config.search.focus_search_modifier.as_str();
-    let modifier_index = match current_modifier {
-        "ctrl" => 0,
-        "alt" => 1,
-        "super" => 2,
-        "shift" => 3,
-        _ => 0,
-    };
-    modifier_row.set_selected(modifier_index);
+    // Edit button
+    let focus_edit_button = gtk::Button::new();
+    focus_edit_button.set_icon_name("document-edit-symbolic");
+    focus_edit_button.set_valign(gtk::Align::Center);
+    focus_edit_button.add_css_class("flat");
+    focus_edit_button.set_tooltip_text(Some("Editar atalho"));
     
-    hotkey_group.add(&modifier_row);
-
-    // Focus search key
-    let key_row = adw::ComboRow::new();
-    key_row.set_title("Tecla");
-    key_row.set_subtitle("Tecla para focar no campo de pesquisa");
+    let focus_button_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    focus_button_box.append(&focus_hotkey_label);
+    focus_button_box.append(&focus_edit_button);
     
-    let icon4 = gtk::Image::from_icon_name("input-keyboard-symbolic");
-    key_row.add_prefix(&icon4);
+    focus_hotkey_row.add_suffix(&focus_button_box);
     
-    let key_model = gtk::StringList::new(&["p", "f", "s", "/"]);
-    key_row.set_model(Some(&key_model));
-    
-    let current_key = config.search.focus_search_key.as_str();
-    let key_index = match current_key {
-        "p" => 0,
-        "f" => 1,
-        "s" => 2,
-        "/" => 3,
-        _ => 0,
-    };
-    key_row.set_selected(key_index);
-    
-    hotkey_group.add(&key_row);
-    
+    hotkey_group.add(&focus_hotkey_row);
     page.add(&hotkey_group);
+
+    // Setup edit dialog for focus hotkey
+    let focus_hotkey_label_clone = focus_hotkey_label.clone();
+    focus_edit_button.connect_clicked(move |btn| {
+        if let Some(window) = btn.root().and_downcast::<gtk::Window>() {
+            show_focus_hotkey_dialog(&window, focus_hotkey_label_clone.clone());
+        }
+    });
 
     // Save button
     let save_group = adw::PreferencesGroup::new();
@@ -116,6 +113,7 @@ pub fn create_page() -> gtk::Widget {
     
     // Clone for closure
     let save_button_clone = save_button.clone();
+    let focus_hotkey_label_for_save = focus_hotkey_label.clone();
     
     // Connect save button
     save_button_clone.connect_clicked(move |btn| {
@@ -123,23 +121,13 @@ pub fn create_page() -> gtk::Widget {
             cfg.search.enable_suggestions = enable_switch.is_active();
             cfg.search.max_suggestions = max_spin.value() as usize;
             
-            let modifier_idx = modifier_row.selected();
-            cfg.search.focus_search_modifier = match modifier_idx {
-                0 => "ctrl".to_string(),
-                1 => "alt".to_string(),
-                2 => "super".to_string(),
-                3 => "shift".to_string(),
-                _ => "ctrl".to_string(),
-            };
-            
-            let key_idx = key_row.selected();
-            cfg.search.focus_search_key = match key_idx {
-                0 => "p".to_string(),
-                1 => "f".to_string(),
-                2 => "s".to_string(),
-                3 => "/".to_string(),
-                _ => "p".to_string(),
-            };
+            // Get current hotkey from label (format: "MODIFIER + KEY")
+            let label_text = focus_hotkey_label_for_save.text();
+            let parts: Vec<&str> = label_text.split(" + ").collect();
+            if parts.len() == 2 {
+                cfg.search.focus_search_modifier = parts[0].to_lowercase();
+                cfg.search.focus_search_key = parts[1].to_lowercase();
+            }
             
             match cfg.save() {
                 Ok(_) => {
@@ -182,4 +170,177 @@ fn find_toast_overlay(widget: &impl IsA<gtk::Widget>) -> Option<adw::ToastOverla
     }
     
     None
+}
+
+fn show_focus_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
+    // Create dialog using gtk::Window SEM DECORAÇÃO (modal limpo)
+    let dialog = gtk::Window::builder()
+        .modal(true)
+        .transient_for(parent)
+        .default_width(480)
+        .default_height(340)
+        .resizable(false)
+        .decorated(false)  // ✅ SEM HEADER DO SISTEMA!
+        .build();
+    
+    dialog.add_css_class("background");
+    
+    // Aplicar CSS para cantos arredondados
+    let css_provider = gtk::CssProvider::new();
+    css_provider.load_from_data(
+        "window { 
+            border-radius: 16px; 
+            background-color: @window_bg_color;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            animation: fadeIn 150ms ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }"
+    );
+    
+    // Aplicar CSS
+    if let Some(display) = gdk::Display::default() {
+        gtk::style_context_add_provider_for_display(
+            &display,
+            &css_provider,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    }
+    
+    // Container principal com padding
+    let main_container = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    main_container.set_margin_start(32);
+    main_container.set_margin_end(32);
+    main_container.set_margin_top(24);
+    main_container.set_margin_bottom(24);
+    
+    // Botão CANCELAR no topo
+    let cancel_button = gtk::Button::new();
+    cancel_button.set_label("Cancelar");
+    cancel_button.set_icon_name("window-close-symbolic");
+    cancel_button.add_css_class("flat");
+    cancel_button.set_halign(gtk::Align::End);
+    let dialog_clone = dialog.clone();
+    cancel_button.connect_clicked(move |_| {
+        dialog_clone.close();
+    });
+    main_container.append(&cancel_button);
+
+    // Content area - MINIMALISTA
+    let content = gtk::Box::new(gtk::Orientation::Vertical, 20);
+    content.set_valign(gtk::Align::Center);
+    content.set_halign(gtk::Align::Center);
+    content.set_vexpand(true);
+
+    // Icon
+    let icon = gtk::Image::from_icon_name("input-keyboard-symbolic");
+    icon.set_pixel_size(72);
+    icon.add_css_class("accent");
+    content.append(&icon);
+
+    // Instruction label
+    let instruction = gtk::Label::new(Some("Pressione a combinação de teclas"));
+    instruction.add_css_class("title-1");
+    content.append(&instruction);
+
+    // Current keys display
+    let keys_display = gtk::Label::new(Some("⌨️"));
+    keys_display.add_css_class("title-1");
+    keys_display.set_margin_top(12);
+    content.append(&keys_display);
+
+    // Captured keys storage
+    let captured_modifier = Rc::new(RefCell::new(String::new()));
+    let captured_key = Rc::new(RefCell::new(String::new()));
+
+    // Key event controller
+    let key_controller = gtk::EventControllerKey::new();
+    let keys_display_clone = keys_display.clone();
+    let captured_modifier_clone = captured_modifier.clone();
+    let captured_key_clone = captured_key.clone();
+    let dialog_clone = dialog.clone();
+    let label_clone = label.clone();
+    
+    key_controller.connect_key_pressed(move |_, keyval, _keycode, modifier| {
+        let mut modifier_str = String::new();
+        
+        // Detect modifiers
+        if modifier.contains(gdk::ModifierType::CONTROL_MASK) {
+            modifier_str.push_str("ctrl");
+        }
+        if modifier.contains(gdk::ModifierType::ALT_MASK) {
+            if !modifier_str.is_empty() {
+                modifier_str.push_str("+");
+            }
+            modifier_str.push_str("alt");
+        }
+        if modifier.contains(gdk::ModifierType::SHIFT_MASK) {
+            if !modifier_str.is_empty() {
+                modifier_str.push_str("+");
+            }
+            modifier_str.push_str("shift");
+        }
+        if modifier.contains(gdk::ModifierType::SUPER_MASK) {
+            if !modifier_str.is_empty() {
+                modifier_str.push_str("+");
+            }
+            modifier_str.push_str("super");
+        }
+
+        // Get key name
+        let key_name = keyval.name();
+        if let Some(key) = key_name {
+            let key_str = key.to_lowercase();
+            
+            // Ignore modifier-only presses
+            if key_str == "control_l" || key_str == "control_r" ||
+               key_str == "alt_l" || key_str == "alt_r" ||
+               key_str == "shift_l" || key_str == "shift_r" ||
+               key_str == "super_l" || key_str == "super_r" ||
+               key_str == "meta_l" || key_str == "meta_r" {
+                return gtk::glib::Propagation::Proceed;
+            }
+            
+            // Clean up key name
+            let clean_key = key_str
+                .replace("_l", "")
+                .replace("_r", "")
+                .to_lowercase();
+            
+            // Update display
+            let display_text = if !modifier_str.is_empty() {
+                format!("{} + {}", modifier_str.to_uppercase(), clean_key.to_uppercase())
+            } else {
+                clean_key.to_uppercase()
+            };
+            
+            keys_display_clone.set_text(&display_text);
+            
+            // Store captured keys
+            *captured_modifier_clone.borrow_mut() = if modifier_str.is_empty() {
+                "none".to_string()
+            } else {
+                modifier_str
+            };
+            *captured_key_clone.borrow_mut() = clean_key;
+            
+            // Update label and close dialog automatically after 500ms
+            let label_clone = label_clone.clone();
+            let dialog_clone = dialog_clone.clone();
+            gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(500), move || {
+                label_clone.set_text(&display_text);
+                dialog_clone.close();
+            });
+        }
+        
+        gtk::glib::Propagation::Stop
+    });
+    
+    dialog.add_controller(key_controller);
+    
+    main_container.append(&content);
+    dialog.set_child(Some(&main_container));
+    dialog.present();
 }
