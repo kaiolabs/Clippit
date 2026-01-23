@@ -148,6 +148,11 @@ impl HistoryManager {
     pub fn clear(&self) -> Result<usize> {
         self.storage.clear()
     }
+
+    /// Search in ALL history (no limit) - returns metadata only for images
+    pub fn search(&self, query: &str) -> Result<Vec<ClipboardEntry>> {
+        self.storage.search(query)
+    }
 }
 
 #[cfg(test)]

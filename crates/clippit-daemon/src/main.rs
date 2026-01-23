@@ -106,9 +106,9 @@ fn handle_ipc_message(
             }
         }
 
-        IpcMessage::QueryHistoryMetadata { limit } => {
+        IpcMessage::QueryHistoryMetadata { limit, offset } => {
             let manager = history_manager.lock().unwrap();
-            match manager.get_recent_metadata(limit) {
+            match manager.get_recent_metadata_with_offset(limit, offset) {
                 Ok(entries) => {
                     let ipc_entries: Vec<HistoryEntry> = entries
                         .into_iter()
@@ -136,9 +136,9 @@ fn handle_ipc_message(
             }
         }
 
-        IpcMessage::QueryHistoryMetadataWithOffset { limit, offset } => {
+        IpcMessage::SearchHistory { query } => {
             let manager = history_manager.lock().unwrap();
-            match manager.get_recent_metadata_with_offset(limit, offset) {
+            match manager.search(&query) {
                 Ok(entries) => {
                     let ipc_entries: Vec<HistoryEntry> = entries
                         .into_iter()
@@ -155,13 +155,13 @@ fn handle_ipc_message(
                             timestamp: e.timestamp,
                         })
                         .collect();
-                    info!("Returned {} metadata entries with offset {} (infinite scroll)", ipc_entries.len(), offset);
-                    IpcResponse::HistoryMetadataResponse {
+                    info!("Search '{}' returned {} results (NO LIMIT)", query, ipc_entries.len());
+                    IpcResponse::SearchHistoryResponse {
                         entries: ipc_entries,
                     }
                 }
                 Err(e) => IpcResponse::Error {
-                    message: format!("Failed to get history metadata with offset: {}", e),
+                    message: format!("Failed to search history: {}", e),
                 },
             }
         }

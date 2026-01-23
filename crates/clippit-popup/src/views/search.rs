@@ -5,16 +5,20 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 use crate::models::SearchContentMap;
-use crate::utils::SuggestionEngine;
-use crate::views::SuggestionsPopover;
+use crate::utils::{SuggestionEngine, create_thumbnail};
+use crate::views::{SuggestionsPopover, buttons::{add_delete_button, add_copy_button}};
 use clippit_ipc::IpcClient;
 use clippit_core::Config;
+use rust_i18n::t;
 
-/// Sets up the search filter on the list box with autocomplete
+/// Sets up the REAL DATABASE SEARCH (no limit) with autocomplete
 pub fn setup_search_filter(
     list_box: &gtk::ListBox,
     search_entry: &gtk::SearchEntry,
     search_map: &SearchContentMap,
+    window: &adw::ApplicationWindow,
+    app: &gtk::Application,
+    entry_map: &Rc<RefCell<std::collections::HashMap<i32, i64>>>,
 ) {
     let list_box_for_search = list_box.clone();
     let search_text_ref: Rc<RefCell<String>> = Rc::new(RefCell::new(String::new()));

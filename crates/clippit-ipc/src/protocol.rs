@@ -24,8 +24,8 @@ pub struct HistoryEntry {
 pub enum IpcMessage {
     ShowPopup,
     QueryHistory { limit: usize },           // Existing - kept for compatibility
-    QueryHistoryMetadata { limit: usize },   // Get metadata without image data
-    QueryHistoryMetadataWithOffset { limit: usize, offset: usize },  // For infinite scroll
+    QueryHistoryMetadata { limit: usize, offset: usize },   // Get metadata without image data
+    SearchHistory { query: String },         // Search in ALL history (no limit)
     GetEntryData { id: i64 },                // Get full data for specific entry
     SelectItem { id: i64 },
     Ping,
@@ -35,8 +35,9 @@ pub enum IpcMessage {
 pub enum IpcResponse {
     Ok,
     HistoryResponse { entries: Vec<HistoryEntry> },           // Existing
-    HistoryMetadataResponse { entries: Vec<HistoryEntry> },   // NEW: Metadata without image data
-    EntryDataResponse { entry: HistoryEntry },                // NEW: Single entry with full data
+    HistoryMetadataResponse { entries: Vec<HistoryEntry> },   // Metadata without image data
+    SearchHistoryResponse { entries: Vec<HistoryEntry> },     // Search results (no limit)
+    EntryDataResponse { entry: HistoryEntry },                // Single entry with full data
     ItemContent { entry: HistoryEntry },
     Error { message: String },
     Pong,

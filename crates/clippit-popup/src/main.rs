@@ -147,8 +147,8 @@ fn build_ui(app: &Application) {
         // Populate history list with entries
         populate_history_list(&list_box_clone, &window_clone, &app_clone, &entry_map_clone, &search_map_clone);
         
-        // Setup search filtering
-        setup_search_filter(&list_box_clone, &search_entry_clone, &search_map_clone);
+        // Setup search filtering (with ability to reload list)
+        setup_search_filter(&list_box_clone, &search_entry_clone, &search_map_clone, &window_clone, &app_clone, &entry_map_clone);
         
         // Setup row activation (click)
         setup_row_activation(&list_box_clone, &entry_map_clone, &window_clone, &app_clone);
