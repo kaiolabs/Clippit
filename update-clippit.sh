@@ -45,12 +45,13 @@ echo "🧹 Limpando processos antigos..."
 killall -9 clippit-daemon 2>/dev/null || true
 killall -9 clippit-popup 2>/dev/null || true
 killall -9 clippit-dashboard 2>/dev/null || true
+killall -9 clippit-ibus 2>/dev/null || true
 
 # Aguardar processos terminarem
 sleep 1
 
 # Verificar se ainda há processos rodando
-if ps aux | grep -E "clippit-(daemon|popup|dashboard)" | grep -v grep > /dev/null; then
+if ps aux | grep -E "clippit-(daemon|popup|dashboard|ibus)" | grep -v grep > /dev/null; then
     echo "⚠️  Ainda há processos rodando, matando com força..."
     pkill -9 clippit-daemon 2>/dev/null || true
     pkill -9 clippit-popup 2>/dev/null || true
