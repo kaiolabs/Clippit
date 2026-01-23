@@ -247,15 +247,172 @@ echo "📋 Últimos logs:"
 journalctl --user -u clippit -n 5 --no-pager | grep -i "atalho\|hotkey" || echo "   (aguardando atividade...)"
 
 echo ""
+
+# ============================================================================
+# Configuração Automática de Atalho Global (Wayland)
+# ============================================================================
+
+# Função para converter formato Clippit → GNOME
+convert_clippit_to_gnome_hotkey() {
+    local mod=$1
+    local key=$2
+    
+    # Converter modificador
+    case $mod in
+        "super"|"meta"|"win") mod_gnome="<Super>" ;;
+        "ctrl"|"control") mod_gnome="<Primary>" ;;
+        "alt") mod_gnome="<Alt>" ;;
+        "shift") mod_gnome="<Shift>" ;;
+        *) mod_gnome="<Super>" ;;
+    esac
+    
+    # Converter tecla
+    case $key in
+        "kp_1"|"numpad1") key_gnome="KP_1" ;;
+        "kp_2"|"numpad2") key_gnome="KP_2" ;;
+        "kp_3"|"numpad3") key_gnome="KP_3" ;;
+        "kp_4"|"numpad4") key_gnome="KP_4" ;;
+        "kp_5"|"numpad5") key_gnome="KP_5" ;;
+        "kp_6"|"numpad6") key_gnome="KP_6" ;;
+        "kp_7"|"numpad7") key_gnome="KP_7" ;;
+        "kp_8"|"numpad8") key_gnome="KP_8" ;;
+        "kp_9"|"numpad9") key_gnome="KP_9" ;;
+        "kp_0"|"numpad0") key_gnome="KP_0" ;;
+        "kp_end") key_gnome="KP_End" ;;
+        *) key_gnome=$(echo "$key" | tr '[:lower:]' '[:upper:]') ;;
+    esac
+    
+    echo "${mod_gnome}${key_gnome}"
+}
+
+# Verificar se está no Wayland e se gsettings está disponível
+if [ "$XDG_SESSION_TYPE" = "wayland" ] && command -v gsettings &> /dev/null; then
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🔑 Configuração de Atalho Global (Wayland)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "   ⚠️  No Wayland, hotkeys globais precisam ser"
+    echo "   configurados através do Sistema Operacional."
+    echo ""
+    
+    # Verificar se já existe atalho configurado
+    EXISTING_BINDING=""
+    if gsettings get org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/ binding &>/dev/null; then
+        EXISTING_BINDING=$(gsettings get org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/ binding 2>/dev/null | tr -d "'")
+    fi
+    
+    if [ -n "$EXISTING_BINDING" ]; then
+        echo "   ✅ Atalho já configurado: $EXISTING_BINDING"
+        echo ""
+        read -p "   Deseja reconfigurar? (s/N): " -n 1 -r RECONFIG
+        echo ""
+        if [[ ! $RECONFIG =~ ^[Ss]$ ]]; then
+            echo "   ⏭️  Mantendo atalho existente"
+            SKIP_HOTKEY_SETUP=true
+        fi
+    else
+        echo "   Deseja configurar o atalho automaticamente agora?"
+        echo ""
+        read -p "   Configurar atalho? (S/n): " -n 1 -r SETUP_HOTKEY
+        echo ""
+        
+        if [[ $SETUP_HOTKEY =~ ^[Nn]$ ]]; then
+            echo "   ⏭️  Pulando configuração de atalho"
+            SKIP_HOTKEY_SETUP=true
+        fi
+    fi
+    
+    if [ "$SKIP_HOTKEY_SETUP" != "true" ]; then
+        echo ""
+        echo "   🔄 Configurando atalho automaticamente..."
+        echo ""
+        
+        # Carregar configuração do Clippit
+        CONFIG_FILE="$HOME/.config/clippit/config.toml"
+        
+        if [ -f "$CONFIG_FILE" ]; then
+            MODIFIER=$(grep "show_history_modifier" "$CONFIG_FILE" | cut -d'"' -f2)
+            KEY=$(grep "show_history_key" "$CONFIG_FILE" | head -n1 | cut -d'"' -f2)
+            echo "   📋 Atalho do Clippit: $MODIFIER + $KEY"
+        else
+            MODIFIER="super"
+            KEY="v"
+            echo "   📋 Usando atalho padrão: $MODIFIER + $KEY"
+        fi
+        
+        # Converter para formato GNOME
+        GNOME_HOTKEY=$(convert_clippit_to_gnome_hotkey "$MODIFIER" "$KEY")
+        echo "   🔄 Formato GNOME: $GNOME_HOTKEY"
+        echo ""
+        
+        # Configurar no gsettings
+        NEW_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/"
+        
+        gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$NEW_PATH name "Clippit - Show History" 2>/dev/null
+        gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$NEW_PATH command "/usr/local/bin/clippit-popup" 2>/dev/null
+        gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$NEW_PATH binding "$GNOME_HOTKEY" 2>/dev/null
+        
+        # Adicionar à lista de atalhos personalizados
+        CUSTOM_KEYS=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null)
+        
+        if [[ "$CUSTOM_KEYS" == "@as []" ]] || [[ "$CUSTOM_KEYS" == "[]" ]]; then
+            NEW_LIST="['$NEW_PATH']"
+        else
+            # Verificar se já está na lista
+            if [[ "$CUSTOM_KEYS" == *"$NEW_PATH"* ]]; then
+                NEW_LIST="$CUSTOM_KEYS"
+            else
+                NEW_LIST=$(echo "$CUSTOM_KEYS" | sed "s/]$/, '$NEW_PATH']/")
+            fi
+        fi
+        
+        gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "$NEW_LIST" 2>/dev/null
+        
+        if [ $? -eq 0 ]; then
+            echo "   ✅ Atalho configurado com sucesso!"
+            echo ""
+            echo "   🎯 Teste agora: Pressione $MODIFIER + $KEY"
+            HOTKEY_CONFIGURED=true
+        else
+            echo "   ❌ Erro ao configurar atalho automaticamente"
+            echo ""
+            echo "   📝 Configure manualmente:"
+            echo "      Configurações → Teclado → Atalhos → Adicionar"
+            echo "      Nome: Clippit - Show History"
+            echo "      Comando: /usr/local/bin/clippit-popup"
+            echo "      Atalho: $MODIFIER + $KEY"
+        fi
+    else
+        echo ""
+        echo "   📝 Para configurar manualmente depois:"
+        echo "      Configurações → Teclado → Atalhos → Adicionar"
+        echo "      Nome: Clippit - Show History"
+        echo "      Comando: /usr/local/bin/clippit-popup"
+        echo "      Atalho: Escolha sua combinação"
+        echo ""
+        echo "   💡 Ou execute: ./scripts/setup-wayland-hotkey.sh"
+    fi
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+fi
+
+# Mensagem final de teste
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🎯 Teste agora:"
+echo "🎯 Teste o Clippit:"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "   1. Pressione seu atalho para abrir o popup"
-echo "   2. Selecione e copie algo do histórico"
-echo "   3. Veja se aparece a notificação do sistema"
+
+if [ "$HOTKEY_CONFIGURED" = "true" ]; then
+    echo "   1. ✅ Pressione o atalho configurado para abrir"
+else
+    echo "   1. ⚙️  Configure o atalho (veja instruções acima)"
+fi
+
+echo "   2. 📋 Copie algo (Ctrl+C) e veja no histórico"
+echo "   3. 🎨 Configure preferências: clippit-dashboard"
 echo ""
 echo "💡 Dicas:"
 echo "   - Ver logs: journalctl --user -u clippit -f"
-echo "   - Configurar: clippit-dashboard"
-echo "   - Autocompletar: Super+Espaço → Selecione 'Clippit'"
+echo "   - Autocompletar: Super+Espaço → 'Clippit'"
+echo "   - Documentação: docs/WAYLAND_HOTKEYS.md"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

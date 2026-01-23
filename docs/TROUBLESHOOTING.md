@@ -79,12 +79,69 @@ systemctl --user restart clippit
 
 ---
 
-### 2. Atalho Não Funciona
+### 2. Atalho Não Funciona ⚠️ WAYLAND
+
+#### ⚠️ IMPORTANTE: Limitação do Wayland
+
+**Global hotkeys não funcionam diretamente no Wayland!** 
+
+O protocolo Wayland bloqueia hotkeys globais por questões de segurança. Aplicativos não podem registrar atalhos globais como no X11. Você **DEVE** configurar o atalho através das configurações do sistema.
 
 #### Sintomas
-- Pressionar `Super+V` não abre popup
+- Pressionar o atalho configurado não abre o popup
+- Nenhum evento de "Hotkey pressed" nos logs
 
-#### Soluções
+#### ✅ Solução Definitiva: Configurar no Sistema
+
+**Opção 1: Script Automático (Recomendado)**
+
+```bash
+# Executar script de configuração
+./scripts/setup-wayland-hotkey.sh
+```
+
+O script:
+- Lê o atalho configurado no Clippit
+- Registra automaticamente nas configurações do GNOME/Zorin
+- Configura o comando correto
+
+**Opção 2: Configurar Manualmente**
+
+1. Abra **Configurações** (Settings)
+2. Vá em **Teclado** → **Atalhos do Teclado** (Keyboard → Shortcuts)
+3. Role até o final e clique em **+** para adicionar
+4. Configure:
+   - **Nome**: `Clippit - Show History`
+   - **Comando**: `/usr/local/bin/clippit-popup`
+   - **Atalho**: Pressione a combinação desejada (ex: `Super+V` ou `Ctrl+Numpad1`)
+
+**Opção 3: Via gsettings (Terminal)**
+
+```bash
+# Criar atalho personalizado
+NEW_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/"
+
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$NEW_PATH name "Clippit - Show History"
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$NEW_PATH command "/usr/local/bin/clippit-popup"
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$NEW_PATH binding "<Super>v"
+
+# Adicionar à lista
+CUSTOM_KEYS=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings)
+NEW_LIST=$(echo "$CUSTOM_KEYS" | sed "s/]$/, '$NEW_PATH']/")
+gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "$NEW_LIST"
+```
+
+#### Verificar Configuração
+
+```bash
+# Ver se o atalho foi registrado
+gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings
+
+# Ver detalhes do atalho Clippit
+gsettings get org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/ binding
+```
+
+#### Outras Soluções (se ainda não funcionar)
 
 **A. Verificar se daemon está rodando**
 ```bash
@@ -93,29 +150,29 @@ systemctl --user status clippit
 
 **B. Verificar conflitos de atalho**
 ```bash
-# GNOME
-gsettings list-recursively | grep -i "super+v"
+# GNOME - Listar todos atalhos com a mesma combinação
+gsettings list-recursively org.gnome.settings-daemon.plugins.media-keys | grep -i "super+v"
 
-# Se houver conflito, desabilite o outro atalho
+# Se houver conflito, desabilite o outro atalho nas Configurações
 ```
 
-**C. Verificar suporte a desktop portals**
+**C. Testar popup manualmente**
 ```bash
-# Instalar xdg-desktop-portal (se não tiver)
-sudo apt install xdg-desktop-portal xdg-desktop-portal-gtk
-
-# Reiniciar sessão
+# Se funcionar manualmente, confirma que é só o hotkey
+/usr/local/bin/clippit-popup
 ```
 
-**D. Testar popup manualmente**
+**D. Ver logs de hotkey (para debug)**
 ```bash
-# Se funcionar manualmente, o problema é o hotkey
-clippit-popup
-```
-
-**E. Ver logs de hotkey**
-```bash
+# Nota: O daemon ainda registra hotkey internamente, mas não funciona no Wayland
 journalctl --user -u clippit -f | grep -i hotkey
+```
+
+**E. Verificar sessão Wayland**
+```bash
+echo $XDG_SESSION_TYPE  # Deve retornar "wayland"
+
+# Se retornar "x11", hotkeys globais funcionariam normalmente
 ```
 
 ---
