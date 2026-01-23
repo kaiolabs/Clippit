@@ -32,6 +32,18 @@ pub fn create_page() -> gtk::Widget {
         cfg.autocomplete.enabled = switch.is_active();
         let _ = cfg.save();
         eprintln!("✅ Autocomplete enabled: {}", switch.is_active());
+        
+        // Reiniciar daemon automaticamente
+        eprintln!("🔄 Reiniciando daemon para aplicar configuração...");
+        let restart_result = std::process::Command::new("systemctl")
+            .args(&["--user", "restart", "clippit"])
+            .output();
+        
+        if restart_result.is_ok() {
+            eprintln!("✅ Daemon reiniciado com sucesso!");
+        } else {
+            eprintln!("⚠️  Execute manualmente: systemctl --user restart clippit");
+        }
     });
     
     row_enable.add_suffix(&switch_enable);
