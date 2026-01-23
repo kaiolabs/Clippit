@@ -37,6 +37,20 @@ impl SuggestionEngine {
                 }
                 
                 for word in text.split_whitespace() {
+                    // URLs são úteis - adicionar inteiras (sem limpar)
+                    let is_url = word.starts_with("http://") || word.starts_with("https://") 
+                                 || word.starts_with("www.");
+                    
+                    if is_url {
+                        // URLs válidas - adicionar completas (case-insensitive)
+                        let url_lower = word.to_lowercase();
+                        if url_lower.len() >= 3 && url_lower.len() <= 100 {
+                            *self.history_words.entry(url_lower).or_insert(0) += 1;
+                        }
+                        continue;
+                    }
+                    
+                    // Para palavras normais, limpar pontuação
                     let cleaned = word.trim_matches(|c: char| !c.is_alphabetic());
                     let word_lower = cleaned.to_lowercase();
                     
@@ -45,10 +59,15 @@ impl SuggestionEngine {
                         continue; // Muito curta ou muito longa
                     }
                     
-                    // Ignorar se contém caracteres técnicos (stack traces, paths, etc)
+                    // Ignorar se contém caracteres técnicos (stack traces, paths do sistema)
+                    // MAS permitir URLs (já tratadas acima)
                     if word.contains("::") || word.contains("->") || word.contains("__") 
-                       || word.contains("()") || word.contains("{}") || word.contains("[]")
-                       || word.contains("/") || word.contains("\\") {
+                       || word.contains("()") || word.contains("{}") || word.contains("[]") {
+                        continue;
+                    }
+                    
+                    // Ignorar paths do sistema (/, \) mas não URLs
+                    if (word.contains("/") || word.contains("\\")) && !is_url {
                         continue;
                     }
                     
