@@ -15,8 +15,10 @@ pub struct ClippitEngine {
     /// Buffer de digitação atual
     typing_buffer: Arc<Mutex<TypingBuffer>>,
     /// Conexão DBus
+    #[allow(dead_code)]
     connection: Connection,
     /// Cliente IPC para comunicar com o daemon
+    #[allow(dead_code)]
     ipc_client: IpcClient,
     /// Estado do engine (habilitado/desabilitado)
     enabled: Arc<Mutex<bool>>,

@@ -12,6 +12,7 @@ pub struct TypingBuffer {
     cursor_pos: usize,
 }
 
+#[allow(dead_code)] // Métodos preparados para uso futuro com IBus
 impl TypingBuffer {
     pub fn new() -> Self {
         Self {
