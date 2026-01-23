@@ -33,6 +33,20 @@ pub fn create_page() -> gtk::Widget {
     let enable_switch = gtk::Switch::new();
     enable_switch.set_active(config.search.enable_suggestions);
     enable_switch.set_valign(gtk::Align::Center);
+    
+    // Auto-save on toggle
+    enable_switch.connect_state_set(|_, state| {
+        if let Ok(mut cfg) = Config::load() {
+            cfg.search.enable_suggestions = state;
+            if let Err(e) = cfg.save() {
+                eprintln!("❌ Erro ao salvar: {}", e);
+            } else {
+                eprintln!("✅ Sugestões atualizado: {}", state);
+            }
+        }
+        gtk::glib::Propagation::Proceed
+    });
+    
     enable_row.set_activatable_widget(Some(&enable_switch));
     enable_row.add_suffix(&enable_switch);
     
@@ -49,8 +63,20 @@ pub fn create_page() -> gtk::Widget {
     let max_spin = gtk::SpinButton::with_range(1.0, 10.0, 1.0);
     max_spin.set_value(config.search.max_suggestions as f64);
     max_spin.set_valign(gtk::Align::Center);
-    max_row.add_suffix(&max_spin);
     
+    // Auto-save on value change
+    max_spin.connect_value_changed(|spin| {
+        if let Ok(mut cfg) = Config::load() {
+            cfg.search.max_suggestions = spin.value() as usize;
+            if let Err(e) = cfg.save() {
+                eprintln!("❌ Erro ao salvar: {}", e);
+            } else {
+                eprintln!("✅ Max sugestões atualizado: {}", spin.value());
+            }
+        }
+    });
+    
+    max_row.add_suffix(&max_spin);
     suggestions_group.add(&max_row);
     
     page.add(&suggestions_group);
@@ -103,73 +129,14 @@ pub fn create_page() -> gtk::Widget {
         }
     });
 
-    // Save button
-    let save_group = adw::PreferencesGroup::new();
-    save_group.set_margin_top(24);
-    
-    let save_button = gtk::Button::with_label("Salvar Configurações");
-    save_button.add_css_class("suggested-action");
-    save_button.set_halign(gtk::Align::Center);
-    
-    // Clone for closure
-    let save_button_clone = save_button.clone();
-    let focus_hotkey_label_for_save = focus_hotkey_label.clone();
-    
-    // Connect save button
-    save_button_clone.connect_clicked(move |btn| {
-        if let Ok(mut cfg) = Config::load() {
-            cfg.search.enable_suggestions = enable_switch.is_active();
-            cfg.search.max_suggestions = max_spin.value() as usize;
-            
-            // Get current hotkey from label (format: "MODIFIER + KEY")
-            let label_text = focus_hotkey_label_for_save.text();
-            let parts: Vec<&str> = label_text.split(" + ").collect();
-            if parts.len() == 2 {
-                cfg.search.focus_search_modifier = parts[0].to_lowercase();
-                cfg.search.focus_search_key = parts[1].to_lowercase();
-            }
-            
-            match cfg.save() {
-                Ok(_) => {
-                    eprintln!("✅ Configurações de pesquisa salvas com sucesso");
-                    
-                    // Show toast notification
-                    if let Some(window) = btn.root().and_downcast::<adw::ApplicationWindow>() {
-                        let toast = adw::Toast::new("Configurações salvas com sucesso!");
-                        toast.set_timeout(3);
-                        
-                        // Find toast overlay in window hierarchy
-                        if let Some(toast_overlay) = find_toast_overlay(&window) {
-                            toast_overlay.add_toast(toast);
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("❌ Erro ao salvar configurações: {}", e);
-                }
-            }
-        }
-    });
-    
-    save_group.add(&save_button);
-    page.add(&save_group);
+    // No need for save button - auto-save enabled
+    page.set_margin_start(12);
+    page.set_margin_end(12);
+    page.set_margin_top(12);
+    page.set_margin_bottom(12);
 
     scrolled.set_child(Some(&page));
     scrolled.upcast()
-}
-
-// Helper function to find toast overlay
-fn find_toast_overlay(widget: &impl IsA<gtk::Widget>) -> Option<adw::ToastOverlay> {
-    let mut current: Option<gtk::Widget> = Some(widget.clone().upcast());
-    
-    while let Some(w) = current {
-        if let Ok(overlay) = w.clone().downcast::<adw::ToastOverlay>() {
-            return Some(overlay);
-        }
-        current = w.parent();
-    }
-    
-    None
 }
 
 fn show_focus_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
@@ -326,11 +293,28 @@ fn show_focus_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
             };
             *captured_key_clone.borrow_mut() = clean_key;
             
-            // Update label and close dialog automatically after 500ms
+            // Update label, save config, and close dialog automatically after 500ms
             let label_clone = label_clone.clone();
             let dialog_clone = dialog_clone.clone();
+            let captured_mod = captured_modifier.clone();
+            let captured_k = captured_key.clone();
+            
             gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(500), move || {
                 label_clone.set_text(&display_text);
+                
+                // Auto-save hotkey configuration
+                if let Ok(mut cfg) = Config::load() {
+                    cfg.search.focus_search_modifier = captured_mod.borrow().clone();
+                    cfg.search.focus_search_key = captured_k.borrow().clone();
+                    
+                    if let Err(e) = cfg.save() {
+                        eprintln!("❌ Erro ao salvar: {}", e);
+                    } else {
+                        eprintln!("✅ Atalho de foco atualizado: {} + {}", 
+                            captured_mod.borrow(), captured_k.borrow());
+                    }
+                }
+                
                 dialog_clone.close();
             });
         }
