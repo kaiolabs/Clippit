@@ -76,7 +76,7 @@ impl AutocompleteManager {
         Ok((x, y + 20))
     }
 
-    /// Mostra popup "fantasma" SEM roubar foco (overlay tooltip-like)
+    /// Mostra popup flutuante com sugestões
     fn show_floating_popup(&self, suggestions: &[Suggestion], pos: (i32, i32)) -> Result<()> {
         let words: Vec<String> = suggestions
             .iter()
@@ -91,12 +91,12 @@ impl AutocompleteManager {
             })
             .collect();
 
-        let text = format!("💡 Sugestões (Tab):\n{}", words.join("\n"));
+        let text = format!("💡 Sugestões (Tab):\n\n{}", words.join("\n"));
         let (x, y) = pos;
         
         // Spawn em thread separada para não bloquear
         std::thread::spawn(move || {
-            // Tentar yad com --no-focus primeiro (overlay sem roubar foco!)
+            // 1️⃣ Tentar yad primeiro (melhor: --no-focus)
             let yad_result = Command::new("yad")
                 .arg("--text-info")
                 .arg("--title=")
@@ -105,12 +105,11 @@ impl AutocompleteManager {
                 .arg(format!("--posx={}", x))
                 .arg(format!("--posy={}", y))
                 .arg("--no-buttons")
-                .arg("--no-focus")           // 🔑 NÃO ROUBAR FOCO!
+                .arg("--no-focus")
                 .arg("--skip-taskbar")
                 .arg("--skip-pager")
                 .arg("--on-top")
                 .arg("--undecorated")
-                .arg("--no-escape")
                 .arg("--timeout=3")
                 .arg("--timeout-indicator=bottom")
                 .stdin(std::process::Stdio::piped())
@@ -123,17 +122,35 @@ impl AutocompleteManager {
                     child.wait()
                 });
 
-            // Se yad falhar, usar notify-send (nunca rouba foco)
-            if yad_result.is_err() {
-                let _ = Command::new("notify-send")
-                    .arg("Clippit Autocomplete")
-                    .arg(&text)
-                    .arg("-t")
-                    .arg("2500")
-                    .arg("-u")
-                    .arg("low")
-                    .output();
+            if yad_result.is_ok() {
+                return; // Sucesso com yad!
             }
+
+            // 2️⃣ Fallback: zenity com --notification (tooltip-like)
+            let zenity_result = Command::new("zenity")
+                .arg("--notification")
+                .arg(format!("--text={}", text.replace('\n', " | ")))
+                .spawn()
+                .and_then(|mut child| {
+                    // Auto-matar após 3 segundos
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    let _ = child.kill();
+                    Ok(())
+                });
+
+            if zenity_result.is_ok() {
+                return; // Sucesso com zenity!
+            }
+
+            // 3️⃣ Último fallback: notify-send
+            let _ = Command::new("notify-send")
+                .arg("Clippit Autocomplete")
+                .arg(&text)
+                .arg("-t")
+                .arg("3000")
+                .arg("-u")
+                .arg("low")
+                .output();
         });
 
         Ok(())
@@ -282,26 +299,25 @@ impl AutocompleteManager {
             })
             .collect();
 
-        let text = format!("💡 Sugestões (Tab):\n{}", words.join("\n"));
+        let text = format!("💡 Sugestões (Tab):\n\n{}", words.join("\n"));
         let (x, y) = pos;
         
         // Spawn em thread separada para não bloquear
         std::thread::spawn(move || {
-            // Tentar yad com --no-focus primeiro (overlay sem roubar foco!)
+            // 1️⃣ Tentar yad primeiro
             let yad_result = Command::new("yad")
                 .arg("--text-info")
                 .arg("--title=")
                 .arg(format!("--width=280"))
                 .arg(format!("--height=140"))
                 .arg(format!("--posx={}", x))
-                .arg(format!("--posy={}", y + 20)) // Abaixo do cursor
+                .arg(format!("--posy={}", y + 20))
                 .arg("--no-buttons")
-                .arg("--no-focus")           // 🔑 NÃO ROUBAR FOCO!
+                .arg("--no-focus")
                 .arg("--skip-taskbar")
                 .arg("--skip-pager")
                 .arg("--on-top")
                 .arg("--undecorated")
-                .arg("--no-escape")
                 .arg("--timeout=5")
                 .arg("--timeout-indicator=bottom")
                 .stdin(std::process::Stdio::piped())
@@ -314,17 +330,34 @@ impl AutocompleteManager {
                     child.wait()
                 });
 
-            // Se yad falhar, usar notify-send (nunca rouba foco)
-            if yad_result.is_err() {
-                let _ = Command::new("notify-send")
-                    .arg("Clippit Autocomplete")
-                    .arg(&text)
-                    .arg("-t")
-                    .arg("2500")
-                    .arg("-u")
-                    .arg("low")
-                    .output();
+            if yad_result.is_ok() {
+                return;
             }
+
+            // 2️⃣ Fallback: zenity --notification
+            let zenity_result = Command::new("zenity")
+                .arg("--notification")
+                .arg(format!("--text={}", text.replace('\n', " | ")))
+                .spawn()
+                .and_then(|mut child| {
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    let _ = child.kill();
+                    Ok(())
+                });
+
+            if zenity_result.is_ok() {
+                return;
+            }
+
+            // 3️⃣ Último fallback: notify-send
+            let _ = Command::new("notify-send")
+                .arg("Clippit Autocomplete")
+                .arg(&text)
+                .arg("-t")
+                .arg("3000")
+                .arg("-u")
+                .arg("low")
+                .output();
         });
 
         Ok(())
