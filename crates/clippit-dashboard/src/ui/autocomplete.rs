@@ -95,6 +95,69 @@ pub fn create_page() -> gtk::Widget {
 
     page.add(&group_general);
 
+    // ========== SEÇÃO: ATALHO DE TECLADO ==========
+    let group_hotkey = adw::PreferencesGroup::new();
+    group_hotkey.set_title("Atalho de Teclado");
+    group_hotkey.set_description(Some("Configure o atalho para ativar/desativar autocomplete temporariamente"));
+
+    let hotkey_row = adw::ActionRow::new();
+    hotkey_row.set_title("Alternar Autocomplete");
+    hotkey_row.set_subtitle("Atalho para ativar/desativar temporariamente");
+    
+    let icon_keyboard = gtk::Image::from_icon_name("input-keyboard-symbolic");
+    hotkey_row.add_prefix(&icon_keyboard);
+    
+    // Label mostrando hotkey atual
+    let hotkey_label = gtk::Label::new(Some(&format!(
+        "{} + {}",
+        config.autocomplete.toggle_modifier,
+        config.autocomplete.toggle_key
+    )));
+    hotkey_label.add_css_class("dim-label");
+    hotkey_label.add_css_class("caption");
+    hotkey_label.add_css_class("monospace");
+    
+    // Botão de editar
+    let edit_button = gtk::Button::new();
+    edit_button.set_icon_name("document-edit-symbolic");
+    edit_button.set_valign(gtk::Align::Center);
+    edit_button.add_css_class("flat");
+    edit_button.set_tooltip_text(Some("Editar atalho"));
+    
+    let button_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    button_box.append(&hotkey_label);
+    button_box.append(&edit_button);
+    
+    hotkey_row.add_suffix(&button_box);
+    group_hotkey.add(&hotkey_row);
+
+    // Dialog para editar hotkey
+    let _hotkey_label_clone = hotkey_label.clone(); // TODO: Usar quando implementar captura de tecla
+    edit_button.connect_clicked(move |btn| {
+        if let Some(window) = btn.root().and_downcast::<gtk::Window>() {
+            let dialog = adw::MessageDialog::new(
+                Some(&window),
+                Some("Editar Atalho"),
+                Some("Pressione a combinação de teclas desejada..."),
+            );
+            dialog.add_response("cancel", "Cancelar");
+            dialog.set_default_response(Some("cancel"));
+            dialog.set_close_response("cancel");
+            
+            // TODO: Implementar captura de tecla personalizada
+            // Por enquanto, apenas mostra o dialog
+            dialog.connect_response(None, move |dialog, response| {
+                if response == "cancel" {
+                    dialog.close();
+                }
+            });
+            
+            dialog.present();
+        }
+    });
+    
+    page.add(&group_hotkey);
+
     // ========== SEÇÃO: PRIVACIDADE E SEGURANÇA ==========
     let group_privacy = adw::PreferencesGroup::new();
     group_privacy.set_title("Privacidade e Segurança");

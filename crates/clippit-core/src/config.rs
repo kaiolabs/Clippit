@@ -175,6 +175,14 @@ pub struct AutocompleteConfig {
     #[serde(default = "default_autocomplete_ignored_apps")]
     pub ignored_apps: Vec<String>,
     
+    /// Hotkey modifier para ativar/desativar autocomplete temporariamente
+    #[serde(default = "default_autocomplete_toggle_modifier")]
+    pub toggle_modifier: String,
+    
+    /// Hotkey key para ativar/desativar autocomplete temporariamente
+    #[serde(default = "default_autocomplete_toggle_key")]
+    pub toggle_key: String,
+    
     /// Configurações de IA (Fase 2 - futuro)
     #[serde(default)]
     pub ai: AutocompleteAIConfig,
@@ -237,6 +245,8 @@ fn default_autocomplete_ignored_apps() -> Vec<String> {
         "1password".to_string(),
     ]
 }
+fn default_autocomplete_toggle_modifier() -> String { "CTRL".to_string() }
+fn default_autocomplete_toggle_key() -> String { "ALT".to_string() }
 fn default_ai_provider() -> String { "local".to_string() }
 fn default_ai_model() -> String { "gpt-4".to_string() }
 
@@ -324,6 +334,8 @@ impl Default for AutocompleteConfig {
             delay_ms: default_autocomplete_delay_ms(),
             show_in_passwords: default_false(),
             ignored_apps: default_autocomplete_ignored_apps(),
+            toggle_modifier: default_autocomplete_toggle_modifier(),
+            toggle_key: default_autocomplete_toggle_key(),
             ai: AutocompleteAIConfig::default(),
         }
     }
