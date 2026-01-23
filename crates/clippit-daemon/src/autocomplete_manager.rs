@@ -126,7 +126,16 @@ impl AutocompleteManager {
                 return; // Sucesso com yad!
             }
 
-            // 2️⃣ Fallback: zenity --info (janela pequena flutuante)
+            // 2️⃣ Fallback: clippit-tooltip (GTK4 tooltip nativo)
+            let tooltip_result = Command::new("clippit-tooltip")
+                .arg(&text)
+                .spawn();
+
+            if tooltip_result.is_ok() {
+                return; // Sucesso com tooltip nativo!
+            }
+
+            // 3️⃣ Fallback: zenity --info (se tooltip não disponível)
             let zenity_result = Command::new("zenity")
                 .arg("--info")
                 .arg("--title=Clippit")
@@ -139,7 +148,7 @@ impl AutocompleteManager {
                 .and_then(|child| child.wait_with_output());
 
             if zenity_result.is_ok() {
-                return; // Sucesso com zenity!
+                return;
             }
 
             // 3️⃣ Último fallback: notify-send
@@ -334,7 +343,16 @@ impl AutocompleteManager {
                 return;
             }
 
-            // 2️⃣ Fallback: zenity --info (janela pequena flutuante)
+            // 2️⃣ Fallback: clippit-tooltip (GTK4 tooltip nativo)
+            let tooltip_result = Command::new("clippit-tooltip")
+                .arg(&text)
+                .spawn();
+
+            if tooltip_result.is_ok() {
+                return;
+            }
+
+            // 3️⃣ Fallback: zenity --info
             let zenity_result = Command::new("zenity")
                 .arg("--info")
                 .arg("--title=Clippit")
@@ -350,7 +368,7 @@ impl AutocompleteManager {
                 return;
             }
 
-            // 3️⃣ Último fallback: notify-send
+            // 4️⃣ Último fallback: notify-send
             let _ = Command::new("notify-send")
                 .arg("Clippit Autocomplete")
                 .arg(&text)

@@ -8,6 +8,7 @@ members = [
     "crates/clippit-dashboard",
     "crates/clippit-popup",
     "crates/clippit-ibus",
+    "crates/clippit-tooltip",
 ]
 resolver = "2"
 

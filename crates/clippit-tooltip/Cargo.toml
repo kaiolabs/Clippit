@@ -1,0 +1,11 @@
+[package]
+name = "clippit-tooltip"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "clippit-tooltip"
+path = "src/main.rs"
+
+[dependencies]
+gtk = { version = "0.9", package = "gtk4", features = ["v4_6"] }
