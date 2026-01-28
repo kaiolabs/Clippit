@@ -479,7 +479,7 @@ impl Storage {
                         h.timestamp
                  FROM clipboard_history h
                  INNER JOIN clipboard_history_fts fts ON h.id = fts.rowid
-                 WHERE fts MATCH ?1
+                 WHERE clipboard_history_fts MATCH ?1
                  ORDER BY h.timestamp DESC",
             )?;
 

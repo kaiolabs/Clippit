@@ -197,7 +197,14 @@ fn create_image_row(row: &adw::ActionRow, entry: &clippit_ipc::HistoryEntry) {
                     preview
                 };
                 
-                row.set_subtitle(&subtitle);
+                // CRITICAL: Escape markup characters to prevent GTK warnings
+                // Replace <, >, & with their HTML entities
+                let escaped_subtitle = subtitle
+                    .replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;");
+                
+                row.set_subtitle(&escaped_subtitle);
                 eprintln!("📝 Added OCR text subtitle for entry {}: {} chars", entry.id, ocr_text.len());
             }
         }
