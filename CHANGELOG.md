@@ -7,6 +7,121 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [1.10.0] - 2026-01-28
+
+### 🚀 OCR - Reconhecimento de Texto em Imagens
+
+**NOVA FUNCIONALIDADE**: Extração automática de texto de imagens usando Tesseract OCR, permitindo buscar conteúdo dentro de screenshots!
+
+### ✨ Adicionado
+
+#### **OCR (Optical Character Recognition)**
+- ✅ **Extração automática de texto** de imagens capturadas
+  - Processamento em background (não bloqueia captura)
+  - Suporte a português + inglês (por+eng)
+  - Indexação no FTS5 para busca ultrarrápida
+  - Timeout configurável (5s padrão)
+
+- ✅ **Integração com busca FTS5**:
+  - Campo `ocr_text` adicionado ao schema
+  - Triggers automáticos mantêm índice sincronizado
+  - Buscar texto normal OU texto em imagens simultaneamente
+  - Performance mantida (< 50ms para 1000+ itens)
+
+- ✅ **UI de configuração no Dashboard**:
+  - Toggle para habilitar/desabilitar OCR
+  - Seleção de idiomas (por+eng, por, eng)
+  - Configurações na aba "General"
+
+- ✅ **Motor OCR robusto**:
+  - `ocr_processor.rs`: Processamento via Tesseract
+  - Spawn blocking para não bloquear async runtime
+  - Logs detalhados de processamento
+  - Error handling completo
+
+#### **Casos de Uso**
+- 📸 Buscar screenshots antigos por palavras-chave
+- 💬 Encontrar conversas em prints de WhatsApp/Discord
+- 📄 Localizar documentos em fotos/PDFs
+- 💻 Buscar código em screenshots
+- 📋 Encontrar notas em imagens
+
+### 🔧 Modificado
+
+#### **Database Schema**
+- Adicionada coluna `ocr_text TEXT` em `clipboard_history`
+- Expandido FTS5 para incluir `ocr_text`
+- Migração automática para bancos existentes
+- Rebuild automático do índice FTS5
+
+#### **ClipboardEntry**
+- Novo campo `ocr_text: Option<String>`
+- Atualizado em todos os construtores
+- Incluído em todos os SELECTs
+
+#### **Busca**
+- Query FTS5 busca em `content_text` OU `ocr_text`
+- Fallback LIKE também inclui `ocr_text`
+- Mantém performance (índice FTS5)
+
+#### **Monitor**
+- Dispara OCR em background após salvar imagem
+- Não bloqueia loop de captura
+- Usa `tokio::spawn` para paralelização
+
+### 📦 Dependências
+
+**Novas dependências Rust:**
+- `tesseract` 0.15 - Wrapper Rust para Tesseract OCR
+
+**Dependências de sistema:**
+- `tesseract-ocr` - Engine OCR
+- `libtesseract-dev` - Headers para compilação
+- `tesseract-ocr-por` - Dados de treino português
+- `tesseract-ocr-eng` - Dados de treino inglês
+
+### 📚 Documentação
+- ✅ `docs/OCR_FEATURE.md`: Guia completo da feature
+- ✅ `scripts/test-ocr.sh`: Script de teste
+- ✅ `scripts/install.sh`: Instalação automática de Tesseract
+
+### 🔄 Atualização
+
+```bash
+# Atualizar código
+git pull origin feature/ocr-implementation
+
+# Instalar Tesseract (se necessário)
+sudo apt-get install tesseract-ocr libtesseract-dev tesseract-ocr-por tesseract-ocr-eng
+
+# Recompilar e reinstalar
+cargo build --release
+./scripts/install.sh
+
+# Reiniciar daemon
+systemctl --user restart clippit
+```
+
+### ⚠️ Breaking Changes
+Nenhum. Atualização é retrocompatível:
+- Bancos existentes recebem migração automática
+- OCR pode ser desabilitado via config
+- Funciona sem Tesseract (apenas não processa OCR)
+
+### 📝 Arquivos Modificados
+- `crates/clippit-core/src/storage.rs` - Schema, FTS5, triggers, update_ocr_text()
+- `crates/clippit-core/src/types.rs` - Campo ocr_text
+- `crates/clippit-core/src/config.rs` - OCRConfig
+- `crates/clippit-daemon/src/ocr_processor.rs` - **NOVO** - Motor OCR
+- `crates/clippit-daemon/src/monitor.rs` - Integração background
+- `crates/clippit-daemon/src/main.rs` - Declaração módulo
+- `crates/clippit-dashboard/src/ui/general.rs` - UI configuração
+- `Cargo.toml` - Dependência tesseract
+- `scripts/install.sh` - Instalação Tesseract
+- `docs/OCR_FEATURE.md` - **NOVO** - Documentação completa
+
+---
+
 ## [1.9.6] - 2026-01-28
 
 ### 🐛 Correções
