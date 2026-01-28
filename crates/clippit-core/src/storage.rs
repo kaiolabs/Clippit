@@ -3,6 +3,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use std::path::Path;
+use std::time::Duration;
 
 pub struct Storage {
     conn: Connection,
@@ -24,6 +25,10 @@ impl Storage {
     }
 
     fn initialize(&self) -> Result<()> {
+        // Configure SQLite for concurrent access (OCR thread writes while monitor reads)
+        self.conn.pragma_update(None, "journal_mode", "WAL")?;
+        self.conn.busy_timeout(Duration::from_secs(5))?; // Wait up to 5s for locks
+
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS clipboard_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
