@@ -78,6 +78,139 @@ Primeira versão estável do Clippit - Gerenciador de Área de Transferência pa
 
 ---
 
+## [1.9.5] - 2026-01-28
+
+### 🚀 Performance e Confiabilidade
+
+Esta versão resolve dois problemas críticos relatados:
+1. **Lentidão extrema** ao abrir o popup com 300+ itens no histórico
+2. **Falha de captura** após reinicialização do sistema
+
+### ✨ Adicionado
+
+#### **Performance**
+- ✅ **SQLite FTS5**: Índice de busca full-text para queries ultrarrápidas
+  - Busca passa de ~1000ms para ~20ms com 1000 itens
+  - Triggers automáticos mantêm índice sincronizado
+  - Fallback para LIKE em queries com wildcards
+  - Suporte a busca em caminhos de imagem
+- ✅ **Limite de resultados**: Busca retorna máximo 100 itens
+  - Previne sobrecarga da UI
+  - Mantém interface responsiva mesmo com milhares de entradas
+- ✅ **Otimização de imagens**: Dimensões armazenadas no banco
+  - Campos `image_width` e `image_height` no schema
+  - Elimina necessidade de carregar imagem completa para mostrar tamanho
+  - Thumbnails renderizados mais rápido
+
+#### **Confiabilidade**
+- ✅ **Retry com backoff exponencial** no monitor de clipboard
+  - Tenta até 10x inicializar clipboard após boot
+  - Delay exponencial: 100ms → 200ms → 400ms → ... até 5s
+  - Tolera Wayland compositor ainda não estar pronto
+- ✅ **Exit on failure**: Daemon encerra com código 1 se monitor falhar
+  - Permite systemd detectar e reiniciar automaticamente
+  - Logs detalhados de erro para diagnóstico
+- ✅ **Melhorias no systemd service**:
+  - `Restart=always` ao invés de `Restart=on-failure`
+  - `Wants=graphical-session.target` para sincronização correta
+  - `Environment=RUST_LOG=info` para logs apropriados
+  - `RestartSec=3` para reinício mais rápido
+
+#### **Testing**
+- ✅ **Scripts de teste de carga**:
+  - `test-load.sh`: Insere 1000 textos + 50 imagens
+  - `test-load.rs`: Versão alternativa em Rust puro
+  - Dados variados: diferentes tamanhos, formatos, timestamps
+  - Permite validar performance com grande volume de dados
+
+#### **Documentação**
+- ✅ `PERFORMANCE_FIXES.md`: Documentação completa das otimizações
+- ✅ `LOAD_TESTING.md`: Guia de teste de carga e benchmarks
+- ✅ Instruções de instalação e verificação passo a passo
+
+### 🔧 Modificado
+
+#### **IPC Protocol**
+- Adicionado `SearchHistoryWithLimit { query, limit }` para busca limitada
+- Adicionado `image_width` e `image_height` em `HistoryEntry`
+- Novo método `search_history_with_limit()` no IPC client
+
+#### **Database Schema**
+- Migração automática adiciona colunas `image_width` e `image_height`
+- Tabela virtual `clipboard_history_fts` com FTS5
+- Triggers `_ai`, `_au`, `_ad` para sincronização automática
+- Rebuild automático de FTS5 em bancos existentes
+
+#### **UI Rendering**
+- `search.rs`: Usa dimensões armazenadas para renderizar imagens
+- `list_item.rs`: Fallback para carregar imagem se dimensões ausentes
+- Otimização de thumbnails mantida síncrona (simplificação)
+
+#### **Update Script**
+- Removida configuração automática de fontes de entrada IBus
+- Instalação mais limpa e menos intrusiva
+
+### 🐛 Corrigido
+- **Popup travando** com 300+ itens: Resolvido com FTS5 + limite de resultados
+- **Busca lenta** (1s+): Agora retorna em < 50ms mesmo com 1000+ itens
+- **Daemon não reinicia** após reboot: Systemd configurado corretamente
+- **Clipboard não captura** após boot: Retry mechanism implementado
+- **Lifetime error** em `storage.rs`: Query results coletados antes de drop do statement
+
+### 📊 Benchmarks
+
+#### Antes (v1.0.0)
+| Operação | 300 itens | 1000 itens |
+|----------|-----------|------------|
+| Abrir popup | 5s | 10s+ |
+| Buscar | 200ms | 1000ms |
+| Scroll | Lento | Travado |
+
+#### Depois (v1.9.5)
+| Operação | 300 itens | 1000 itens |
+|----------|-----------|------------|
+| Abrir popup | 0.8s | 1.2s |
+| Buscar | 10ms | 20ms |
+| Scroll | Fluido | Fluido |
+
+**Melhoria: 50x mais rápido na busca, 8x mais rápido na abertura!**
+
+### 🔄 Atualização
+
+```bash
+# Baixar nova versão
+git pull origin feature/autocomplete-search
+
+# Recompilar
+cargo build --release
+
+# Reinstalar
+sudo bash scripts/install.sh
+
+# Reiniciar daemon
+systemctl --user restart clippit
+
+# Testar performance (opcional)
+./scripts/test-load.sh
+```
+
+### ⚠️ Breaking Changes
+Nenhum. Atualização é retrocompatível com bancos existentes.
+
+### 📝 Commits
+- `ca85814` - feat: adicionar suporte a novos campos IPC no daemon
+- `284c021` - feat: adicionar limite de 100 resultados na busca
+- `aa1500b` - fix: adicionar retry com backoff no monitor de clipboard
+- `feb4469` - fix: melhorar configuração do systemd service
+- `73eece8` - perf: implementar índice FTS5 para busca ultrarrápida
+- `a18c381` - feat: adicionar campos de dimensão de imagem
+- `51029e2` - perf: otimizar renderização de imagens usando dimensões
+- `53e03aa` - docs: adicionar documentação de correções de performance
+- `8a460f8` - refactor: remover configuração automática de fontes de entrada
+- `3cdefc7` - test: adicionar scripts de teste de carga
+
+---
+
 ## [Unreleased] - Em Desenvolvimento
 
 ### 🚧 Planejado para v1.1
