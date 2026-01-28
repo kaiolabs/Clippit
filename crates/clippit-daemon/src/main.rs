@@ -1,7 +1,7 @@
+mod autocomplete_manager;
 mod hotkey;
 mod monitor;
 mod typing_monitor;
-mod autocomplete_manager;
 
 use anyhow::Result;
 use clippit_core::HistoryManager;
@@ -25,7 +25,10 @@ async fn main() -> Result<()> {
         .with_env_filter("clippit_daemon=info")
         .init();
 
-    info!("Starting Clippit daemon v{} (Wayland-native)...", env!("CARGO_PKG_VERSION"));
+    info!(
+        "Starting Clippit daemon v{} (Wayland-native)...",
+        env!("CARGO_PKG_VERSION")
+    );
 
     // Initialize history manager
     let db_path = get_db_path();
@@ -37,7 +40,10 @@ async fn main() -> Result<()> {
     // Start clipboard monitor
     let monitor_handle = task::spawn(async move {
         if let Err(e) = monitor::start_monitor(history_clone).await {
-            error!("Clipboard monitor error: {}", e);
+            error!("FATAL: Clipboard monitor failed: {}", e);
+            error!("This is a critical error - daemon cannot function without clipboard monitor");
+            error!("Exiting to allow systemd to restart the service");
+            std::process::exit(1); // Force restart by systemd
         }
     });
 
@@ -108,6 +114,8 @@ fn handle_ipc_message(
                             content_data: e.content_data,
                             image_path: e.image_path,
                             thumbnail_data: e.thumbnail_data,
+                            image_width: e.image_width,
+                            image_height: e.image_height,
                             timestamp: e.timestamp,
                         })
                         .collect();
@@ -135,12 +143,17 @@ fn handle_ipc_message(
                             },
                             content_text: e.content_text,
                             content_data: e.content_data, // Already None for images from get_recent_metadata
-                            image_path: e.image_path, // Include image path
+                            image_path: e.image_path,     // Include image path
                             thumbnail_data: e.thumbnail_data, // Include thumbnail data
+                            image_width: e.image_width,
+                            image_height: e.image_height,
                             timestamp: e.timestamp,
                         })
                         .collect();
-                    info!("Returned {} metadata entries (images without data)", ipc_entries.len());
+                    info!(
+                        "Returned {} metadata entries (images without data)",
+                        ipc_entries.len()
+                    );
                     IpcResponse::HistoryMetadataResponse {
                         entries: ipc_entries,
                     }
@@ -167,11 +180,55 @@ fn handle_ipc_message(
                             content_data: e.content_data,
                             image_path: e.image_path,
                             thumbnail_data: e.thumbnail_data,
+                            image_width: e.image_width,
+                            image_height: e.image_height,
                             timestamp: e.timestamp,
                         })
                         .collect();
-                    info!("Search '{}' returned {} results (NO LIMIT)", query, ipc_entries.len());
+                    info!(
+                        "Search '{}' returned {} results (NO LIMIT)",
+                        query,
+                        ipc_entries.len()
+                    );
                     IpcResponse::SearchHistoryResponse {
+                        entries: ipc_entries,
+                    }
+                }
+                Err(e) => IpcResponse::Error {
+                    message: format!("Failed to search history: {}", e),
+                },
+            }
+        }
+
+        IpcMessage::SearchHistoryWithLimit { query, limit } => {
+            let manager = history_manager.lock().unwrap();
+            match manager.search(&query) {
+                Ok(entries) => {
+                    let ipc_entries: Vec<HistoryEntry> = entries
+                        .into_iter()
+                        .take(limit) // Limit results
+                        .map(|e| HistoryEntry {
+                            id: e.id,
+                            content_type: match e.content_type {
+                                clippit_core::ContentType::Text => ContentType::Text,
+                                clippit_core::ContentType::Image => ContentType::Image,
+                            },
+                            content_text: e.content_text,
+                            content_data: e.content_data,
+                            image_path: e.image_path,
+                            thumbnail_data: e.thumbnail_data,
+                            image_width: e.image_width,
+                            image_height: e.image_height,
+                            timestamp: e.timestamp,
+                        })
+                        .collect();
+                    info!(
+                        "Search '{}' returned {} results (limited to {})",
+                        query,
+                        ipc_entries.len(),
+                        limit
+                    );
+                    IpcResponse::SearchHistoryWithLimitResponse {
                         entries: ipc_entries,
                     }
                 }
@@ -187,14 +244,18 @@ fn handle_ipc_message(
                 Ok(Some(mut entry)) => {
                     info!("📦 Preparing response for entry {}", id);
                     info!("   Content type: {:?}", entry.content_type);
-                    
+
                     // If it's an image with a file path, read from disk
                     if matches!(entry.content_type, clippit_core::ContentType::Image) {
                         if let Some(ref path) = entry.image_path {
                             info!("📂 Reading image from file: {}", path);
                             match std::fs::read(path) {
                                 Ok(data) => {
-                                    info!("✅ Read {} bytes ({:.2} MB) from disk", data.len(), data.len() as f64 / (1024.0 * 1024.0));
+                                    info!(
+                                        "✅ Read {} bytes ({:.2} MB) from disk",
+                                        data.len(),
+                                        data.len() as f64 / (1024.0 * 1024.0)
+                                    );
                                     entry.content_data = Some(data);
                                 }
                                 Err(e) => {
@@ -207,11 +268,15 @@ fn handle_ipc_message(
                             }
                         }
                     }
-                    
+
                     if let Some(ref data) = entry.content_data {
-                        info!("   Data size: {} bytes ({:.2} MB)", data.len(), data.len() as f64 / (1024.0 * 1024.0));
+                        info!(
+                            "   Data size: {} bytes ({:.2} MB)",
+                            data.len(),
+                            data.len() as f64 / (1024.0 * 1024.0)
+                        );
                     }
-                    
+
                     let ipc_entry = HistoryEntry {
                         id: entry.id,
                         content_type: match entry.content_type {
@@ -220,8 +285,10 @@ fn handle_ipc_message(
                         },
                         content_text: entry.content_text,
                         content_data: entry.content_data, // Full data included (backwards compat)
-                        image_path: entry.image_path, // Include image path
+                        image_path: entry.image_path,     // Include image path
                         thumbnail_data: entry.thumbnail_data, // Include thumbnail data
+                        image_width: entry.image_width,
+                        image_height: entry.image_height,
                         timestamp: entry.timestamp,
                     };
                     info!("✅ Returned full data for entry {}", id);
@@ -303,4 +370,3 @@ fn get_db_path() -> PathBuf {
     path.push("history.db");
     path
 }
-
