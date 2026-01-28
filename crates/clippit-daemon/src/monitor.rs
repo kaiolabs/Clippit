@@ -190,6 +190,11 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
                                             error!("❌ Failed to optimize image: {}", e);
                                         }
                                     }
+                                } else {
+                                    // CRITICAL: Update hash even for duplicates to avoid infinite loop!
+                                    // Without this, daemon keeps processing same image forever
+                                    info!("⏭️  Image duplicate detected (hash match), skipping");
+                                    last_image_hash = Some(current_hash);
                                 }
                             } else {
                                 warn!(
