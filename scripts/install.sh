@@ -41,6 +41,30 @@ elif [ "$XDG_SESSION_TYPE" == "x11" ]; then
     echo "   Please switch to a Wayland session to use Clippit."
 fi
 
+# Check for Tesseract OCR (required for OCR feature)
+echo ""
+echo "🔍 Checking Tesseract OCR dependencies..."
+if ! command -v tesseract &> /dev/null; then
+    echo "⚠️  Tesseract OCR not found. Installing for OCR feature..."
+    sudo apt-get update -qq
+    sudo apt-get install -y tesseract-ocr libtesseract-dev tesseract-ocr-por tesseract-ocr-eng
+    echo "✅ Tesseract OCR installed"
+else
+    echo "✅ Tesseract OCR already installed"
+    
+    # Verificar se idiomas estão instalados
+    if ! tesseract --list-langs 2>/dev/null | grep -q "por"; then
+        echo "⚠️  Portuguese language data not found. Installing..."
+        sudo apt-get install -y tesseract-ocr-por
+    fi
+    if ! tesseract --list-langs 2>/dev/null | grep -q "eng"; then
+        echo "⚠️  English language data not found. Installing..."
+        sudo apt-get install -y tesseract-ocr-eng
+    fi
+    echo "✅ OCR language data verified (por+eng)"
+fi
+echo ""
+
 # Build release
 echo "📦 Building Clippit in release mode..."
 cargo build --release
