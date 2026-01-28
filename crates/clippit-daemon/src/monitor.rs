@@ -9,6 +9,8 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 
+use crate::ocr_processor;
+
 pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Result<()> {
     info!("Starting clipboard monitor (Wayland-native with arboard)...");
 
@@ -140,6 +142,27 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
                                                             info!("✅ Saved image entry with id {} (with thumbnail)", id);
                                                             last_image_hash =
                                                                 Some(current_hash.clone());
+
+                                                            // Disparar OCR em background se habilitado
+                                                            if config.features.enable_ocr {
+                                                                let history_clone =
+                                                                    Arc::clone(&history_manager);
+                                                                let path_clone = image_path.clone();
+                                                                let languages =
+                                                                    config.ocr.languages.clone();
+
+                                                                info!("🔍 Starting OCR processing in background for entry {}", id);
+
+                                                                tokio::spawn(async move {
+                                                                    ocr_processor::process_ocr_for_entry(
+                                                                        id,
+                                                                        path_clone,
+                                                                        languages,
+                                                                        history_clone,
+                                                                    )
+                                                                    .await;
+                                                                });
+                                                            }
                                                         }
                                                         Ok(None) => {
                                                             info!("⏭️  Image duplicate, skipped");
