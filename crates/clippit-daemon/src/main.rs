@@ -167,7 +167,14 @@ fn handle_ipc_message(
 
         IpcMessage::SearchHistory { query } => {
             let manager = history_manager.lock().unwrap();
-            match manager.search(&query) {
+            // If query is empty, return recent entries (1000 = effectively all)
+            let result = if query.trim().is_empty() {
+                manager.get_recent(1000)
+            } else {
+                manager.search(&query)
+            };
+            
+            match result {
                 Ok(entries) => {
                     let ipc_entries: Vec<HistoryEntry> = entries
                         .into_iter()
@@ -203,11 +210,18 @@ fn handle_ipc_message(
 
         IpcMessage::SearchHistoryWithLimit { query, limit } => {
             let manager = history_manager.lock().unwrap();
-            match manager.search(&query) {
+            // If query is empty, return recent entries
+            let result = if query.trim().is_empty() {
+                manager.get_recent(limit)
+            } else {
+                manager.search(&query)
+            };
+            
+            match result {
                 Ok(entries) => {
                     let ipc_entries: Vec<HistoryEntry> = entries
                         .into_iter()
-                        .take(limit) // Limit results
+                        .take(limit) // Limit results (for search case)
                         .map(|e| HistoryEntry {
                             id: e.id,
                             content_type: match e.content_type {
