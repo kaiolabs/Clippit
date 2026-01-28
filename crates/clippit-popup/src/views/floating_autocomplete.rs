@@ -132,7 +132,7 @@ impl FloatingAutocomplete {
         for (i, sugg) in suggestions.iter().enumerate() {
             let row = adw::ActionRow::new();
             row.set_title(&sugg.word);
-            
+
             // Mostrar score como subtitle (opcional)
             if sugg.score > 0 {
                 let score_text = format!("Score: {}", sugg.score);
@@ -153,7 +153,7 @@ impl FloatingAutocomplete {
 
         // Posicionar próximo ao cursor
         self.window.present();
-        
+
         // Ajustar posição (precisaria de layer-shell para posicionamento absoluto)
         // Por enquanto, centraliza na tela
         // TODO: Implementar posicionamento absoluto com gtk4-layer-shell

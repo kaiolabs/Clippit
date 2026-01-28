@@ -1,9 +1,9 @@
+mod autocomplete;
 mod general;
 mod hotkeys;
+mod privacy;
 mod search;
 mod theme;
-mod privacy;
-mod autocomplete;
 
 use gtk::prelude::*;
 use libadwaita as adw;
@@ -14,7 +14,7 @@ pub fn create_content() -> gtk::Widget {
     let header = adw::HeaderBar::new();
     header.set_show_end_title_buttons(true);
     header.set_show_start_title_buttons(true);
-    
+
     let title = adw::WindowTitle::new(&t!("dashboard.title"), &t!("dashboard.subtitle"));
     header.set_title_widget(Some(&title));
 
@@ -25,11 +25,17 @@ pub fn create_content() -> gtk::Widget {
 
     // Create menu items with icons
     let items = vec![
-        (t!("menu.general").to_string(), "preferences-system-symbolic"),
+        (
+            t!("menu.general").to_string(),
+            "preferences-system-symbolic",
+        ),
         (t!("menu.hotkeys").to_string(), "input-keyboard-symbolic"),
         ("Pesquisa".to_string(), "edit-find-symbolic"),
         ("Autocompletar".to_string(), "input-keyboard-symbolic"),
-        (t!("menu.theme").to_string(), "applications-graphics-symbolic"),
+        (
+            t!("menu.theme").to_string(),
+            "applications-graphics-symbolic",
+        ),
         (t!("menu.privacy").to_string(), "security-high-symbolic"),
     ];
 
@@ -40,15 +46,15 @@ pub fn create_content() -> gtk::Widget {
         hbox.set_margin_end(12);
         hbox.set_margin_top(8);
         hbox.set_margin_bottom(8);
-        
+
         let icon_widget = gtk::Image::from_icon_name(icon);
         let label_widget = gtk::Label::new(Some(&label));
         label_widget.set_halign(gtk::Align::Start);
-        
+
         hbox.append(&icon_widget);
         hbox.append(&label_widget);
         row.set_child(Some(&hbox));
-        
+
         sidebar.append(&row);
     }
 
@@ -58,7 +64,7 @@ pub fn create_content() -> gtk::Widget {
     stack.set_transition_duration(200);
     stack.set_hexpand(true);
     stack.set_vexpand(true);
-    
+
     stack.add_named(&general::create_page(), Some("0"));
     stack.add_named(&hotkeys::create_page(), Some("1"));
     stack.add_named(&search::create_page(), Some("2"));

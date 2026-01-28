@@ -1,6 +1,6 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 /// Manages the mapping between row indices and entry IDs
 pub type EntryMap = Rc<RefCell<HashMap<i32, i64>>>;

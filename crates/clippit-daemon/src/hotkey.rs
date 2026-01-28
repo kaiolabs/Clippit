@@ -14,18 +14,18 @@ pub async fn start_hotkey_handler(_history_manager: Arc<Mutex<HistoryManager>>) 
 
     // Load configuration
     let config = Config::load().unwrap_or_default();
-    
+
     let manager = GlobalHotKeyManager::new()?;
 
     // Parse modifier from config
     let modifiers = parse_modifiers(&config.hotkeys.show_history_modifier);
-    
+
     // Parse key from config
     let key_code = parse_key(&config.hotkeys.show_history_key);
-    
+
     // Register hotkey
     let hotkey = HotKey::new(modifiers, key_code);
-    
+
     // Try to register, unregister and retry if already registered
     match manager.register(hotkey) {
         Ok(_) => {
@@ -47,18 +47,19 @@ pub async fn start_hotkey_handler(_history_manager: Arc<Mutex<HistoryManager>>) 
     }
 
     // Log configured hotkey prominently
-    eprintln!(""); 
+    eprintln!("");
     eprintln!("═══════════════════════════════════════════════════════");
-    eprintln!("  🔑 ATALHO REGISTRADO: {} + {}", 
-        config.hotkeys.show_history_modifier.to_uppercase(), 
+    eprintln!(
+        "  🔑 ATALHO REGISTRADO: {} + {}",
+        config.hotkeys.show_history_modifier.to_uppercase(),
         config.hotkeys.show_history_key.to_uppercase()
     );
     eprintln!("═══════════════════════════════════════════════════════");
     eprintln!("");
-    
-    info!("Hotkey handler ready with: {} + {}", 
-        config.hotkeys.show_history_modifier, 
-        config.hotkeys.show_history_key
+
+    info!(
+        "Hotkey handler ready with: {} + {}",
+        config.hotkeys.show_history_modifier, config.hotkeys.show_history_key
     );
 
     let receiver = GlobalHotKeyEvent::receiver();
@@ -82,9 +83,9 @@ pub async fn start_hotkey_handler(_history_manager: Arc<Mutex<HistoryManager>>) 
 fn notify_ui_show_popup() -> Result<()> {
     // Check lock file instead of pgrep (more reliable)
     let lock_file = std::path::Path::new("/tmp/clippit-popup.lock");
-    
+
     info!("🔍 Checking lock file: exists={}", lock_file.exists());
-    
+
     if lock_file.exists() {
         // Read PID from lock file
         if let Ok(content) = std::fs::read_to_string(lock_file) {
@@ -95,29 +96,31 @@ fn notify_ui_show_popup() -> Result<()> {
                 let check = Command::new("ps")
                     .args(&["-p", &pid.to_string(), "-o", "stat="])
                     .output();
-                
+
                 if let Ok(output) = check {
                     let stat = String::from_utf8_lossy(&output.stdout);
                     info!("📊 Process stat: '{}'", stat.trim());
                     // If process is zombie (Z) or doesn't exist, clean up
                     if stat.trim().starts_with('Z') || stat.trim().is_empty() {
                         info!("💀 Cleaning up stale/zombie popup (PID: {})", pid);
-                        let _ = Command::new("kill").args(&["-9", &pid.to_string()]).output();
+                        let _ = Command::new("kill")
+                            .args(&["-9", &pid.to_string()])
+                            .output();
                         std::fs::remove_file(lock_file).ok();
                     } else {
                         // Process is alive, toggle (close it)
                         info!("🔄 Popup already open (PID: {}) - closing (toggle)", pid);
                         info!("📤 Sending SIGTERM...");
-                        let _ = Command::new("kill").args(&["-TERM", &pid.to_string()]).output();
-                        
+                        let _ = Command::new("kill")
+                            .args(&["-TERM", &pid.to_string()])
+                            .output();
+
                         // Aguarda o popup fechar completamente (até 500ms)
                         for i in 0..10 {
                             std::thread::sleep(std::time::Duration::from_millis(50));
                             // Verifica se o processo ainda existe
-                            let check = Command::new("ps")
-                                .args(&["-p", &pid.to_string()])
-                                .output();
-                            
+                            let check = Command::new("ps").args(&["-p", &pid.to_string()]).output();
+
                             if let Ok(output) = check {
                                 if !output.status.success() {
                                     info!("✅ Popup fechado após {}ms", (i + 1) * 50);
@@ -125,7 +128,7 @@ fn notify_ui_show_popup() -> Result<()> {
                                 }
                             }
                         }
-                        
+
                         info!("🗑️  Removing lock file...");
                         std::fs::remove_file(lock_file).ok();
                         info!("✅ Toggle complete");
@@ -137,30 +140,33 @@ fn notify_ui_show_popup() -> Result<()> {
     } else {
         info!("❌ Lock file does not exist");
     }
-    
+
     // Launch clippit-popup (Wayland-native, no window ID needed)
     info!("🚀 Opening popup...");
     eprintln!("🚀🚀🚀 EXECUTING: clippit-popup");
     eprintln!("🔍 Binary path: /usr/local/bin/clippit-popup");
-    
+
     let result = std::process::Command::new("/usr/local/bin/clippit-popup")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::inherit())
         .spawn();
-    
+
     match result {
         Ok(child) => {
-            eprintln!("✅ clippit-popup spawned successfully (PID: {})", child.id());
+            eprintln!(
+                "✅ clippit-popup spawned successfully (PID: {})",
+                child.id()
+            );
         }
         Err(e) => {
             eprintln!("❌ Failed to spawn clippit-popup: {}", e);
         }
     }
-    
+
     // Small delay to allow popup to create lock file
     std::thread::sleep(std::time::Duration::from_millis(150));
-    
+
     info!("✅ Popup launch complete");
 
     Ok(())
@@ -168,7 +174,7 @@ fn notify_ui_show_popup() -> Result<()> {
 
 fn parse_modifiers(modifier_str: &str) -> Option<Modifiers> {
     let mut modifiers = Modifiers::empty();
-    
+
     for part in modifier_str.split('+') {
         let part = part.trim().to_lowercase();
         match part.as_str() {
@@ -180,7 +186,7 @@ fn parse_modifiers(modifier_str: &str) -> Option<Modifiers> {
             _ => {}
         }
     }
-    
+
     if modifiers.is_empty() {
         None
     } else {
@@ -190,7 +196,7 @@ fn parse_modifiers(modifier_str: &str) -> Option<Modifiers> {
 
 fn parse_key(key_str: &str) -> Code {
     let key = key_str.trim().to_lowercase();
-    
+
     match key.as_str() {
         // Letters
         "a" => Code::KeyA,
@@ -219,7 +225,7 @@ fn parse_key(key_str: &str) -> Code {
         "x" => Code::KeyX,
         "y" => Code::KeyY,
         "z" => Code::KeyZ,
-        
+
         // Numbers
         "0" | "digit0" => Code::Digit0,
         "1" | "digit1" => Code::Digit1,
@@ -231,7 +237,7 @@ fn parse_key(key_str: &str) -> Code {
         "7" | "digit7" => Code::Digit7,
         "8" | "digit8" => Code::Digit8,
         "9" | "digit9" => Code::Digit9,
-        
+
         // Numpad
         "kp_0" | "numpad0" => Code::Numpad0,
         "kp_1" | "numpad1" => Code::Numpad1,
@@ -243,7 +249,7 @@ fn parse_key(key_str: &str) -> Code {
         "kp_7" | "numpad7" => Code::Numpad7,
         "kp_8" | "numpad8" => Code::Numpad8,
         "kp_9" | "numpad9" => Code::Numpad9,
-        
+
         // Function keys
         "f1" => Code::F1,
         "f2" => Code::F2,
@@ -257,7 +263,7 @@ fn parse_key(key_str: &str) -> Code {
         "f10" => Code::F10,
         "f11" => Code::F11,
         "f12" => Code::F12,
-        
+
         // Special keys
         "space" => Code::Space,
         "enter" | "return" => Code::Enter,
@@ -270,13 +276,13 @@ fn parse_key(key_str: &str) -> Code {
         "end" => Code::End,
         "pageup" => Code::PageUp,
         "pagedown" => Code::PageDown,
-        
+
         // Arrow keys
         "left" => Code::ArrowLeft,
         "right" => Code::ArrowRight,
         "up" => Code::ArrowUp,
         "down" => Code::ArrowDown,
-        
+
         // Default
         _ => Code::KeyV, // Fallback to V
     }

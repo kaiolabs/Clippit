@@ -1,9 +1,9 @@
 mod ui;
 
+use clippit_core::{set_language, Config};
 use gtk::prelude::*;
 use gtk::Application;
 use libadwaita as adw;
-use clippit_core::{Config, set_language};
 
 // Initialize i18n pointing to the same locales as clippit-core
 rust_i18n::i18n!("../clippit-core/locales", fallback = "en");
@@ -16,9 +16,7 @@ fn main() -> anyhow::Result<()> {
     adw::init().expect("Failed to initialize libadwaita");
 
     // Create application
-    let app = Application::builder()
-        .application_id(APP_ID)
-        .build();
+    let app = Application::builder().application_id(APP_ID).build();
 
     app.connect_activate(build_ui);
     app.run();
@@ -28,20 +26,20 @@ fn main() -> anyhow::Result<()> {
 
 fn apply_theme(config: &Config) {
     let style_manager = adw::StyleManager::default();
-    
+
     match config.ui.theme.as_str() {
         "dark" => {
             style_manager.set_color_scheme(adw::ColorScheme::ForceDark);
             eprintln!("✅ Tema forçado: Dark");
-        },
+        }
         "light" => {
             style_manager.set_color_scheme(adw::ColorScheme::ForceLight);
             eprintln!("✅ Tema forçado: Light");
-        },
+        }
         "system" | _ => {
             style_manager.set_color_scheme(adw::ColorScheme::Default);
             eprintln!("✅ Tema: Sistema (seguindo SO)");
-        },
+        }
     }
 }
 
@@ -50,10 +48,10 @@ fn build_ui(app: &Application) {
     let config = Config::load().unwrap_or_default();
     set_language(&config.ui.language);
     apply_theme(&config);
-    
+
     // Create main content with sidebar
     let content = ui::create_content();
-    
+
     // Create main window with libadwaita
     let window = adw::ApplicationWindow::builder()
         .application(app)
@@ -65,7 +63,7 @@ fn build_ui(app: &Application) {
 
     // Ensure window can be closed properly
     window.set_deletable(true);
-    
+
     // 🔑 FECHAR COMPLETAMENTE ao invés de minimizar
     let app_clone = app.clone();
     window.connect_close_request(move |_| {
@@ -73,6 +71,6 @@ fn build_ui(app: &Application) {
         app_clone.quit();
         gtk::glib::Propagation::Proceed
     });
-    
+
     window.present();
 }

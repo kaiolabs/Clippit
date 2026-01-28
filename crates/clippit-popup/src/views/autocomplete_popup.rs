@@ -1,9 +1,9 @@
+use clippit_ipc::protocol::Suggestion;
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
-use clippit_ipc::protocol::Suggestion;
 use tracing::{debug, info};
 
 /// Popup flutuante de autocomplete (estilo Android/iOS)
@@ -67,9 +67,9 @@ impl AutocompletePopup {
                 opacity: 0.6;
                 margin-left: 8px;
             }
-            "#
+            "#,
         );
-        
+
         gtk::style_context_add_provider_for_display(
             &gtk::prelude::WidgetExt::display(&window),
             &css,
@@ -118,10 +118,10 @@ impl AutocompletePopup {
         // Conectar eventos de teclado
         let key_controller = gtk::EventControllerKey::new();
         let popup_clone = Rc::clone(&popup);
-        
+
         key_controller.connect_key_pressed(move |_, keyval, _, _| {
             let popup_ref = popup_clone.borrow();
-            
+
             match keyval {
                 gdk::Key::Up => {
                     popup_ref.navigate_up();
@@ -163,7 +163,12 @@ impl AutocompletePopup {
             return;
         }
 
-        info!("📍 Mostrando popup com {} sugestões em ({}, {})", suggestions.len(), x, y);
+        info!(
+            "📍 Mostrando popup com {} sugestões em ({}, {})",
+            suggestions.len(),
+            x,
+            y
+        );
 
         *self.suggestions.borrow_mut() = suggestions.clone();
         *self.selected_index.borrow_mut() = 0;
@@ -244,7 +249,7 @@ impl AutocompletePopup {
     fn navigate_up(&self) {
         let mut index = self.selected_index.borrow_mut();
         let len = self.suggestions.borrow().len();
-        
+
         if len == 0 {
             return;
         }
@@ -266,7 +271,7 @@ impl AutocompletePopup {
     fn navigate_down(&self) {
         let mut index = self.selected_index.borrow_mut();
         let len = self.suggestions.borrow().len();
-        
+
         if len == 0 {
             return;
         }
@@ -287,7 +292,7 @@ impl AutocompletePopup {
 
         if let Some(suggestion) = suggestions.get(index) {
             info!("✅ Aceitando sugestão: '{}'", suggestion.word);
-            
+
             if let Some(callback) = self.on_accept.lock().unwrap().as_ref() {
                 callback(suggestion.word.clone());
             }

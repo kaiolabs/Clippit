@@ -8,7 +8,7 @@ use crate::typing_buffer::TypingBuffer;
 use clippit_ipc::IpcClient;
 
 /// Clippit IBus Engine Implementation
-/// 
+///
 /// Este engine atua como Input Method, capturando keystrokes
 /// e enviando-os para o daemon Clippit para processamento
 pub struct ClippitEngine {
@@ -48,14 +48,14 @@ impl ClippitEngine {
 
         // Registrar interface IBus no DBus
         // Nota: IBus usa uma interface específica em org.freedesktop.IBus.Engine
-        
+
         // Por enquanto, implementar um loop básico
         // TODO: Implementar interface IBus completa via DBus
-        
+
         loop {
             // Aguardar eventos
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            
+
             // Por enquanto, apenas manter o engine rodando
             // A implementação completa virá nas próximas tarefas
         }
@@ -65,13 +65,16 @@ impl ClippitEngine {
     #[allow(dead_code)] // Será usado quando integrar com IBus
     pub async fn process_key_press(&self, keyval: u32, keycode: u32, state: u32) -> Result<bool> {
         let enabled = *self.enabled.lock().await;
-        
+
         if !enabled {
             // Engine desabilitado, passar tecla direto
             return Ok(false);
         }
 
-        debug!("Key pressed: keyval={}, keycode={}, state={}", keyval, keycode, state);
+        debug!(
+            "Key pressed: keyval={}, keycode={}, state={}",
+            keyval, keycode, state
+        );
 
         // Converter keyval para caractere
         if let Some(c) = self.keyval_to_char(keyval) {
@@ -82,7 +85,7 @@ impl ClippitEngine {
             if buffer.current_word_len() >= 2 {
                 if let Some(word) = buffer.current_word() {
                     debug!("Current word: {}", word);
-                    
+
                     // TODO: Enviar via IPC para daemon
                     // TODO: Receber sugestões
                     // TODO: Mostrar popup
@@ -113,7 +116,7 @@ impl ClippitEngine {
                 buffer.clear();
                 Ok(false)
             }
-            _ => Ok(false) // Outras teclas, não processar
+            _ => Ok(false), // Outras teclas, não processar
         }
     }
 
@@ -131,7 +134,7 @@ impl ClippitEngine {
         info!("Disabling Clippit IBus Engine");
         let mut enabled = self.enabled.lock().await;
         *enabled = false;
-        
+
         // Limpar buffer
         let mut buffer = self.typing_buffer.lock().await;
         buffer.clear();

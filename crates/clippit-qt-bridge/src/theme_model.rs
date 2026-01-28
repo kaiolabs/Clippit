@@ -23,7 +23,7 @@ impl ThemeModel {
 
     pub fn load_theme(&mut self, theme_name: String) {
         let config = Config::load().unwrap_or_default();
-        
+
         let colors = if theme_name == "dark" || theme_name == "Dark" {
             &config.ui.colors.dark
         } else {
@@ -39,7 +39,7 @@ impl ThemeModel {
 
     pub fn save_custom_theme(&self) -> bool {
         let mut config = Config::load().unwrap_or_default();
-        
+
         let is_dark = self.current_theme == "dark";
         let colors = if is_dark {
             &mut config.ui.colors.dark

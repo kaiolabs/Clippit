@@ -53,9 +53,12 @@ impl IpcClient {
     }
 
     /// Query history metadata with offset (for infinite scroll)
-    pub fn query_history_metadata_with_offset(limit: usize, offset: usize) -> Result<Vec<crate::protocol::HistoryEntry>> {
+    pub fn query_history_metadata_with_offset(
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<crate::protocol::HistoryEntry>> {
         match Self::send_message(IpcMessage::QueryHistoryMetadata { limit, offset })? {
-            IpcResponse::HistoryMetadataResponse { entries} => Ok(entries),
+            IpcResponse::HistoryMetadataResponse { entries } => Ok(entries),
             IpcResponse::Error { message } => Err(anyhow::anyhow!("Server error: {}", message)),
             _ => Err(anyhow::anyhow!("Unexpected response")),
         }
@@ -65,6 +68,18 @@ impl IpcClient {
     pub fn search_history(query: String) -> Result<Vec<crate::protocol::HistoryEntry>> {
         match Self::send_message(IpcMessage::SearchHistory { query })? {
             IpcResponse::SearchHistoryResponse { entries } => Ok(entries),
+            IpcResponse::Error { message } => Err(anyhow::anyhow!("Server error: {}", message)),
+            _ => Err(anyhow::anyhow!("Unexpected response")),
+        }
+    }
+
+    /// Search history with limit (optimized for UI)
+    pub fn search_history_with_limit(
+        query: String,
+        limit: usize,
+    ) -> Result<Vec<crate::protocol::HistoryEntry>> {
+        match Self::send_message(IpcMessage::SearchHistoryWithLimit { query, limit })? {
+            IpcResponse::SearchHistoryWithLimitResponse { entries } => Ok(entries),
             IpcResponse::Error { message } => Err(anyhow::anyhow!("Server error: {}", message)),
             _ => Err(anyhow::anyhow!("Unexpected response")),
         }

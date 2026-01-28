@@ -85,7 +85,7 @@ impl HistoryManager {
 
         // Check for duplicates nos últimos 10 itens do histórico
         let hash = Self::compute_hash(&entry);
-        
+
         // Verifica se já existe nos últimos itens
         let recent = self.storage.get_recent(10)?;
         for existing in recent {
@@ -125,7 +125,11 @@ impl HistoryManager {
     }
 
     /// Get recent entries with offset (for infinite scroll)
-    pub fn get_recent_metadata_with_offset(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardEntry>> {
+    pub fn get_recent_metadata_with_offset(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<ClipboardEntry>> {
         self.storage.get_recent_metadata_with_offset(limit, offset)
     }
 
@@ -144,7 +148,7 @@ impl HistoryManager {
     pub fn delete_by_id(&self, id: i64) -> Result<bool> {
         self.storage.delete_by_id(id)
     }
-    
+
     pub fn clear(&self) -> Result<usize> {
         self.storage.clear()
     }

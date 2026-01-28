@@ -15,8 +15,10 @@ pub struct HistoryEntry {
     pub content_type: ContentType,
     pub content_text: Option<String>,
     pub content_data: Option<Vec<u8>>, // Backwards compatibility
-    pub image_path: Option<String>, // Path to image file on disk
+    pub image_path: Option<String>,    // Path to image file on disk
     pub thumbnail_data: Option<Vec<u8>>,
+    pub image_width: Option<u32>, // Image dimensions (avoid loading full image)
+    pub image_height: Option<u32>,
     pub timestamp: DateTime<Utc>,
 }
 
@@ -39,21 +41,36 @@ pub struct Suggestion {
 /// Origem da sugestão
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SuggestionSource {
-    History,       // Do histórico do clipboard
-    Frequency,     // Palavras frequentes
-    AI,            // Gerado por IA (futuro)
+    History,   // Do histórico do clipboard
+    Frequency, // Palavras frequentes
+    AI,        // Gerado por IA (futuro)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum IpcMessage {
     ShowPopup,
-    QueryHistory { limit: usize },           // Existing - kept for compatibility
-    QueryHistoryMetadata { limit: usize, offset: usize },   // Get metadata without image data
-    SearchHistory { query: String },         // Search in ALL history (no limit)
-    GetEntryData { id: i64 },                // Get full data for specific entry
-    SelectItem { id: i64 },
+    QueryHistory {
+        limit: usize,
+    }, // Existing - kept for compatibility
+    QueryHistoryMetadata {
+        limit: usize,
+        offset: usize,
+    }, // Get metadata without image data
+    SearchHistory {
+        query: String,
+    }, // Search in ALL history (no limit)
+    SearchHistoryWithLimit {
+        query: String,
+        limit: usize,
+    }, // Search with limit
+    GetEntryData {
+        id: i64,
+    }, // Get full data for specific entry
+    SelectItem {
+        id: i64,
+    },
     Ping,
-    
+
     // ========== AUTOCOMPLETE GLOBAL ==========
     /// Evento de keystroke do IBus engine
     KeystrokeEvent {
@@ -85,14 +102,29 @@ pub enum IpcMessage {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum IpcResponse {
     Ok,
-    HistoryResponse { entries: Vec<HistoryEntry> },           // Existing
-    HistoryMetadataResponse { entries: Vec<HistoryEntry> },   // Metadata without image data
-    SearchHistoryResponse { entries: Vec<HistoryEntry> },     // Search results (no limit)
-    EntryDataResponse { entry: HistoryEntry },                // Single entry with full data
-    ItemContent { entry: HistoryEntry },
-    Error { message: String },
+    HistoryResponse {
+        entries: Vec<HistoryEntry>,
+    }, // Existing
+    HistoryMetadataResponse {
+        entries: Vec<HistoryEntry>,
+    }, // Metadata without image data
+    SearchHistoryResponse {
+        entries: Vec<HistoryEntry>,
+    }, // Search results (no limit)
+    SearchHistoryWithLimitResponse {
+        entries: Vec<HistoryEntry>,
+    }, // Search results with limit
+    EntryDataResponse {
+        entry: HistoryEntry,
+    }, // Single entry with full data
+    ItemContent {
+        entry: HistoryEntry,
+    },
+    Error {
+        message: String,
+    },
     Pong,
-    
+
     // ========== AUTOCOMPLETE GLOBAL ==========
     /// Resposta com sugestões de autocomplete
     AutocompleteSuggestions {
