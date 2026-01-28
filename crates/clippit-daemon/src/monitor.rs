@@ -101,20 +101,13 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
                                 hasher.update(&png_bytes);
                                 let current_hash = format!("{:x}", hasher.finalize());
 
-                                info!("🔍 Image hash comparison:");
-                                info!("   Current hash: {}...", &current_hash[..12]);
-                                info!(
-                                    "   Last hash: {:?}",
-                                    last_image_hash.as_ref().map(|h| &h[..12])
-                                );
-                                info!(
-                                    "   Are different? {}",
-                                    last_image_hash.as_ref() != Some(&current_hash)
-                                );
-
                                 // Only save if different from last image
                                 if last_image_hash.as_ref() != Some(&current_hash) {
-                                    info!("📸 New image detected, optimizing and saving...");
+                                    info!(
+                                        "📸 New image detected (PNG: {} bytes, hash: {}...), optimizing...",
+                                        png_bytes.len(),
+                                        &current_hash[..12]
+                                    );
 
                                     // Optimize if needed (max 2048px)
                                     match optimize_image(png_bytes.clone(), 2048) {
@@ -193,7 +186,7 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
                                 } else {
                                     // CRITICAL: Update hash even for duplicates to avoid infinite loop!
                                     // Without this, daemon keeps processing same image forever
-                                    info!("⏭️  Image duplicate detected (hash match), skipping");
+                                    // Use trace level to avoid log spam (clipboard has same image constantly)
                                     last_image_hash = Some(current_hash);
                                 }
                             } else {
@@ -236,7 +229,7 @@ fn convert_image_data_to_png(img_data: &ImageData) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
     dynamic_img.write_to(&mut Cursor::new(&mut buf), ImageFormat::Png)?;
 
-    info!("📸 Converted clipboard image to PNG ({} bytes)", buf.len());
+    // Reduced to trace to avoid log spam (runs every 80ms)
     Ok(buf)
 }
 
