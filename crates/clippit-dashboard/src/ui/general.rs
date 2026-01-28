@@ -233,6 +233,94 @@ pub fn create_page() -> gtk::Widget {
 
     page.add(&image_group);
 
+    // OCR Settings Group
+    let ocr_group = adw::PreferencesGroup::new();
+    ocr_group.set_title("OCR (Reconhecimento de Texto)");
+    ocr_group.set_description(Some("Extrai automaticamente texto de imagens para busca"));
+    ocr_group.set_margin_top(12);
+
+    // Enable OCR switch
+    let enable_ocr_row = adw::ActionRow::new();
+    enable_ocr_row.set_title("Ativar OCR");
+    enable_ocr_row.set_subtitle("Extrair texto de screenshots e imagens automaticamente");
+
+    let ocr_icon = gtk::Image::from_icon_name("document-properties-symbolic");
+    enable_ocr_row.add_prefix(&ocr_icon);
+
+    let enable_ocr_switch = gtk::Switch::new();
+    enable_ocr_switch.set_active(config.features.enable_ocr);
+    enable_ocr_switch.set_valign(gtk::Align::Center);
+
+    enable_ocr_switch.connect_active_notify(|switch| {
+        if let Ok(mut cfg) = Config::load() {
+            cfg.features.enable_ocr = switch.is_active();
+            if let Err(e) = cfg.save() {
+                eprintln!("❌ Erro ao salvar: {}", e);
+            } else {
+                eprintln!(
+                    "✅ OCR {}",
+                    if switch.is_active() {
+                        "habilitado"
+                    } else {
+                        "desabilitado"
+                    }
+                );
+            }
+        }
+    });
+
+    enable_ocr_row.add_suffix(&enable_ocr_switch);
+    enable_ocr_row.set_activatable_widget(Some(&enable_ocr_switch));
+    ocr_group.add(&enable_ocr_row);
+
+    // OCR Languages row
+    let ocr_lang_row = adw::ActionRow::new();
+    ocr_lang_row.set_title("Idiomas OCR");
+    ocr_lang_row.set_subtitle("Idiomas para reconhecimento de texto");
+
+    let lang_icon = gtk::Image::from_icon_name("preferences-desktop-locale-symbolic");
+    ocr_lang_row.add_prefix(&lang_icon);
+
+    // Create dropdown for language selection
+    let lang_dropdown = gtk::DropDown::from_strings(&[
+        "por+eng (Português + Inglês)",
+        "por (Apenas Português)",
+        "eng (Apenas Inglês)",
+    ]);
+
+    // Set current selection based on config
+    let current_lang_index = match config.ocr.languages.as_str() {
+        "por+eng" => 0,
+        "por" => 1,
+        "eng" => 2,
+        _ => 0,
+    };
+    lang_dropdown.set_selected(current_lang_index);
+    lang_dropdown.set_valign(gtk::Align::Center);
+
+    lang_dropdown.connect_selected_notify(|dropdown| {
+        let languages = match dropdown.selected() {
+            0 => "por+eng",
+            1 => "por",
+            2 => "eng",
+            _ => "por+eng",
+        };
+
+        if let Ok(mut cfg) = Config::load() {
+            cfg.ocr.languages = languages.to_string();
+            if let Err(e) = cfg.save() {
+                eprintln!("❌ Erro ao salvar: {}", e);
+            } else {
+                eprintln!("✅ Idiomas OCR atualizados: {}", languages);
+            }
+        }
+    });
+
+    ocr_lang_row.add_suffix(&lang_dropdown);
+    ocr_group.add(&ocr_lang_row);
+
+    page.add(&ocr_group);
+
     // No need for save button - auto-save enabled
     page.set_margin_start(12);
     page.set_margin_end(12);
