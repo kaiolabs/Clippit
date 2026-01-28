@@ -458,12 +458,12 @@ impl Storage {
         if use_fts {
             // Fast FTS5 search with prefix matching
             // Add * to each word for prefix search: "lingua" → "lingua*"
+            // FTS5 will search in ALL columns (content_text AND ocr_text)
             let fts_query = query
                 .split_whitespace()
                 .map(|word| format!("{}*", word))
                 .collect::<Vec<_>>()
                 .join(" OR ");
-            let search_pattern = format!("%{}%", query);
 
             let mut stmt = self.conn.prepare(
                 "SELECT h.id, h.content_type, h.content_text,
@@ -479,26 +479,12 @@ impl Storage {
                         h.timestamp
                  FROM clipboard_history h
                  INNER JOIN clipboard_history_fts fts ON h.id = fts.rowid
-                 WHERE fts.content_text MATCH ?1 OR fts.ocr_text MATCH ?1
-                 UNION
-                 SELECT id, content_type, content_text,
-                        CASE
-                            WHEN content_type = 'image' THEN NULL
-                            ELSE content_data
-                        END as content_data,
-                        image_path,
-                        thumbnail_data,
-                        image_width,
-                        image_height,
-                        ocr_text,
-                        timestamp
-                 FROM clipboard_history
-                 WHERE content_type = 'image' AND image_path LIKE ?2
-                 ORDER BY timestamp DESC",
+                 WHERE fts MATCH ?1
+                 ORDER BY h.timestamp DESC",
             )?;
 
             let entries = stmt
-                .query_map(params![&fts_query, &search_pattern], |row| {
+                .query_map(params![&fts_query], |row| {
                     let content_type_str: String = row.get(1)?;
                     let content_type = match content_type_str.as_str() {
                         "text" => ContentType::Text,
