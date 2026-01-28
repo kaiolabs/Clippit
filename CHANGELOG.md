@@ -7,6 +7,25 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [1.10.1] - 2026-01-28
+
+### 🐛 Correções Críticas
+
+- **[CRÍTICO]** Corrigido loop infinito ao detectar imagens duplicadas no clipboard
+  - Daemon processava mesma imagem repetidamente sem parar
+  - Causava alto uso de CPU e logs excessivos  
+  - Agora atualiza hash corretamente para evitar reprocessamento
+- **[Performance]** Reduzidos logs excessivos ao monitorar clipboard
+  - Removidos logs verbose que apareciam a cada 80ms
+  - Mantidos apenas logs importantes (novas imagens, OCR)
+  - Melhor legibilidade e performance de I/O
+
+### 📦 Arquivos Modificados
+
+- `crates/clippit-daemon/src/monitor.rs`
+
+---
+
 ## [1.10.0] - 2026-01-28
 
 ### 🚀 OCR - Reconhecimento de Texto em Imagens
