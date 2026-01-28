@@ -20,6 +20,61 @@ NOVA_VERSAO=$(grep "^version" Cargo.toml | head -1 | cut -d'"' -f2)
 echo "🚀 Versão que será instalada: $NOVA_VERSAO"
 echo ""
 
+# Verificar dependências do Tesseract OCR (necessário para feature OCR v1.10.0+)
+echo "🔍 Verificando dependências do Tesseract OCR..."
+MISSING_DEPS=false
+
+if ! command -v tesseract &> /dev/null; then
+    echo "⚠️  Tesseract OCR não está instalado (necessário para feature OCR)"
+    MISSING_DEPS=true
+elif ! pkg-config --exists lept; then
+    echo "⚠️  libleptonica-dev não está instalado (necessário para compilação)"
+    MISSING_DEPS=true
+elif ! pkg-config --exists tesseract; then
+    echo "⚠️  libtesseract-dev não está instalado (necessário para compilação)"
+    MISSING_DEPS=true
+fi
+
+# Verificar idiomas
+if command -v tesseract &> /dev/null; then
+    if ! tesseract --list-langs 2>/dev/null | grep -q "por"; then
+        echo "⚠️  Dados de treino português não instalados"
+        MISSING_DEPS=true
+    fi
+    if ! tesseract --list-langs 2>/dev/null | grep -q "eng"; then
+        echo "⚠️  Dados de treino inglês não instalados"
+        MISSING_DEPS=true
+    fi
+fi
+
+if [ "$MISSING_DEPS" = true ]; then
+    echo ""
+    echo "📦 Instalando dependências do Tesseract OCR..."
+    sudo apt-get update -qq
+    sudo apt-get install -y \
+        tesseract-ocr \
+        libtesseract-dev \
+        libleptonica-dev \
+        tesseract-ocr-por \
+        tesseract-ocr-eng
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ Tesseract OCR instalado com sucesso!"
+    else
+        echo "❌ Falha ao instalar Tesseract OCR"
+        echo "   Execute manualmente:"
+        echo "   sudo apt-get install -y tesseract-ocr libtesseract-dev libleptonica-dev tesseract-ocr-por tesseract-ocr-eng"
+        exit 1
+    fi
+else
+    echo "✅ Tesseract OCR e dependências já instalados"
+fi
+
+echo ""
+echo "📋 Versão Tesseract instalada:"
+tesseract --version | head -1 | sed 's/^/   /'
+echo ""
+
 # Compilar tudo
 echo "🏗️  Compilando em modo release..."
 cargo build --release
