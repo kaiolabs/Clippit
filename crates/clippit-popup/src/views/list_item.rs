@@ -186,15 +186,14 @@ fn create_image_row(row: &adw::ActionRow, entry: &clippit_ipc::HistoryEntry) {
         // Add OCR text as subtitle if available
         if let Some(ocr_text) = &entry.ocr_text {
             if !ocr_text.trim().is_empty() {
-                // Show first 2 lines of OCR text as preview
-                let lines: Vec<&str> = ocr_text.lines().take(2).collect();
-                let preview = lines.join("\n");
-                let char_limit = 160; // ~80 chars per line * 2
+                // Show ONLY first line, max 60 chars (compact preview)
+                let first_line = ocr_text.lines().next().unwrap_or("");
+                let char_limit = 60;
                 
-                let subtitle = if preview.len() > char_limit {
-                    format!("{}...", &preview[..char_limit])
+                let subtitle = if first_line.len() > char_limit {
+                    format!("{}...", &first_line[..char_limit])
                 } else {
-                    preview
+                    first_line.to_string()
                 };
                 
                 // CRITICAL: Escape markup characters to prevent GTK warnings
@@ -205,7 +204,7 @@ fn create_image_row(row: &adw::ActionRow, entry: &clippit_ipc::HistoryEntry) {
                     .replace('>', "&gt;");
                 
                 row.set_subtitle(&escaped_subtitle);
-                eprintln!("📝 Added OCR text subtitle for entry {}: {} chars", entry.id, ocr_text.len());
+                eprintln!("📝 OCR subtitle: '{}' (from {} chars total)", escaped_subtitle, ocr_text.len());
             }
         }
 

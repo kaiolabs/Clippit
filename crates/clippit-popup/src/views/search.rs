@@ -241,11 +241,26 @@ pub fn setup_search_filter(
     let suggestions_popover_for_changed = suggestions_popover.clone();
     let perform_search_for_changed = perform_search.clone();
 
+    // Debounce: aguarda 300ms após parar de digitar antes de buscar
+    let search_timeout_id: Rc<RefCell<Option<gtk::glib::SourceId>>> = Rc::new(RefCell::new(None));
+    let search_timeout_for_changed = search_timeout_id.clone();
+
     search_entry.connect_changed(move |entry| {
         let text = entry.text().to_string();
 
-        // 🔍 BUSCA EM TEMPO REAL
-        perform_search_for_changed(text.clone());
+        // Cancelar busca anterior (debounce)
+        if let Some(id) = search_timeout_for_changed.borrow_mut().take() {
+            id.remove();
+        }
+
+        // 🔍 BUSCA COM DEBOUNCE (300ms após parar de digitar)
+        let perform_search_clone = perform_search_for_changed.clone();
+        let text_clone = text.clone();
+        let timeout_id = gtk::glib::timeout_add_local(std::time::Duration::from_millis(300), move || {
+            perform_search_clone(text_clone.clone());
+            gtk::glib::ControlFlow::Break
+        });
+        *search_timeout_for_changed.borrow_mut() = Some(timeout_id);
 
         // Autocompletar (só se habilitado)
         if let (Some(ref engine), Some(ref popover)) = (
