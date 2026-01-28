@@ -97,9 +97,11 @@ impl Storage {
         }
 
         // Create FTS5 virtual table for fast text search (includes ocr_text)
+        // NOTE: NOT using external content to avoid trigger complexity and "malformed database" errors
+        // Data is duplicated in FTS5 table, but this is the recommended approach for reliability
         let _ = self.conn.execute(
             "CREATE VIRTUAL TABLE IF NOT EXISTS clipboard_history_fts
-             USING fts5(content_text, ocr_text, content='clipboard_history', content_rowid='id')",
+             USING fts5(content_text, ocr_text)",
             [],
         );
 
@@ -109,20 +111,20 @@ impl Storage {
             "CREATE TRIGGER IF NOT EXISTS clipboard_history_ai
              AFTER INSERT ON clipboard_history BEGIN
                  INSERT INTO clipboard_history_fts(rowid, content_text, ocr_text)
-                 VALUES (new.id, new.content_text, COALESCE(new.ocr_text, ''));
+                 VALUES (new.id, COALESCE(new.content_text, ''), COALESCE(new.ocr_text, ''));
              END",
             [],
         );
 
         // Trigger to keep FTS5 table synchronized on UPDATE (includes ocr_text)
         // COALESCE ensures NULL is converted to empty string (FTS5 doesn't support NULL)
+        // DELETE + INSERT approach is more reliable than UPDATE for FTS5
         let _ = self.conn.execute(
             "CREATE TRIGGER IF NOT EXISTS clipboard_history_au
              AFTER UPDATE ON clipboard_history BEGIN
-                 UPDATE clipboard_history_fts
-                 SET content_text = new.content_text,
-                     ocr_text = COALESCE(new.ocr_text, '')
-                 WHERE rowid = new.id;
+                 DELETE FROM clipboard_history_fts WHERE rowid = old.id;
+                 INSERT INTO clipboard_history_fts(rowid, content_text, ocr_text)
+                 VALUES (new.id, COALESCE(new.content_text, ''), COALESCE(new.ocr_text, ''));
              END",
             [],
         );
