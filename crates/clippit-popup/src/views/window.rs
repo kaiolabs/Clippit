@@ -2,6 +2,8 @@ use gtk::prelude::*;
 use gtk::{ScrolledWindow, SearchEntry};
 use libadwaita as adw;
 use rust_i18n::t;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// Creates the main popup window with list and search
 ///
@@ -68,17 +70,46 @@ pub fn create_main_window(
 
 fn setup_auto_close(window: &adw::ApplicationWindow) {
     let window_for_focus = window.clone();
+    let close_timeout_id: Rc<RefCell<Option<gtk::glib::SourceId>>> = Rc::new(RefCell::new(None));
 
     // Delay inicial antes de habilitar auto-close (dar tempo para o usuário começar a usar)
     let window_for_init = window.clone();
+    let close_timeout_for_init = close_timeout_id.clone();
+    
     gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(300), move || {
         eprintln!("🔵 Auto-close habilitado após 300ms");
 
         window_for_init.connect_is_active_notify(move |win| {
             if !win.is_active() {
-                eprintln!("🔴 Popup perdeu o foco - fechando imediatamente...");
+                eprintln!("🔴 Popup perdeu o foco - aguardando 500ms antes de fechar...");
+                
+                // Cancelar timeout anterior se existir (usuário voltou o foco rapidamente)
+                if let Some(id) = close_timeout_for_init.borrow_mut().take() {
+                    id.remove();
+                    eprintln!("   ↩️  Timeout anterior cancelado");
+                }
+                
+                // Agendar fechamento após 500ms (dar tempo para retornar foco)
                 let window_to_close = window_for_focus.clone();
-                window_to_close.close();
+                let timeout_id = gtk::glib::timeout_add_local_once(
+                    std::time::Duration::from_millis(500),
+                    move || {
+                        if !window_to_close.is_active() {
+                            eprintln!("   ✅ Fechando popup (sem foco por 500ms)");
+                            window_to_close.close();
+                        } else {
+                            eprintln!("   ⏸️  Não fechando - foco recuperado!");
+                        }
+                    }
+                );
+                *close_timeout_for_init.borrow_mut() = Some(timeout_id);
+            } else {
+                eprintln!("🟢 Popup ganhou o foco - cancelando auto-close");
+                // Cancelar timeout se ganhar foco de volta
+                if let Some(id) = close_timeout_for_init.borrow_mut().take() {
+                    id.remove();
+                    eprintln!("   ↩️  Auto-close cancelado (foco recuperado)");
+                }
             }
         });
     });
