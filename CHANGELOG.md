@@ -7,77 +7,6 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
-## [1.0.0] - 2026-01-21
-
-### 🎉 Lançamento Inicial
-
-Primeira versão estável do Clippit - Gerenciador de Área de Transferência para Linux!
-
-### ✨ Adicionado
-
-#### **Core Features**
-- ✅ Captura automática de texto copiado
-- ✅ Suporte completo a imagens (PNG, JPEG, WebP)
-- ✅ Histórico persistente usando SQLite
-- ✅ Atalho global `Super+V` para acesso rápido
-- ✅ Interface moderna com GTK4 e libadwaita
-
-#### **Interface do Usuário**
-- ✅ Popup elegante e rápido (`Super+V`)
-- ✅ Dashboard de configurações completo
-- ✅ Busca inteligente no histórico
-- ✅ Navegação por teclado (↑↓ Enter Delete)
-- ✅ Preview de imagens em hover
-- ✅ Tema claro/escuro automático
-
-#### **Gerenciamento**
-- ✅ Configuração de limite máximo de itens
-- ✅ Ajuste de tamanho máximo de imagens
-- ✅ Opção para ativar/desativar captura de imagens
-- ✅ Limpeza seletiva de histórico
-- ✅ Estatísticas de uso
-
-#### **Sistema**
-- ✅ Daemon com autostart via systemd
-- ✅ Baixo consumo de recursos (~20MB RAM)
-- ✅ Armazenamento eficiente de imagens em disco
-- ✅ Logs detalhados para troubleshooting
-
-#### **Distribuição**
-- ✅ Pacote `.deb` para instalação fácil
-- ✅ Suporte a Ubuntu 22.04+ e Debian 12+
-- ✅ Compatibilidade com X11
-- ✅ Script de build para compilação local
-
-### 🔧 Técnico
-
-#### **Arquitetura**
-- Modular: `clippit-core`, `clippit-daemon`, `clippit-ipc`, `clippit-popup`, `clippit-dashboard`
-- Escrito em Rust para performance e segurança
-- Comunicação IPC eficiente entre componentes
-- Armazenamento lazy-loading de imagens
-
-#### **Dependências**
-- GTK4 4.6+ / libadwaita 1.2+
-- SQLite3
-- xdotool, xclip (runtime)
-
-### 📚 Documentação
-- ✅ README.md completo com screenshots e exemplos
-- ✅ BUILD_FOR_USERS.md para compilação local
-- ✅ Seção de Troubleshooting detalhada
-- ✅ Documentação de arquitetura
-
-### 🐛 Correções Conhecidas
-- Corrigido: Imagens não aparecendo no popup
-- Corrigido: Paste não funcionando para imagens
-- Corrigido: Loop infinito de detecção de duplicatas
-- Corrigido: Modal fechando ao passar mouse sobre preview
-- Corrigido: Search field sem padding inferior
-- Corrigido: Compatibilidade com GTK4 4.6 e libadwaita 1.2
-
----
-
 ## [1.9.6] - 2026-01-28
 
 ### 🐛 Correções
@@ -99,6 +28,7 @@ Primeira versão estável do Clippit - Gerenciador de Área de Transferência pa
 
 ### 📝 Commit
 - `7bae979` - fix: adicionar busca por prefixo no FTS5
+- `d46f96a` - chore: bump version to 1.9.6
 
 ---
 
@@ -209,7 +139,7 @@ git pull origin feature/autocomplete-search
 cargo build --release
 
 # Reinstalar
-sudo bash scripts/install.sh
+bash scripts/install.sh
 
 # Reiniciar daemon
 systemctl --user restart clippit
@@ -235,42 +165,351 @@ Nenhum. Atualização é retrocompatível com bancos existentes.
 
 ---
 
+## [1.9.0] - Data Estimada
+
+### 🚀 Autocomplete Global (FEATURE PRINCIPAL)
+
+**NOVA FUNCIONALIDADE REVOLUCIONÁRIA**: Autocomplete inteligente que funciona em **qualquer aplicativo** do sistema, baseado no seu histórico de clipboard!
+
+### ✨ Adicionado
+
+#### **Autocomplete Global via IBus**
+- ✅ **clippit-ibus**: Engine IBus completo para captura de digitação
+  - Integração nativa com IBus Input Method Framework
+  - Captura keystroke em tempo real
+  - Comunicação via DBus (zbus 4.0)
+  - Processamento assíncrono com Tokio
+
+- ✅ **Typing Monitor**: Monitor de digitação global
+  - `autocomplete_manager.rs`: Gerenciamento de sugestões
+  - `typing_monitor.rs`: Processamento de eventos de teclado
+  - Buffer de palavras em tempo real
+  - Fuzzy matching inteligente
+
+- ✅ **Suggestion Engine**: Motor de sugestões
+  - Busca no histórico de clipboard
+  - Ranking por frequência e recência
+  - Máximo de 3-5 sugestões configuráveis
+  - Filtragem inteligente de contexto
+
+#### **UI de Autocomplete**
+- ✅ **Floating Autocomplete Popup**: Popup flutuante para sugestões
+  - Aparece próximo ao cursor
+  - Navegação por setas (↑↓)
+  - Aceitar com Tab ou Enter
+  - ESC para cancelar
+  - Design minimalista e não intrusivo
+
+- ✅ **Tooltip de Sugestões**: `clippit-tooltip`
+  - Exibição temporária de sugestões
+  - Posicionamento inteligente na tela
+  - Fade in/out suave
+  - Sem roubar foco do aplicativo
+
+#### **Configuração de Autocomplete**
+- ✅ **Dashboard - Aba Autocomplete**:
+  - Habilitar/desabilitar autocomplete global
+  - Caracteres mínimos para ativar (2-5)
+  - Delay entre digitação e sugestão (50-500ms)
+  - Máximo de sugestões (1-10)
+  - Lista de aplicativos bloqueados (senha, banking, etc.)
+
+- ✅ **Configuração no TOML**:
+  ```toml
+  [autocomplete]
+  enabled = true
+  min_chars = 2
+  delay_ms = 100
+  max_suggestions = 3
+  blocked_apps = ["password-manager", "banking-app"]
+  ```
+
+#### **IPC para Autocomplete**
+- ✅ Novas mensagens IPC:
+  - `RequestAutocompleteSuggestions { query, context }`
+  - `AcceptSuggestion { suggestion }`
+  - `ShowAutocompletePopup { suggestions, position }`
+  - `HideAutocompletePopup`
+- ✅ Responses:
+  - `AutocompleteSuggestions { suggestions: Vec<Suggestion> }`
+  - `SuggestionAccepted { word }`
+
+#### **Segurança e Privacidade**
+- ✅ **Lista de bloqueio automática**:
+  - Desabilita em campos de senha
+  - Desabilita em aplicativos bancários
+  - Desabilita em formulários sensíveis
+  - Configurável pelo usuário
+
+#### **Scripts e Instalação**
+- ✅ `scripts/install-ibus.sh`: Instalação automática do componente IBus
+  - Compila clippit-ibus
+  - Instala em `~/.local/bin/`
+  - Registra componente em `/usr/share/ibus/component/`
+  - Reinicia IBus daemon
+  - Adiciona fonte de entrada no sistema
+
+#### **Documentação Completa**
+- ✅ `docs/AUTOCOMPLETE_GLOBAL.md`: Guia completo do autocomplete
+- ✅ `AUTOCOMPLETE_IMPLEMENTATION.md`: Detalhes de implementação
+- ✅ `.cursor/rules/features/AUTOCOMPLETE-GLOBAL.md`: Regras de desenvolvimento
+- ✅ `.cursor/rules/infrastructure/IBUS-ENGINE.md`: Arquitetura do IBus
+
+### 🔧 Técnico
+
+#### **Novos Crates**
+- `clippit-ibus`: Engine IBus (~600 linhas)
+- `clippit-tooltip`: Tooltip flutuante (~300 linhas)
+
+#### **Dependências Adicionadas**
+- `zbus` 4.0: DBus communication
+- `zvariant` 4.0: DBus types
+- `rdev` 0.5: Keyboard monitoring
+- `fuzzy-matcher`: Busca fuzzy
+
+#### **Arquitetura**
+```
+[Usuário digita] 
+  → [IBus Framework captura] 
+  → [clippit-ibus/engine.rs processa]
+  → [IPC RequestAutocompleteSuggestions] 
+  → [daemon/typing_monitor.rs busca histórico]
+  → [Retorna sugestões]
+  → [clippit-tooltip exibe popup]
+  → [Tab para aceitar]
+  → [xdotool injeta texto]
+```
+
+### 📋 Como Usar
+
+1. **Instalar IBus component**:
+   ```bash
+   sudo bash scripts/install-ibus.sh
+   ```
+
+2. **Configurar fonte de entrada**:
+   - Configurações → Teclado → Fontes de Entrada
+   - Adicionar "Clippit Autocomplete"
+   - Alternar com `Super+Space`
+
+3. **Usar autocomplete**:
+   - Digite em qualquer aplicativo
+   - Sugestões aparecem após 2+ caracteres
+   - `↑↓` para navegar
+   - `Tab` ou `Enter` para aceitar
+   - `ESC` para cancelar
+
+4. **Configurar**:
+   - Abrir Dashboard: `clippit-dashboard`
+   - Aba "Autocomplete"
+   - Ajustar preferências
+
+---
+
+## [1.0.0] - 2026-01-21
+
+### 🎉 Lançamento Inicial
+
+Primeira versão estável do Clippit - Gerenciador de Área de Transferência para Linux!
+
+### ✨ Adicionado
+
+#### **Core Features**
+- ✅ **Captura automática** de texto copiado
+- ✅ **Suporte completo a imagens** (PNG, JPEG, WebP)
+  - Thumbnails automáticos (128x128)
+  - Preview em hover
+  - Armazenamento eficiente em disco
+  - Otimização automática de imagens grandes
+- ✅ **Histórico persistente** usando SQLite
+- ✅ **Atalho global** `Super+V` para acesso rápido
+- ✅ **Interface moderna** com GTK4 e libadwaita
+- ✅ **Suporte nativo a Wayland** via arboard
+
+#### **Interface do Usuário**
+
+##### **Popup (GTK4)**
+- ✅ Popup elegante e rápido (`Super+V`)
+- ✅ **Busca inteligente** no histórico
+  - Busca em tempo real
+  - Autocomplete de busca (SuggestionEngine)
+  - Highlighting de termos buscados
+  - Suggestions popover com palavras frequentes
+- ✅ **Navegação por teclado**:
+  - `↑↓` - Navegar
+  - `Enter` - Colar item selecionado
+  - `Delete` - Remover item
+  - `ESC` - Fechar popup
+  - `Tab` - Autocompletar busca
+- ✅ **Preview de imagens** em hover
+- ✅ **Tema claro/escuro** automático (segue sistema)
+- ✅ **List virtualization** para performance
+
+##### **Dashboard (Qt6/QML)**
+- ✅ Dashboard de configurações completo
+- ✅ **Interface moderna** com Qt6 e QML
+- ✅ **5 Abas de configuração**:
+  - **General**: Limite de itens, tamanho de imagens, ativar/desativar captura
+  - **Hotkeys**: Configurar atalhos globais
+  - **Theme**: Tema claro/escuro/automático
+  - **Privacy**: Limpeza de histórico, aplicativos bloqueados
+  - **Autocomplete**: Configurações de autocomplete global (v1.9+)
+- ✅ **Estatísticas de uso**:
+  - Total de itens
+  - Tamanho do banco
+  - Espaço usado por imagens
+  - Itens por tipo (texto/imagem)
+- ✅ **Gerenciamento de histórico**:
+  - Limpar tudo
+  - Limpar apenas textos
+  - Limpar apenas imagens
+  - Limpar itens antigos (por data)
+
+#### **Internacionalização**
+- ✅ **Suporte a múltiplos idiomas** (rust-i18n)
+- ✅ **Locales disponíveis**:
+  - Português (pt) - completo
+  - Inglês (en) - completo
+- ✅ **Arquivos de tradução** YAML:
+  - `crates/clippit-core/locales/pt.yml`
+  - `crates/clippit-core/locales/en.yml`
+- ✅ **Detecção automática** do idioma do sistema
+
+#### **Gerenciamento**
+- ✅ Configuração de **limite máximo de itens** (100-10000)
+- ✅ Ajuste de **tamanho máximo de imagens** (1-10MB)
+- ✅ Opção para **ativar/desativar captura de imagens**
+- ✅ **Limpeza seletiva** de histórico
+- ✅ **Estatísticas de uso** em tempo real
+- ✅ **Configuração via TOML** (`~/.config/clippit/config.toml`)
+
+#### **Sistema**
+- ✅ **Daemon** com autostart via systemd
+  - `systemctl --user enable clippit`
+  - `systemctl --user start clippit`
+  - Logs via journalctl
+- ✅ **Baixo consumo de recursos** (~20MB RAM)
+- ✅ **Armazenamento eficiente**:
+  - Imagens em `~/.local/share/clippit/images/`
+  - Banco SQLite em `~/.local/share/clippit/history.db`
+  - Lazy-loading de imagens
+  - Compressão automática
+- ✅ **Logs detalhados** para troubleshooting (tracing)
+- ✅ **Comunicação IPC** via Unix Domain Sockets
+  - Socket em `/tmp/clippit-{uid}.sock`
+  - Protocolo binário eficiente (serde)
+
+#### **Wayland e X11**
+- ✅ **Suporte nativo a Wayland**:
+  - Usa `arboard` com `wayland-data-control`
+  - Funciona em GNOME, KDE Plasma, Sway, Hyprland
+  - Captura de clipboard sem polling
+- ✅ **Compatibilidade com X11**:
+  - Fallback automático para X11
+  - Usa `xdotool` para injeção de texto
+  - Usa `xclip` para manipulação de clipboard
+
+#### **Distribuição**
+- ✅ **Pacote `.deb`** para instalação fácil
+  - Suporte a Ubuntu 22.04+ e Debian 12+
+  - Instalação com `sudo dpkg -i clippit_*.deb`
+- ✅ **Scripts de build**:
+  - `scripts/build-deb.sh`: Build padrão
+  - `scripts/build-deb-universal.sh`: Build compatível
+  - `scripts/build-deb-ubuntu20.sh`: Ubuntu 20.04
+- ✅ **Scripts de instalação**:
+  - `scripts/install.sh`: Instalação completa
+  - `scripts/reinstall.sh`: Reinstalação rápida
+  - `scripts/uninstall.sh`: Remoção completa
+
+### 🔧 Técnico
+
+#### **Arquitetura Modular**
+- `clippit-core`: Lógica de negócio, storage, config, types
+- `clippit-daemon`: Monitor de clipboard, hotkeys, IPC server, typing monitor
+- `clippit-ipc`: Protocolo IPC, client, server
+- `clippit-popup`: UI GTK4/libadwaita para histórico
+- `clippit-dashboard`: UI Qt6/QML para configurações
+- `clippit-qt-bridge`: Bridge Rust ↔ Qt6/QML (cxx-qt)
+- `clippit-ui`: Interface unificada (legacy)
+
+#### **Stack Tecnológico**
+- **Linguagem**: Rust 1.70+ (Edition 2021)
+- **Async Runtime**: Tokio 1.36
+- **UI Frameworks**:
+  - GTK4 4.6+ / libadwaita 1.2+ (Popup)
+  - Qt6 / QML (Dashboard)
+- **Database**: SQLite3 (rusqlite 0.31)
+- **Clipboard**: arboard 3.6 (Wayland-native)
+- **Hotkeys**: global-hotkey 0.7
+- **IPC**: interprocess 2.0 (Unix sockets)
+- **Logging**: tracing + tracing-subscriber
+- **Serialization**: serde + serde_json
+- **Image Processing**: image 0.25 (PNG, JPEG, WebP)
+- **Configuration**: toml 0.8
+
+#### **Dependências de Runtime**
+- GTK4 4.6+ / libadwaita 1.2+
+- Qt6 (para dashboard)
+- SQLite3
+- xdotool (para X11 e injeção de texto)
+- xclip (para X11 clipboard)
+
+### 📚 Documentação
+- ✅ `README.md`: Documentação principal
+- ✅ `BUILD_FOR_USERS.md`: Guia de compilação
+- ✅ `CONFIGURATION.md`: Guia de configuração
+- ✅ `TROUBLESHOOTING.md`: Solução de problemas
+- ✅ `FEATURES.md`: Lista completa de features
+- ✅ `DEVELOPMENT.md`: Guia para desenvolvedores
+- ✅ `.cursor/rules/`: Documentação técnica completa
+  - Arquitetura, crates, features, build, deploy
+
+### 🐛 Correções Conhecidas
+- Corrigido: Imagens não aparecendo no popup
+- Corrigido: Paste não funcionando para imagens
+- Corrigido: Loop infinito de detecção de duplicatas
+- Corrigido: Modal fechando ao passar mouse sobre preview
+- Corrigido: Search field sem padding inferior
+- Corrigido: Compatibilidade com GTK4 4.6 e libadwaita 1.2
+
+---
+
 ## [Unreleased] - Em Desenvolvimento
 
-### 🚧 Planejado para v1.1
+### 🚧 Planejado para Próximas Versões
 
 #### **Features**
-- [ ] Fixar itens favoritos
-- [ ] Categorias/tags personalizadas
-- [ ] Estatísticas mais detalhadas
-- [ ] Temas customizados
-- [ ] Importar/exportar histórico
-- [ ] Sincronização entre dispositivos (experimental)
+- [ ] **Fixar itens favoritos**: Pin itens importantes no topo
+- [ ] **Categorias/tags personalizadas**: Organizar histórico
+- [ ] **Compressão inteligente de imagens**: Reduzir espaço usado
+- [ ] **Shortcuts customizáveis**: Configurar todos os atalhos
+- [ ] **Notificações de sistema**: Avisos de captura
+- [ ] **Importar/exportar histórico**: Backup e restore
+- [ ] **Sincronização entre dispositivos**: Cloud sync (experimental)
 
 #### **Melhorias**
-- [ ] Otimização de busca para grandes históricos
-- [ ] Suporte a mais formatos de imagem (GIF, SVG)
-- [ ] Compressão inteligente de imagens
-- [ ] Shortcuts customizáveis
-- [ ] Notificações de sistema
+- [ ] **Suporte a GIF animado**: Preview e captura
+- [ ] **Suporte a SVG**: Imagens vetoriais
+- [ ] **Autocomplete com IA**: Sugestões contextuais (GPT/LLM)
+- [ ] **Temas customizados**: Cores e estilos personalizados
+- [ ] **Estatísticas avançadas**: Gráficos de uso
 
 #### **Bugs a Corrigir**
 - [ ] Nenhum bug crítico conhecido
 
 ---
 
-## [2.0.0] - Futuro
+## [2.0.0] - Visão de Longo Prazo
 
-### 🔮 Visão de Longo Prazo
+### 🔮 Grandes Features Futuras
 
-#### **Grandes Features**
-- [ ] Suporte a Wayland nativo
-- [ ] OCR (Reconhecimento de texto em imagens)
-- [ ] Criptografia end-to-end para dados sensíveis
-- [ ] Sincronização cloud (Google Drive, Dropbox)
-- [ ] Plugins/extensões de terceiros
-- [ ] Aplicativo mobile companion (Android/iOS)
-- [ ] Suporte a outros tipos de mídia (áudio, vídeo)
+- [ ] **OCR** (Reconhecimento de texto em imagens)
+- [ ] **Criptografia end-to-end** para dados sensíveis
+- [ ] **Sincronização cloud** (Google Drive, Dropbox)
+- [ ] **Plugins/extensões** de terceiros
+- [ ] **Aplicativo mobile** companion (Android/iOS)
+- [ ] **Suporte a áudio e vídeo**: Clipboard multimídia
 
 ---
 
@@ -282,6 +521,7 @@ Nenhum. Atualização é retrocompatível com bancos existentes.
 - **🗑️ Removido**: Features removidas
 - **🐛 Corrigido**: Correção de bugs
 - **🔒 Segurança**: Correções de vulnerabilidades
+- **⚡ Performance**: Melhorias de performance
 
 ---
 
@@ -293,6 +533,7 @@ Ao contribuir com o projeto, por favor:
 2. Use os tipos de mudanças apropriados
 3. Seja claro e conciso na descrição
 4. Adicione referências a issues/PRs quando relevante
+5. **Sempre incremente a versão** ao fazer correções ou features
 
 Exemplo:
 ```markdown
@@ -307,3 +548,11 @@ Exemplo:
 - [Repositório GitHub](https://github.com/yourusername/clippit)
 - [Releases](https://github.com/yourusername/clippit/releases)
 - [Issues](https://github.com/yourusername/clippit/issues)
+- [Documentação](./docs/)
+
+---
+
+**Legenda de Versões:**
+- **1.9.x**: Performance, reliability, autocomplete
+- **1.0.0**: Lançamento inicial
+- **2.0.0**: Futuro (features experimentais)
