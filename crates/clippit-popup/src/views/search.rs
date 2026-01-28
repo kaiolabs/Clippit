@@ -72,15 +72,15 @@ pub fn setup_search_filter(
         let search_map_clone = search_map_for_search.clone();
 
         Rc::new(move |query: String| {
-            if query.trim().is_empty() {
-                eprintln!("🔍 Busca vazia - mantendo lista atual");
-                return;
-            }
-
             // Buscar no banco de dados com limite de 100 resultados
+            // Se query vazia, daemon retorna TODOS os resultados recentes (agora funciona!)
             eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            eprintln!("🔍 BUSCANDO NO BANCO: '{}'", query);
-            eprintln!("🔍 Query length: {} chars", query.len());
+            if query.trim().is_empty() {
+                eprintln!("🔍 BUSCA VAZIA - RETORNANDO TODOS OS RESULTADOS");
+            } else {
+                eprintln!("🔍 BUSCANDO NO BANCO: '{}'", query);
+                eprintln!("🔍 Query length: {} chars", query.len());
+            }
             eprintln!("🔍 Limite: 100 resultados");
             eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
