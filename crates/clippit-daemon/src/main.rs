@@ -1,6 +1,7 @@
 mod autocomplete_manager;
 mod hotkey;
 mod monitor;
+mod ocr_processor;
 mod typing_monitor;
 
 use anyhow::Result;
