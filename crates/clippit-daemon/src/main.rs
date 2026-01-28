@@ -117,6 +117,7 @@ fn handle_ipc_message(
                             thumbnail_data: e.thumbnail_data,
                             image_width: e.image_width,
                             image_height: e.image_height,
+                            ocr_text: e.ocr_text,
                             timestamp: e.timestamp,
                         })
                         .collect();
@@ -148,6 +149,7 @@ fn handle_ipc_message(
                             thumbnail_data: e.thumbnail_data, // Include thumbnail data
                             image_width: e.image_width,
                             image_height: e.image_height,
+                            ocr_text: e.ocr_text,
                             timestamp: e.timestamp,
                         })
                         .collect();
@@ -190,6 +192,7 @@ fn handle_ipc_message(
                             thumbnail_data: e.thumbnail_data,
                             image_width: e.image_width,
                             image_height: e.image_height,
+                            ocr_text: e.ocr_text,
                             timestamp: e.timestamp,
                         })
                         .collect();
@@ -234,6 +237,7 @@ fn handle_ipc_message(
                             thumbnail_data: e.thumbnail_data,
                             image_width: e.image_width,
                             image_height: e.image_height,
+                            ocr_text: e.ocr_text,
                             timestamp: e.timestamp,
                         })
                         .collect();
@@ -304,6 +308,7 @@ fn handle_ipc_message(
                         thumbnail_data: entry.thumbnail_data, // Include thumbnail data
                         image_width: entry.image_width,
                         image_height: entry.image_height,
+                        ocr_text: entry.ocr_text,
                         timestamp: entry.timestamp,
                     };
                     info!("✅ Returned full data for entry {}", id);

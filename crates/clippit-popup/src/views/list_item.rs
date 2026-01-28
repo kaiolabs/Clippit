@@ -183,6 +183,25 @@ fn create_image_row(row: &adw::ActionRow, entry: &clippit_ipc::HistoryEntry) {
 
         row.set_title(&image_info);
 
+        // Add OCR text as subtitle if available
+        if let Some(ocr_text) = &entry.ocr_text {
+            if !ocr_text.trim().is_empty() {
+                // Show first 2 lines of OCR text as preview
+                let lines: Vec<&str> = ocr_text.lines().take(2).collect();
+                let preview = lines.join("\n");
+                let char_limit = 160; // ~80 chars per line * 2
+                
+                let subtitle = if preview.len() > char_limit {
+                    format!("{}...", &preview[..char_limit])
+                } else {
+                    preview
+                };
+                
+                row.set_subtitle(&subtitle);
+                eprintln!("📝 Added OCR text subtitle for entry {}: {} chars", entry.id, ocr_text.len());
+            }
+        }
+
         // Process thumbnail (optimized: thumbnails are small and fast to decode)
         // Main optimization is limiting results to 100 via search_history_with_limit
         match create_thumbnail(data, 128) {
