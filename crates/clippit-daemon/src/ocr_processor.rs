@@ -1,7 +1,6 @@
 use anyhow::Result;
-use clippit_core::history::HistoryManager;
+use clippit_core::storage::Storage;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use tesseract::Tesseract;
 use tracing::{error, info, warn};
 
@@ -69,7 +68,7 @@ pub async fn process_ocr_for_entry(
     entry_id: i64,
     image_path: String,
     languages: String,
-    history_manager: Arc<Mutex<HistoryManager>>,
+    db_path: String,
 ) {
     // Spawn blocking para não bloquear runtime async
     let result = tokio::task::spawn_blocking(move || {
@@ -80,12 +79,18 @@ pub async fn process_ocr_for_entry(
 
     match result {
         Ok(Ok(Some(ocr_text))) => {
-            // Atualizar banco com texto OCR
-            let manager = history_manager.lock().unwrap();
-            if let Err(e) = manager.update_ocr_text(entry_id, &ocr_text) {
-                error!("❌ Failed to update OCR text in database: {}", e);
-            } else {
-                info!("✅ OCR text saved for entry {}", entry_id);
+            // Criar conexão própria para write (WAL permite múltiplas conexões)
+            match Storage::new(&db_path) {
+                Ok(storage) => {
+                    if let Err(e) = storage.update_ocr_text(entry_id, &ocr_text) {
+                        error!("❌ Failed to update OCR text in database: {}", e);
+                    } else {
+                        info!("✅ OCR text saved for entry {}", entry_id);
+                    }
+                }
+                Err(e) => {
+                    error!("❌ Failed to open database for OCR update: {}", e);
+                }
             }
         }
         Ok(Ok(None)) => {

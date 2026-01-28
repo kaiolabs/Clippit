@@ -141,11 +141,16 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
 
                                                             // Disparar OCR em background se habilitado
                                                             if config.features.enable_ocr {
-                                                                let history_clone =
-                                                                    Arc::clone(&history_manager);
                                                                 let path_clone = image_path_for_ocr;
                                                                 let languages =
                                                                     config.ocr.languages.clone();
+                                                                let db_path = dirs::data_local_dir()
+                                                                    .expect("Failed to get data directory")
+                                                                    .join("clippit")
+                                                                    .join("history.db")
+                                                                    .to_str()
+                                                                    .expect("Path to string failed")
+                                                                    .to_string();
 
                                                                 info!("🔍 Starting OCR processing in background for entry {}", id);
 
@@ -154,7 +159,7 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
                                                                         id,
                                                                         path_clone,
                                                                         languages,
-                                                                        history_clone,
+                                                                        db_path,
                                                                     )
                                                                     .await;
                                                                 });
