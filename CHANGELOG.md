@@ -7,6 +7,24 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [1.10.3] - 2026-01-28
+
+### 🐛 Correções Críticas
+
+- **[CRÍTICO]** Corrigido triggers FTS5 causando erro ao salvar OCR
+  - Triggers tentavam inserir NULL no FTS5 (não suportado)
+  - UPDATE falhava: "database disk image is malformed"
+  - FTS5 corrompido internamente após migrações
+  - Solução: recriado FTS5 do zero com COALESCE(ocr_text, '')
+  - Triggers agora tratam NULL corretamente
+  - **OCR salva texto perfeitamente agora! ✅**
+
+### 📦 Arquivos Modificados
+
+- FTS5 e triggers reconstruídos via SQL direto
+
+---
+
 ## [1.10.2] - 2026-01-28
 
 ### 🐛 Correções Críticas
