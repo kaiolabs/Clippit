@@ -60,20 +60,22 @@ pub fn create_main_window(
         .content(&main_box)
         .build();
 
-    // Auto-close on focus loss with intelligent delay
-    setup_auto_close(&window);
+    // Auto-close on focus loss with intelligent delay (passa search_entry para verificar foco)
+    setup_auto_close(&window, &search_entry);
 
-    eprintln!("🔵 Window: adw::ApplicationWindow, 700x550 (auto-close inteligente 500ms + system notifications)");
+    eprintln!("🔵 Window: adw::ApplicationWindow, 700x550 (auto-close inteligente 1500ms + system notifications)");
 
     (window, list_box, scrolled, search_entry)
 }
 
-fn setup_auto_close(window: &adw::ApplicationWindow) {
+fn setup_auto_close(window: &adw::ApplicationWindow, search_entry: &SearchEntry) {
     let window_for_focus = window.clone();
+    let search_entry_for_focus = search_entry.clone();
     let close_timeout_id: Rc<RefCell<Option<gtk::glib::SourceId>>> = Rc::new(RefCell::new(None));
 
     // Delay inicial antes de habilitar auto-close (dar tempo para o usuário começar a usar)
     let window_for_init = window.clone();
+    let search_entry_for_init = search_entry.clone();
     let close_timeout_for_init = close_timeout_id.clone();
     
     gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(300), move || {
@@ -81,7 +83,13 @@ fn setup_auto_close(window: &adw::ApplicationWindow) {
 
         window_for_init.connect_is_active_notify(move |win| {
             if !win.is_active() {
-                eprintln!("🔴 Popup perdeu o foco - aguardando 500ms antes de fechar...");
+                // CRÍTICO: Não fechar se search_entry tem foco (usuário está digitando)
+                if search_entry_for_init.has_focus() {
+                    eprintln!("⏸️  Popup perdeu foco MAS campo de pesquisa ativo - NÃO fechando!");
+                    return;
+                }
+                
+                eprintln!("🔴 Popup perdeu o foco - aguardando 1500ms antes de fechar...");
                 
                 // Cancelar timeout anterior se existir (usuário voltou o foco rapidamente)
                 if let Some(id) = close_timeout_for_init.borrow_mut().take() {
@@ -89,13 +97,20 @@ fn setup_auto_close(window: &adw::ApplicationWindow) {
                     eprintln!("   ↩️  Timeout anterior cancelado");
                 }
                 
-                // Agendar fechamento após 500ms (dar tempo para retornar foco)
+                // Agendar fechamento após 1500ms (dar tempo para retornar foco)
                 let window_to_close = window_for_focus.clone();
+                let search_entry_to_check = search_entry_for_focus.clone();
                 let timeout_id = gtk::glib::timeout_add_local_once(
-                    std::time::Duration::from_millis(500),
+                    std::time::Duration::from_millis(1500),
                     move || {
+                        // Verificar novamente se search_entry tem foco antes de fechar
+                        if search_entry_to_check.has_focus() {
+                            eprintln!("   ⏸️  Campo de pesquisa ainda ativo - NÃO fechando!");
+                            return;
+                        }
+                        
                         if !window_to_close.is_active() {
-                            eprintln!("   ✅ Fechando popup (sem foco por 500ms)");
+                            eprintln!("   ✅ Fechando popup (sem foco por 1500ms)");
                             window_to_close.close();
                         } else {
                             eprintln!("   ⏸️  Não fechando - foco recuperado!");
