@@ -320,5 +320,5 @@ Se performance ainda estiver ruim:
 
 ---
 
-**Versão:** 1.9.5  
+**Versão:** 1.9.6  
 **Última atualização:** 2026-01-28

@@ -1,4 +1,4 @@
-# Correções de Performance e Captura - v1.9.5
+# Correções de Performance e Captura - v1.9.6
 
 ## 🎯 Problemas Resolvidos
 
@@ -336,6 +336,16 @@ sqlite3 ~/.local/share/clippit/history.db ".schema"
 
 ## 📝 Changelog
 
+### [1.9.6] - 2026-01-28
+
+**Busca:**
+- Corrigida busca por prefixo no FTS5 (palavras parciais agora funcionam)
+  - "lingua" agora encontra "linguagem"
+  - Adiciona `*` automaticamente ao final de cada palavra da query
+
+**Arquivos Modificados:**
+- `crates/clippit-core/src/storage.rs` - Query FTS5 com suporte a prefixo
+
 ### [1.9.5] - 2026-01-28
 
 **Performance:**
@@ -363,6 +373,6 @@ sqlite3 ~/.local/share/clippit/history.db ".schema"
 
 ---
 
-**Versão**: 1.9.5  
+**Versão**: 1.9.6  
 **Data**: 2026-01-28  
 **Autor**: Clippit Team

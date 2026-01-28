@@ -78,6 +78,30 @@ Primeira versão estável do Clippit - Gerenciador de Área de Transferência pa
 
 ---
 
+## [1.9.6] - 2026-01-28
+
+### 🐛 Correções
+
+#### **Busca**
+- ✅ **Busca por prefixo no FTS5**: Agora busca palavras parciais
+  - Problema: FTS5 só buscava palavras completas ("lingua" não encontrava "linguagem")
+  - Solução: Adicionar `*` ao final de cada palavra da query para busca por prefixo
+  - Exemplos que agora funcionam:
+    - "lingua" → encontra "linguagem", "linguagem de programação"
+    - "rust" → encontra "Rust é incrível", "Rusty"
+    - "test" → encontra "teste", "testing", "Test #123"
+    - "prog" → encontra "programa", "programação"
+
+### 🔧 Modificado
+- `storage.rs`: Query FTS5 agora adiciona `*` a cada palavra
+  - "lingua" → `"lingua*"`
+  - "rust prog" → `"rust* OR prog*"`
+
+### 📝 Commit
+- `7bae979` - fix: adicionar busca por prefixo no FTS5
+
+---
+
 ## [1.9.5] - 2026-01-28
 
 ### 🚀 Performance e Confiabilidade
