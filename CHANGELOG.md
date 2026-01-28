@@ -7,6 +7,76 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [1.10.5] - 2026-01-28
+
+### 🎯 OCR Completo - Busca e Exibição Funcionando!
+
+Esta versão completa a implementação do OCR com correções críticas na busca e exibição do texto extraído.
+
+#### 🔍 Correções de Busca
+
+- **[FIX]** Query FTS5 simplificada para resolver erro MATCH
+  - Removido UNION que causava "unable to use function MATCH in the requested context"
+  - Query simplificada: `WHERE fts MATCH ?1` busca em content_text E ocr_text automaticamente
+  - Busca agora funciona corretamente para texto OCR! ✅
+
+- **[FIX]** Campo de busca vazio agora retorna todos os resultados
+  - Daemon detecta `query.trim().is_empty()` e chama `get_recent(1000)`
+  - Popup remove early return e sempre executa busca
+  - **Comportamento correto**: apagar texto = mostrar tudo novamente! ✅
+
+- **[FIX]** Busca em tempo real conforme você digita
+  - Popup atualiza listagem a cada caractere digitado
+  - Sem necessidade de pressionar Enter
+  - Experiência fluida e responsiva! ⚡
+
+#### 👁️ Exibição do Texto OCR
+
+- **[FEAT]** Texto OCR agora aparece como subtítulo nas imagens do popup!
+  - Protocolo IPC estendido com campo `ocr_text: Option<String>`
+  - Daemon envia OCR em todas respostas IPC
+  - Popup mostra preview (2 linhas, ~160 chars) abaixo da thumbnail
+  - **Usuário consegue VER o texto extraído!** 🎉
+
+#### 📊 Exemplo Visual no Popup
+
+```
+┌──────────────────────────────────┐
+│ [📸] 1920x1080 · 128 KB          │ ← dimensões e tamanho
+│ Abaixo, você encontra as esp...  │ ← TEXTO OCR (preview)
+└──────────────────────────────────┘
+```
+
+#### ✅ Stack Completo Funcionando
+
+1. **Captura**: Daemon detecta imagem e salva
+2. **OCR**: Tesseract extrai texto em background
+3. **Indexação**: FTS5 indexa ocr_text para busca
+4. **Busca**: Query simplificada encontra texto corretamente
+5. **Exibição**: Popup mostra preview do OCR como subtítulo
+
+#### 📦 Arquivos Modificados
+
+- `crates/clippit-core/src/storage.rs` - Query FTS5 simplificada
+- `crates/clippit-daemon/src/main.rs` - Busca vazia + envio OCR via IPC
+- `crates/clippit-popup/src/views/search.rs` - Busca em tempo real
+- `crates/clippit-ipc/src/protocol.rs` - Campo ocr_text adicionado
+- `crates/clippit-popup/src/views/list_item.rs` - Exibição OCR como subtítulo
+
+#### 🎉 Resultado Final
+
+- ✅ OCR extrai texto perfeitamente
+- ✅ Salva no banco sem erros
+- ✅ Busca encontra texto OCR
+- ✅ Busca em tempo real funcionando
+- ✅ Campo vazio retorna todos os resultados
+- ✅ Texto OCR visível no popup
+- ✅ Experiência de usuário completa!
+
+**OCR está 100% funcional e integrado! 🚀**
+
+---
+
 ## [1.10.4] - 2026-01-28
 
 ### 🎉 Correção Definitiva - OCR Funcionando 100%!
