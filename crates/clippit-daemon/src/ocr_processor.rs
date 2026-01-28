@@ -81,7 +81,7 @@ pub async fn process_ocr_for_entry(
     match result {
         Ok(Ok(Some(ocr_text))) => {
             // Atualizar banco com texto OCR
-            let mut manager = history_manager.lock().unwrap();
+            let manager = history_manager.lock().unwrap();
             if let Err(e) = manager.update_ocr_text(entry_id, &ocr_text) {
                 error!("❌ Failed to update OCR text in database: {}", e);
             } else {

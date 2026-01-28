@@ -130,6 +130,9 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
                                                         image_path, width, height
                                                     );
 
+                                                    // Clone image_path antes de mover para entry
+                                                    let image_path_for_ocr = image_path.clone();
+
                                                     let entry =
                                                         ClipboardEntry::new_image_with_dimensions(
                                                             image_path, thumbnail, width, height,
@@ -147,7 +150,7 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
                                                             if config.features.enable_ocr {
                                                                 let history_clone =
                                                                     Arc::clone(&history_manager);
-                                                                let path_clone = image_path.clone();
+                                                                let path_clone = image_path_for_ocr;
                                                                 let languages =
                                                                     config.ocr.languages.clone();
 

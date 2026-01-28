@@ -157,6 +157,11 @@ impl HistoryManager {
     pub fn search(&self, query: &str) -> Result<Vec<ClipboardEntry>> {
         self.storage.search(query)
     }
+
+    /// Update OCR text for an existing entry (used by OCR processor)
+    pub fn update_ocr_text(&self, id: i64, ocr_text: &str) -> Result<()> {
+        self.storage.update_ocr_text(id, ocr_text)
+    }
 }
 
 #[cfg(test)]
