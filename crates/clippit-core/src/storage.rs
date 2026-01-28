@@ -413,8 +413,13 @@ impl Storage {
         let use_fts = !query.contains('%') && !query.contains('_') && !query.is_empty();
 
         if use_fts {
-            // Fast FTS5 search
-            let fts_query = query.replace(' ', " OR "); // Simple OR for multiple words
+            // Fast FTS5 search with prefix matching
+            // Add * to each word for prefix search: "lingua" → "lingua*"
+            let fts_query = query
+                .split_whitespace()
+                .map(|word| format!("{}*", word))
+                .collect::<Vec<_>>()
+                .join(" OR ");
             let search_pattern = format!("%{}%", query);
 
             let mut stmt = self.conn.prepare(
