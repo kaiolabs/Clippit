@@ -7,6 +7,25 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [1.10.2] - 2026-01-28
+
+### 🐛 Correções Críticas
+
+- **[CRÍTICO]** Configurado SQLite WAL mode para acesso concorrente
+  - OCR extraía texto mas falhava ao salvar: "database disk image is malformed"
+  - Daemon usava journal_mode=delete (bloqueia writes concorrentes)
+  - busy_timeout=0 (falhava imediatamente sem esperar lock)
+  - Thread OCR (background write) conflitava com monitor (read)
+  - Agora usa WAL mode (Write-Ahead Logging) + busy_timeout 5s
+  - Permite leituras e 1 escrita simultâneas sem conflitos
+  - **OCR agora salva texto corretamente no banco! ✅**
+
+### 📦 Arquivos Modificados
+
+- `crates/clippit-core/src/storage.rs`
+
+---
+
 ## [1.10.1] - 2026-01-28
 
 ### 🐛 Correções Críticas
