@@ -83,13 +83,14 @@ fn setup_auto_close(window: &adw::ApplicationWindow, search_entry: &SearchEntry)
 
         window_for_init.connect_is_active_notify(move |win| {
             if !win.is_active() {
-                // CRÍTICO: Não fechar se search_entry tem foco (usuário está digitando)
-                if search_entry_for_init.has_focus() {
-                    eprintln!("⏸️  Popup perdeu foco MAS campo de pesquisa ativo - NÃO fechando!");
+                // CRÍTICO: Não fechar se há texto no campo de pesquisa (usuário está usando)
+                let search_text = search_entry_for_init.text();
+                if !search_text.is_empty() {
+                    eprintln!("⏸️  Popup perdeu foco MAS há texto no campo ('{}') - NÃO fechando!", search_text);
                     return;
                 }
                 
-                eprintln!("🔴 Popup perdeu o foco - aguardando 1500ms antes de fechar...");
+                eprintln!("🔴 Popup perdeu o foco (campo vazio) - aguardando 1500ms antes de fechar...");
                 
                 // Cancelar timeout anterior se existir (usuário voltou o foco rapidamente)
                 if let Some(id) = close_timeout_for_init.borrow_mut().take() {
@@ -103,14 +104,15 @@ fn setup_auto_close(window: &adw::ApplicationWindow, search_entry: &SearchEntry)
                 let timeout_id = gtk::glib::timeout_add_local_once(
                     std::time::Duration::from_millis(1500),
                     move || {
-                        // Verificar novamente se search_entry tem foco antes de fechar
-                        if search_entry_to_check.has_focus() {
-                            eprintln!("   ⏸️  Campo de pesquisa ainda ativo - NÃO fechando!");
+                        // Verificar novamente se há texto no campo antes de fechar
+                        let search_text = search_entry_to_check.text();
+                        if !search_text.is_empty() {
+                            eprintln!("   ⏸️  Ainda há texto no campo ('{}') - NÃO fechando!", search_text);
                             return;
                         }
                         
                         if !window_to_close.is_active() {
-                            eprintln!("   ✅ Fechando popup (sem foco por 1500ms)");
+                            eprintln!("   ✅ Fechando popup (sem foco por 1500ms, campo vazio)");
                             window_to_close.close();
                         } else {
                             eprintln!("   ⏸️  Não fechando - foco recuperado!");
