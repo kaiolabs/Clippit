@@ -1,4 +1,4 @@
-use clippit_ipc::{IpcClient, HistoryEntry};
+use clippit_ipc::{HistoryEntry, IpcClient};
 
 pub struct HistoryModel {
     entries: Vec<HistoryEntry>,
@@ -28,8 +28,13 @@ impl HistoryModel {
     pub fn get_item_content(&self, index: i32) -> String {
         if let Some(entry) = self.entries.get(index as usize) {
             if let Some(text) = &entry.content_text {
-                let preview: String = text.lines().next().unwrap_or("")
-                    .chars().take(100).collect();
+                let preview: String = text
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .chars()
+                    .take(100)
+                    .collect();
                 return preview;
             } else if let Some(data) = &entry.content_data {
                 return format!("[Image - {} bytes]", data.len());

@@ -4,16 +4,16 @@ use std::time::Duration;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    
+
     if args.len() < 2 {
         eprintln!("Uso: clippit-tooltip \"texto das sugestões\"");
         std::process::exit(1);
     }
 
     let text = &args[1];
-    
+
     gtk::init().unwrap();
-    
+
     // Janela tooltip - sem decoração, sem foco
     let window = gtk::Window::new();
     window.set_decorated(false);
@@ -22,7 +22,7 @@ fn main() {
     window.set_focusable(false);
     window.set_can_focus(false);
     window.set_modal(false);
-    
+
     // CSS para aparência de tooltip escuro
     let css = r#"
         window {
@@ -38,7 +38,7 @@ fn main() {
             padding: 16px;
         }
     "#;
-    
+
     let provider = gtk::CssProvider::new();
     provider.load_from_data(css);
     gtk::style_context_add_provider_for_display(
@@ -46,15 +46,15 @@ fn main() {
         &provider,
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
-    
+
     // Label com o texto
     let label = gtk::Label::new(Some(text));
     label.set_halign(gtk::Align::Start);
     label.set_valign(gtk::Align::Start);
     window.set_child(Some(&label));
-    
+
     window.present();
-    
+
     // Auto-fechar após 3 segundos
     let window_weak = window.downgrade();
     gtk::glib::timeout_add_local_once(Duration::from_secs(3), move || {
@@ -62,7 +62,7 @@ fn main() {
             w.close();
         }
     });
-    
+
     // Main loop
     let main_loop = gtk::glib::MainLoop::new(None, false);
     let loop_clone = main_loop.clone();

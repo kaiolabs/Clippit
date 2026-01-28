@@ -29,7 +29,11 @@ impl AutocompleteManager {
     }
 
     /// Atualiza sugestões e mostra popup flutuante
-    pub fn show_suggestions(&self, suggestions: Vec<Suggestion>, partial_word: String) -> Result<()> {
+    pub fn show_suggestions(
+        &self,
+        suggestions: Vec<Suggestion>,
+        partial_word: String,
+    ) -> Result<()> {
         if suggestions.is_empty() {
             return Ok(());
         }
@@ -49,7 +53,11 @@ impl AutocompleteManager {
         // Mostrar popup flutuante próximo ao cursor
         self.show_floating_popup(&suggestions, cursor_pos)?;
 
-        info!("📋 {} sugestões mostradas para '{}'", suggestions.len(), partial_word);
+        info!(
+            "📋 {} sugestões mostradas para '{}'",
+            suggestions.len(),
+            partial_word
+        );
         Ok(())
     }
 
@@ -93,7 +101,7 @@ impl AutocompleteManager {
 
         let text = format!("💡 Sugestões (Tab):\n\n{}", words.join("\n"));
         let (x, y) = pos;
-        
+
         // Spawn em thread separada para não bloquear
         std::thread::spawn(move || {
             // 1️⃣ Tentar yad primeiro (melhor: --no-focus)
@@ -127,9 +135,7 @@ impl AutocompleteManager {
             }
 
             // 2️⃣ Fallback: clippit-tooltip (GTK4 tooltip nativo)
-            let tooltip_result = Command::new("clippit-tooltip")
-                .arg(&text)
-                .spawn();
+            let tooltip_result = Command::new("clippit-tooltip").arg(&text).spawn();
 
             if tooltip_result.is_ok() {
                 return; // Sucesso com tooltip nativo!
@@ -179,7 +185,10 @@ impl AutocompleteManager {
         let suggestion = &suggestions[index];
         let word_to_inject = &suggestion.word;
 
-        info!("✅ Aceitando sugestão: '{}' (substituindo '{}')", word_to_inject, partial);
+        info!(
+            "✅ Aceitando sugestão: '{}' (substituindo '{}')",
+            word_to_inject, partial
+        );
 
         // Apagar palavra parcial (Backspace N vezes)
         let backspaces = partial.len();
@@ -250,7 +259,7 @@ impl AutocompleteManager {
         self.current_suggestions.lock().unwrap().clear();
         *self.selected_index.lock().unwrap() = 0;
         self.current_partial.lock().unwrap().clear();
-        
+
         // Remover arquivo temporário
         if let Ok(path) = self.get_suggestions_file_path() {
             let _ = fs::remove_file(path);
@@ -284,17 +293,20 @@ impl AutocompleteManager {
         }
 
         // Fechar popup anterior
-        let _ = Command::new("pkill")
-            .arg("-f")
-            .arg("yad.*Clippit")
-            .output();
+        let _ = Command::new("pkill").arg("-f").arg("yad.*Clippit").output();
 
         // Mostrar novo popup com seleção atualizada
-        self.show_floating_popup_with_selection(&suggestions, index, cursor_pos).ok();
+        self.show_floating_popup_with_selection(&suggestions, index, cursor_pos)
+            .ok();
     }
-    
+
     /// Mostra popup com índice de seleção específico
-    fn show_floating_popup_with_selection(&self, suggestions: &[Suggestion], selected: usize, pos: (i32, i32)) -> Result<()> {
+    fn show_floating_popup_with_selection(
+        &self,
+        suggestions: &[Suggestion],
+        selected: usize,
+        pos: (i32, i32),
+    ) -> Result<()> {
         let words: Vec<String> = suggestions
             .iter()
             .take(5)
@@ -310,7 +322,7 @@ impl AutocompleteManager {
 
         let text = format!("💡 Sugestões (Tab):\n\n{}", words.join("\n"));
         let (x, y) = pos;
-        
+
         // Spawn em thread separada para não bloquear
         std::thread::spawn(move || {
             // 1️⃣ Tentar yad primeiro
@@ -344,9 +356,7 @@ impl AutocompleteManager {
             }
 
             // 2️⃣ Fallback: clippit-tooltip (GTK4 tooltip nativo)
-            let tooltip_result = Command::new("clippit-tooltip")
-                .arg(&text)
-                .spawn();
+            let tooltip_result = Command::new("clippit-tooltip").arg(&text).spawn();
 
             if tooltip_result.is_ok() {
                 return;

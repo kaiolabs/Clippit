@@ -19,13 +19,13 @@ pub struct Config {
 pub struct GeneralConfig {
     #[serde(default = "default_max_history")]
     pub max_history_items: usize,
-    
+
     #[serde(default = "default_poll_interval")]
     pub poll_interval_ms: u64,
-    
+
     #[serde(default = "default_max_text_size")]
     pub max_text_size: usize,
-    
+
     #[serde(default = "default_max_image_size")]
     pub max_image_size: usize,
 }
@@ -34,10 +34,10 @@ pub struct GeneralConfig {
 pub struct HotkeyConfig {
     #[serde(default = "default_hotkey_modifier")]
     pub show_history_modifier: String,
-    
+
     #[serde(default = "default_hotkey_key")]
     pub show_history_key: String,
-    
+
     pub show_history_alt_modifier: Option<String>,
     pub show_history_alt_key: Option<String>,
 }
@@ -46,19 +46,19 @@ pub struct HotkeyConfig {
 pub struct UiConfig {
     #[serde(default = "default_theme")]
     pub theme: String,
-    
+
     #[serde(default = "default_language")]
     pub language: String,
-    
+
     #[serde(default = "default_font_family")]
     pub font_family: String,
-    
+
     #[serde(default = "default_font_size")]
     pub font_size: u32,
-    
+
     #[serde(default = "default_true")]
     pub show_notifications: bool,
-    
+
     pub colors: UiColors,
     pub window: WindowConfig,
 }
@@ -81,13 +81,13 @@ pub struct ThemeColors {
 pub struct WindowConfig {
     #[serde(default = "default_window_width")]
     pub width: u32,
-    
+
     #[serde(default = "default_window_height")]
     pub max_height: u32,
-    
+
     #[serde(default = "default_window_position")]
     pub position: String,
-    
+
     #[serde(default = "default_window_opacity")]
     pub opacity: f32,
 }
@@ -96,13 +96,13 @@ pub struct WindowConfig {
 pub struct SearchConfig {
     #[serde(default = "default_enable_suggestions")]
     pub enable_suggestions: bool,
-    
+
     #[serde(default = "default_max_suggestions")]
     pub max_suggestions: usize,
-    
+
     #[serde(default = "default_focus_search_modifier")]
     pub focus_search_modifier: String,
-    
+
     #[serde(default = "default_focus_search_key")]
     pub focus_search_key: String,
 }
@@ -111,13 +111,13 @@ pub struct SearchConfig {
 pub struct FeaturesConfig {
     #[serde(default = "default_true")]
     pub capture_text: bool,
-    
+
     #[serde(default = "default_true")]
     pub capture_images: bool,
-    
+
     #[serde(default = "default_false")]
     pub capture_files: bool,
-    
+
     #[serde(default = "default_false")]
     pub sync_enabled: bool,
 }
@@ -126,16 +126,16 @@ pub struct FeaturesConfig {
 pub struct PrivacyConfig {
     #[serde(default = "default_true")]
     pub ignore_sensitive_apps: bool,
-    
+
     #[serde(default)]
     pub ignored_apps: Vec<String>,
-    
+
     #[serde(default = "default_false")]
     pub clear_on_exit: bool,
-    
+
     #[serde(default = "default_enable_image_capture")]
     pub enable_image_capture: bool,
-    
+
     #[serde(default = "default_max_image_size_mb")]
     pub max_image_size_mb: u32,
 }
@@ -144,7 +144,7 @@ pub struct PrivacyConfig {
 pub struct AdvancedConfig {
     #[serde(default = "default_log_level")]
     pub log_level: String,
-    
+
     pub database_path: Option<String>,
     pub ipc_socket: Option<String>,
 }
@@ -154,35 +154,35 @@ pub struct AutocompleteConfig {
     /// Habilitar autocomplete global
     #[serde(default = "default_autocomplete_enabled")]
     pub enabled: bool,
-    
+
     /// Número máximo de sugestões a mostrar
     #[serde(default = "default_autocomplete_max_suggestions")]
     pub max_suggestions: usize,
-    
+
     /// Número mínimo de caracteres para acionar autocomplete
     #[serde(default = "default_autocomplete_min_chars")]
     pub min_chars: usize,
-    
+
     /// Delay em ms antes de mostrar sugestões
     #[serde(default = "default_autocomplete_delay_ms")]
     pub delay_ms: u64,
-    
+
     /// Mostrar autocomplete em campos de senha
     #[serde(default = "default_false")]
     pub show_in_passwords: bool,
-    
+
     /// Apps onde autocomplete deve ser ignorado
     #[serde(default = "default_autocomplete_ignored_apps")]
     pub ignored_apps: Vec<String>,
-    
+
     /// Hotkey modifier para ativar/desativar autocomplete temporariamente
     #[serde(default = "default_autocomplete_toggle_modifier")]
     pub toggle_modifier: String,
-    
+
     /// Hotkey key para ativar/desativar autocomplete temporariamente
     #[serde(default = "default_autocomplete_toggle_key")]
     pub toggle_key: String,
-    
+
     /// Configurações de IA (Fase 2 - futuro)
     #[serde(default)]
     pub ai: AutocompleteAIConfig,
@@ -193,49 +193,103 @@ pub struct AutocompleteAIConfig {
     /// Habilitar sugestões via IA
     #[serde(default = "default_false")]
     pub enabled: bool,
-    
+
     /// Provider de IA (local, openai, anthropic)
     #[serde(default = "default_ai_provider")]
     pub provider: String,
-    
+
     /// Modelo de IA
     #[serde(default = "default_ai_model")]
     pub model: String,
-    
+
     /// API Key (se necessário)
     pub api_key: Option<String>,
 }
 
 // Default functions
-fn default_max_history() -> usize { 100 }
-fn default_poll_interval() -> u64 { 200 }
-fn default_max_text_size() -> usize { 10 * 1024 * 1024 }
-fn default_max_image_size() -> usize { 50 * 1024 * 1024 }
-fn default_hotkey_modifier() -> String { "super".to_string() }
-fn default_hotkey_key() -> String { "v".to_string() }
-fn default_theme() -> String { "system".to_string() }
-fn default_language() -> String { "en".to_string() }
-fn default_font_family() -> String { "Nunito".to_string() }
-fn default_font_size() -> u32 { 14 }
-fn default_window_width() -> u32 { 600 }
-fn default_window_height() -> u32 { 400 }
-fn default_window_position() -> String { "center".to_string() }
-fn default_window_opacity() -> f32 { 0.95 }
-fn default_log_level() -> String { "info".to_string() }
-fn default_true() -> bool { true }
-fn default_false() -> bool { false }
-fn default_enable_image_capture() -> bool { true }
-fn default_max_image_size_mb() -> u32 { 10 }
-fn default_enable_suggestions() -> bool { true }
-fn default_max_suggestions() -> usize { 3 }
-fn default_focus_search_modifier() -> String { "ctrl".to_string() }
-fn default_focus_search_key() -> String { "p".to_string() }
+fn default_max_history() -> usize {
+    100
+}
+fn default_poll_interval() -> u64 {
+    200
+}
+fn default_max_text_size() -> usize {
+    10 * 1024 * 1024
+}
+fn default_max_image_size() -> usize {
+    50 * 1024 * 1024
+}
+fn default_hotkey_modifier() -> String {
+    "super".to_string()
+}
+fn default_hotkey_key() -> String {
+    "v".to_string()
+}
+fn default_theme() -> String {
+    "system".to_string()
+}
+fn default_language() -> String {
+    "en".to_string()
+}
+fn default_font_family() -> String {
+    "Nunito".to_string()
+}
+fn default_font_size() -> u32 {
+    14
+}
+fn default_window_width() -> u32 {
+    600
+}
+fn default_window_height() -> u32 {
+    400
+}
+fn default_window_position() -> String {
+    "center".to_string()
+}
+fn default_window_opacity() -> f32 {
+    0.95
+}
+fn default_log_level() -> String {
+    "info".to_string()
+}
+fn default_true() -> bool {
+    true
+}
+fn default_false() -> bool {
+    false
+}
+fn default_enable_image_capture() -> bool {
+    true
+}
+fn default_max_image_size_mb() -> u32 {
+    10
+}
+fn default_enable_suggestions() -> bool {
+    true
+}
+fn default_max_suggestions() -> usize {
+    3
+}
+fn default_focus_search_modifier() -> String {
+    "ctrl".to_string()
+}
+fn default_focus_search_key() -> String {
+    "p".to_string()
+}
 
 // Autocomplete defaults
-fn default_autocomplete_enabled() -> bool { false }  // ⚠️ DESATIVADO POR PADRÃO (feature avançada)
-fn default_autocomplete_max_suggestions() -> usize { 3 }
-fn default_autocomplete_min_chars() -> usize { 2 }
-fn default_autocomplete_delay_ms() -> u64 { 300 }
+fn default_autocomplete_enabled() -> bool {
+    false
+} // ⚠️ DESATIVADO POR PADRÃO (feature avançada)
+fn default_autocomplete_max_suggestions() -> usize {
+    3
+}
+fn default_autocomplete_min_chars() -> usize {
+    2
+}
+fn default_autocomplete_delay_ms() -> u64 {
+    300
+}
 fn default_autocomplete_ignored_apps() -> Vec<String> {
     vec![
         "gnome-terminal".to_string(),
@@ -245,10 +299,18 @@ fn default_autocomplete_ignored_apps() -> Vec<String> {
         "1password".to_string(),
     ]
 }
-fn default_autocomplete_toggle_modifier() -> String { "CTRL".to_string() }
-fn default_autocomplete_toggle_key() -> String { "ALT".to_string() }
-fn default_ai_provider() -> String { "local".to_string() }
-fn default_ai_model() -> String { "gpt-4".to_string() }
+fn default_autocomplete_toggle_modifier() -> String {
+    "CTRL".to_string()
+}
+fn default_autocomplete_toggle_key() -> String {
+    "ALT".to_string()
+}
+fn default_ai_provider() -> String {
+    "local".to_string()
+}
+fn default_ai_model() -> String {
+    "gpt-4".to_string()
+}
 
 impl Default for Config {
     fn default() -> Self {
@@ -328,7 +390,7 @@ impl Default for Config {
 impl Default for AutocompleteConfig {
     fn default() -> Self {
         Self {
-            enabled: default_autocomplete_enabled(),  // ✅ ATIVADO POR PADRÃO
+            enabled: default_autocomplete_enabled(), // ✅ ATIVADO POR PADRÃO
             max_suggestions: default_autocomplete_max_suggestions(),
             min_chars: default_autocomplete_min_chars(),
             delay_ms: default_autocomplete_delay_ms(),
@@ -355,7 +417,7 @@ impl Default for AutocompleteAIConfig {
 impl Config {
     pub fn load() -> Result<Self> {
         let config_path = Self::config_path();
-        
+
         if !config_path.exists() {
             // Create default config
             let config = Self::default();
@@ -363,35 +425,31 @@ impl Config {
             return Ok(config);
         }
 
-        let contents = std::fs::read_to_string(&config_path)
-            .context("Failed to read config file")?;
-        
-        let config: Config = toml::from_str(&contents)
-            .context("Failed to parse config file")?;
-        
+        let contents =
+            std::fs::read_to_string(&config_path).context("Failed to read config file")?;
+
+        let config: Config = toml::from_str(&contents).context("Failed to parse config file")?;
+
         Ok(config)
     }
 
     pub fn save(&self) -> Result<()> {
         let config_path = Self::config_path();
-        
+
         // Create config directory if it doesn't exist
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
 
-        let contents = toml::to_string_pretty(self)
-            .context("Failed to serialize config")?;
-        
-        std::fs::write(&config_path, contents)
-            .context("Failed to write config file")?;
-        
+        let contents = toml::to_string_pretty(self).context("Failed to serialize config")?;
+
+        std::fs::write(&config_path, contents).context("Failed to write config file")?;
+
         Ok(())
     }
 
     pub fn config_path() -> PathBuf {
-        let mut path = dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from("."));
+        let mut path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
         path.push("clippit");
         path.push("config.toml");
         path

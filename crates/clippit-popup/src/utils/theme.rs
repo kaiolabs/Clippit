@@ -1,13 +1,13 @@
-use libadwaita as adw;
 use clippit_core::Config;
+use libadwaita as adw;
 
 /// Applies the theme configuration from the config
-/// 
+///
 /// # Arguments
 /// * `config` - The configuration containing theme settings
 pub fn apply_theme(config: &Config) {
     let style_manager = adw::StyleManager::default();
-    
+
     match config.ui.theme.as_str() {
         "dark" => style_manager.set_color_scheme(adw::ColorScheme::ForceDark),
         "light" => style_manager.set_color_scheme(adw::ColorScheme::ForceLight),
@@ -16,7 +16,7 @@ pub fn apply_theme(config: &Config) {
 }
 
 /// Loads custom CSS for the application
-/// 
+///
 /// Includes rounded corners for thumbnails and preview images
 pub fn load_custom_css() {
     let css_provider = gtk::CssProvider::new();
@@ -110,9 +110,9 @@ pub fn load_custom_css() {
         
         button.flat.circular:hover {
             opacity: 1;
-        }"
+        }",
     );
-    
+
     if let Some(display) = gtk::gdk::Display::default() {
         gtk::style_context_add_provider_for_display(
             &display,

@@ -72,7 +72,7 @@ pub struct TypingMonitor {
 impl TypingMonitor {
     pub fn new(history_manager: Arc<Mutex<HistoryManager>>) -> Self {
         let config = Config::load().unwrap_or_default();
-        
+
         Self {
             history_manager,
             typing_buffer: Arc::new(Mutex::new(TypingBuffer::new())),
@@ -98,7 +98,7 @@ impl TypingMonitor {
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_secs(2)).await;
-                
+
                 let mut buffer = buffer_clone.lock().unwrap();
                 if buffer.is_stale() && !buffer.chars.is_empty() {
                     debug!("🧹 Limpando buffer antigo");
@@ -132,7 +132,7 @@ impl TypingMonitor {
     /// Processa tecla pressionada
     fn process_key_press(&self, key: Key) {
         let mut buffer = self.typing_buffer.lock().unwrap();
-        
+
         match key {
             // Caracteres alfanuméricos
             Key::KeyA => buffer.push_char('a'),
@@ -161,7 +161,7 @@ impl TypingMonitor {
             Key::KeyX => buffer.push_char('x'),
             Key::KeyY => buffer.push_char('y'),
             Key::KeyZ => buffer.push_char('z'),
-            
+
             // Números
             Key::Num0 => buffer.push_char('0'),
             Key::Num1 => buffer.push_char('1'),
@@ -173,19 +173,19 @@ impl TypingMonitor {
             Key::Num7 => buffer.push_char('7'),
             Key::Num8 => buffer.push_char('8'),
             Key::Num9 => buffer.push_char('9'),
-            
+
             // Espaço e caracteres especiais
             Key::Space => {
                 buffer.push_char(' ');
                 // Limpar buffer após espaço (nova palavra)
                 buffer.clear();
             }
-            
+
             // Backspace
             Key::Backspace => {
                 buffer.pop_char();
             }
-            
+
             // Tab - aceitar sugestão
             Key::Tab => {
                 drop(buffer);
@@ -194,7 +194,7 @@ impl TypingMonitor {
                 }
                 return;
             }
-            
+
             // Setas - navegar sugestões
             Key::DownArrow => {
                 self.autocomplete_manager.next_suggestion();
@@ -204,13 +204,13 @@ impl TypingMonitor {
                 self.autocomplete_manager.previous_suggestion();
                 return;
             }
-            
+
             // Enter (nova linha = nova palavra)
             Key::Return | Key::ControlLeft | Key::ControlRight => {
                 buffer.clear();
                 self.autocomplete_manager.clear_suggestions();
             }
-            
+
             _ => {
                 // Outras teclas não nos interessam para autocompletar
                 return;
@@ -229,11 +229,15 @@ impl TypingMonitor {
 
         if current_word.len() >= min_chars {
             debug!("🔍 Buscando sugestões para: '{}'", current_word);
-            
+
             // Buscar sugestões do histórico
             if let Ok(suggestions) = self.get_suggestions(&current_word, max_suggestions) {
                 if !suggestions.is_empty() {
-                    info!("💡 Encontradas {} sugestões para '{}'", suggestions.len(), current_word);
+                    info!(
+                        "💡 Encontradas {} sugestões para '{}'",
+                        suggestions.len(),
+                        current_word
+                    );
                     self.show_suggestions(suggestions, current_word.clone());
                 } else {
                     // Limpar sugestões se não houver nenhuma
@@ -258,32 +262,35 @@ impl TypingMonitor {
                 // Extrair palavras do texto
                 for word in text.split_whitespace() {
                     let word_lower = word.to_lowercase();
-                    
+
                     // Filtrar palavras muito curtas ou que não começam com o prefixo
                     if word.len() < 3 || !word_lower.starts_with(&partial_lower) {
                         continue;
                     }
-                    
+
                     // Filtrar palavras técnicas/lixo
-                    if word.contains("::") || word.contains("->") || 
-                       word.contains("__") || word.len() > 30 {
+                    if word.contains("::")
+                        || word.contains("->")
+                        || word.contains("__")
+                        || word.len() > 30
+                    {
                         continue;
                     }
-                    
+
                     // Calcular score (quanto mais próximo do início, maior o score)
                     let score = 100 - (word.len() as i64 - partial_word.len() as i64).abs();
-                    
+
                     suggestions.push(Suggestion {
                         word: word.to_string(),
                         score,
                         source: SuggestionSource::History,
                     });
-                    
+
                     if suggestions.len() >= max_results {
                         break;
                     }
                 }
-                
+
                 if suggestions.len() >= max_results {
                     break;
                 }
@@ -305,7 +312,10 @@ impl TypingMonitor {
         }
 
         // Usar gerenciador de autocomplete
-        if let Err(e) = self.autocomplete_manager.show_suggestions(suggestions, partial_word) {
+        if let Err(e) = self
+            .autocomplete_manager
+            .show_suggestions(suggestions, partial_word)
+        {
             error!("❌ Erro ao mostrar sugestões: {}", e);
         }
     }

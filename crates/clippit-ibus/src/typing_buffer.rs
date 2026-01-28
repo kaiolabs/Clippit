@@ -49,7 +49,7 @@ impl TypingBuffer {
     }
 
     /// Retorna a palavra atual sendo digitada
-    /// 
+    ///
     /// Uma palavra é definida como uma sequência de caracteres alfanuméricos
     /// sem espaços ou pontuação
     pub fn current_word(&self) -> Option<String> {
@@ -70,7 +70,7 @@ impl TypingBuffer {
             .unwrap_or(self.buffer.len());
 
         let word = &self.buffer[start..end];
-        
+
         if word.is_empty() {
             None
         } else {
@@ -151,7 +151,7 @@ mod tests {
         buffer.push_char('e');
         buffer.push_char('s');
         buffer.push_char('t');
-        
+
         buffer.pop_char();
         assert_eq!(buffer.current_word(), Some("tes".to_string()));
     }
