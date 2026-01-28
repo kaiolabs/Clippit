@@ -13,7 +13,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "1.9.6"
+version = "1.10.0"
 edition = "2021"
 authors = ["Clippit Team"]
 license = "MIT"
@@ -63,6 +63,9 @@ sha2 = "0.10"
 
 # Image processing
 image = "0.25"
+
+# OCR (Optical Character Recognition)
+tesseract = "0.15"
 
 # Configuration
 toml = "0.8"
