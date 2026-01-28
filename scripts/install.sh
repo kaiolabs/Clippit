@@ -90,12 +90,14 @@ cat > ~/.config/systemd/user/clippit.service << EOF
 [Unit]
 Description=Clippit Clipboard Manager
 After=graphical-session.target
+Wants=graphical-session.target
 
 [Service]
 Type=simple
 ExecStart=%h/.local/bin/clippit-daemon
-Restart=on-failure
-RestartSec=5
+Restart=always
+RestartSec=3
+Environment=RUST_LOG=info
 
 [Install]
 WantedBy=default.target
