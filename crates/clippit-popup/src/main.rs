@@ -156,7 +156,7 @@ fn build_ui(app: &Application) {
     load_custom_css();
 
     // Create main window structure (no toast overlay - using system notifications)
-    let (window, list_box, scrolled, search_entry) = create_main_window(app);
+    let (window, list_box, scrolled, search_entry, close_timeout_id) = create_main_window(app);
 
     // Create data structures
     let entry_map = new_entry_map();
@@ -187,6 +187,7 @@ fn build_ui(app: &Application) {
     let entry_map_clone = entry_map.clone();
     let search_map_clone = search_map.clone();
     let search_entry_clone = search_entry.clone();
+    let close_timeout_id_clone = close_timeout_id.clone();
 
     gtk::glib::idle_add_local_once(move || {
         // Remove skeleton loaders
@@ -218,7 +219,7 @@ fn build_ui(app: &Application) {
             }
         });
 
-        // Setup search filtering (with ability to reload list)
+        // Setup search filtering (with ability to reload list) + passar close_timeout_id
         setup_search_filter(
             &list_box_clone,
             &search_entry_clone,
@@ -226,6 +227,7 @@ fn build_ui(app: &Application) {
             &window_clone,
             &app_clone,
             &entry_map_clone,
+            Some(close_timeout_id_clone),
         );
 
         // Setup row activation (click)

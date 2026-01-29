@@ -15,6 +15,7 @@ pub fn create_main_window(
     gtk::ListBox,
     ScrolledWindow,
     SearchEntry,
+    Rc<RefCell<Option<gtk::glib::SourceId>>>,
 ) {
     // Create search entry
     let search_entry = gtk::SearchEntry::new();
@@ -60,22 +61,12 @@ pub fn create_main_window(
         .content(&main_box)
         .build();
 
-    // Auto-close on focus loss with intelligent delay (passa search_entry para verificar foco)
+    // Auto-close on focus loss with intelligent delay (retorna timeout_id para passar ao search_filter)
     let close_timeout_id = setup_auto_close(&window, &search_entry);
-    
-    // Cancelar auto-close quando usuário digitar (proteção adicional)
-    let search_entry_for_typing = search_entry.clone();
-    search_entry.connect_changed(move |_| {
-        // Quando usuário digita, CANCELA qualquer timeout de fechamento pendente
-        if let Some(id) = close_timeout_id.borrow_mut().take() {
-            id.remove();
-            eprintln!("⚡ Usuário digitando - auto-close CANCELADO!");
-        }
-    });
 
     eprintln!("🔵 Window: adw::ApplicationWindow, 700x550 (auto-close inteligente 1500ms + system notifications)");
 
-    (window, list_box, scrolled, search_entry_for_typing)
+    (window, list_box, scrolled, search_entry, close_timeout_id)
 }
 
 fn setup_auto_close(window: &adw::ApplicationWindow, search_entry: &SearchEntry) -> Rc<RefCell<Option<gtk::glib::SourceId>>> {

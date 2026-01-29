@@ -20,6 +20,7 @@ pub fn setup_search_filter(
     window: &adw::ApplicationWindow,
     app: &gtk::Application,
     entry_map: &Rc<RefCell<std::collections::HashMap<i32, i64>>>,
+    close_timeout_id: Option<Rc<RefCell<Option<gtk::glib::SourceId>>>>,
 ) {
     let list_box_for_search = list_box.clone();
     let window_for_search = window.clone();
@@ -244,9 +245,18 @@ pub fn setup_search_filter(
     // Debounce: aguarda 300ms após parar de digitar antes de buscar
     let search_timeout_id: Rc<RefCell<Option<gtk::glib::SourceId>>> = Rc::new(RefCell::new(None));
     let search_timeout_for_changed = search_timeout_id.clone();
+    let close_timeout_for_changed = close_timeout_id.clone();
 
     search_entry.connect_changed(move |entry| {
         let text = entry.text().to_string();
+
+        // CRÍTICO: Cancelar auto-close quando usuário digita (proteção contra fechamento)
+        if let Some(ref close_id) = close_timeout_for_changed {
+            if let Some(id) = close_id.borrow_mut().take() {
+                id.remove();
+                eprintln!("⚡ Usuário digitando - auto-close CANCELADO!");
+            }
+        }
 
         // Cancelar busca anterior (debounce)
         if let Some(id) = search_timeout_for_changed.borrow_mut().take() {
