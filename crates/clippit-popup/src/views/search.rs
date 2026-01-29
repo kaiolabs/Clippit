@@ -253,14 +253,14 @@ pub fn setup_search_filter(
         // CRÍTICO: Cancelar auto-close quando usuário digita (proteção contra fechamento)
         if let Some(ref close_id) = close_timeout_for_changed {
             if let Some(id) = close_id.borrow_mut().take() {
-                id.remove();
+                let _ = id.remove(); // Ignore error if source was already removed
                 eprintln!("⚡ Usuário digitando - auto-close CANCELADO!");
             }
         }
 
         // Cancelar busca anterior (debounce)
         if let Some(id) = search_timeout_for_changed.borrow_mut().take() {
-            id.remove();
+            let _ = id.remove(); // Ignore error if source was already removed
         }
 
         // 🔍 BUSCA COM DEBOUNCE (300ms após parar de digitar)

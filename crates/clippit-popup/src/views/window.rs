@@ -91,7 +91,7 @@ fn setup_auto_close(window: &adw::ApplicationWindow, search_entry: &SearchEntry)
                     eprintln!("⏸️  Popup perdeu foco MAS há texto ('{}') - auto-close DESABILITADO!", search_text);
                     // Cancelar qualquer timeout existente (proteção adicional)
                     if let Some(id) = close_timeout_for_init.borrow_mut().take() {
-                        id.remove();
+                        let _ = id.remove(); // Ignore error if source was already removed
                         eprintln!("   ↩️  Timeout existente cancelado");
                     }
                     return;
@@ -101,7 +101,7 @@ fn setup_auto_close(window: &adw::ApplicationWindow, search_entry: &SearchEntry)
                 
                 // Cancelar timeout anterior se existir (usuário voltou o foco rapidamente)
                 if let Some(id) = close_timeout_for_init.borrow_mut().take() {
-                    id.remove();
+                    let _ = id.remove(); // Ignore error if source was already removed
                     eprintln!("   ↩️  Timeout anterior cancelado");
                 }
                 
@@ -131,7 +131,7 @@ fn setup_auto_close(window: &adw::ApplicationWindow, search_entry: &SearchEntry)
                 eprintln!("🟢 Popup ganhou o foco - cancelando auto-close");
                 // Cancelar timeout se ganhar foco de volta
                 if let Some(id) = close_timeout_for_init.borrow_mut().take() {
-                    id.remove();
+                    let _ = id.remove(); // Ignore error if source was already removed
                     eprintln!("   ↩️  Auto-close cancelado (foco recuperado)");
                 }
             }
