@@ -99,32 +99,22 @@ fn handle_lock_file() -> Result<()> {
 
                     // Se processo está rodando (não é zombie)
                     if !stat.trim().is_empty() && !stat.trim().starts_with('Z') {
-                        eprintln!("🔄 Popup já rodando (PID: {}) - fechando (toggle)", pid);
-
-                        // Enviar SIGTERM para fechar
-                        let _ = std::process::Command::new("kill")
-                            .args(&["-TERM", &pid.to_string()])
-                            .output();
-
-                        // Aguardar processo fechar (até 500ms)
-                        for i in 0..10 {
-                            std::thread::sleep(std::time::Duration::from_millis(50));
-
-                            let check = std::process::Command::new("ps")
-                                .args(&["-p", &pid.to_string()])
-                                .output();
-
-                            if let Ok(output) = check {
-                                if !output.status.success() {
-                                    eprintln!("✅ Popup fechado após {}ms", (i + 1) * 50);
-                                    break;
-                                }
-                            }
+                        eprintln!("🔄 Popup já rodando (PID: {}) - dando foco ao invés de fechar", pid);
+                        
+                        // Tentar dar foco à janela existente ao invés de matar o processo
+                        // Usa wmctrl ou xdotool para focar a janela do popup
+                        let focus_success = std::process::Command::new("wmctrl")
+                            .args(&["-a", "Clippit"])
+                            .output()
+                            .map(|o| o.status.success())
+                            .unwrap_or(false);
+                        
+                        if focus_success {
+                            eprintln!("✅ Foco dado ao popup existente - saindo");
+                        } else {
+                            eprintln!("⚠️  wmctrl não disponível - popup já aberto mas não conseguiu dar foco");
                         }
-
-                        // Limpar lock file
-                        std::fs::remove_file(lock_file).ok();
-                        eprintln!("✅ Toggle completo - saindo");
+                        
                         std::process::exit(0);
                     } else {
                         eprintln!(
