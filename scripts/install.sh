@@ -41,27 +41,46 @@ elif [ "$XDG_SESSION_TYPE" == "x11" ]; then
     echo "   Please switch to a Wayland session to use Clippit."
 fi
 
-# Check for Tesseract OCR (required for OCR feature)
+# Check and install system dependencies
 echo ""
-echo "🔍 Checking Tesseract OCR dependencies..."
+echo "🔍 Verificando dependências do sistema..."
+DEPS_TO_INSTALL=()
+
+# 1. Tesseract OCR (necessário para feature OCR)
 if ! command -v tesseract &> /dev/null; then
-    echo "⚠️  Tesseract OCR not found. Installing for OCR feature..."
-    sudo apt-get update -qq
-    sudo apt-get install -y tesseract-ocr libtesseract-dev tesseract-ocr-por tesseract-ocr-eng
-    echo "✅ Tesseract OCR installed"
+    echo "⚠️  Tesseract OCR não encontrado"
+    DEPS_TO_INSTALL+=(tesseract-ocr libtesseract-dev tesseract-ocr-por tesseract-ocr-eng)
 else
-    echo "✅ Tesseract OCR already installed"
+    echo "✅ Tesseract OCR já instalado"
     
-    # Verificar se idiomas estão instalados
+    # Verificar idiomas
     if ! tesseract --list-langs 2>/dev/null | grep -q "por"; then
-        echo "⚠️  Portuguese language data not found. Installing..."
-        sudo apt-get install -y tesseract-ocr-por
+        echo "⚠️  Dados de idioma português não encontrados"
+        DEPS_TO_INSTALL+=(tesseract-ocr-por)
     fi
     if ! tesseract --list-langs 2>/dev/null | grep -q "eng"; then
-        echo "⚠️  English language data not found. Installing..."
-        sudo apt-get install -y tesseract-ocr-eng
+        echo "⚠️  Dados de idioma inglês não encontrados"
+        DEPS_TO_INSTALL+=(tesseract-ocr-eng)
     fi
-    echo "✅ OCR language data verified (por+eng)"
+fi
+
+# 2. wmctrl (necessário para gerenciamento de foco do popup)
+if ! command -v wmctrl &> /dev/null; then
+    echo "⚠️  wmctrl não encontrado (necessário para gerenciar foco do popup)"
+    DEPS_TO_INSTALL+=(wmctrl)
+else
+    echo "✅ wmctrl já instalado"
+fi
+
+# Instalar todas as dependências faltantes de uma vez
+if [ ${#DEPS_TO_INSTALL[@]} -gt 0 ]; then
+    echo ""
+    echo "📦 Instalando dependências faltantes: ${DEPS_TO_INSTALL[*]}"
+    sudo apt-get update -qq
+    sudo apt-get install -y "${DEPS_TO_INSTALL[@]}"
+    echo "✅ Todas as dependências instaladas com sucesso!"
+else
+    echo "✅ Todas as dependências já instaladas!"
 fi
 echo ""
 
