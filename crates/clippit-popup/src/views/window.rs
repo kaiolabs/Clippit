@@ -85,14 +85,19 @@ fn setup_auto_close(window: &adw::ApplicationWindow, search_entry: &SearchEntry)
 
         window_for_init.connect_is_active_notify(move |win| {
             if !win.is_active() {
-                // CRÍTICO: Não fechar se há texto no campo de pesquisa (usuário está usando)
+                // CRÍTICO: Não agendar timeout se há texto no campo de pesquisa
                 let search_text = search_entry_for_init.text();
                 if !search_text.is_empty() {
-                    eprintln!("⏸️  Popup perdeu foco MAS há texto no campo ('{}') - NÃO fechando!", search_text);
+                    eprintln!("⏸️  Popup perdeu foco MAS há texto ('{}') - auto-close DESABILITADO!", search_text);
+                    // Cancelar qualquer timeout existente (proteção adicional)
+                    if let Some(id) = close_timeout_for_init.borrow_mut().take() {
+                        id.remove();
+                        eprintln!("   ↩️  Timeout existente cancelado");
+                    }
                     return;
                 }
                 
-                eprintln!("🔴 Popup perdeu o foco (campo vazio) - aguardando 1500ms antes de fechar...");
+                eprintln!("🔴 Popup perdeu foco (campo vazio) - aguardando 1500ms...");
                 
                 // Cancelar timeout anterior se existir (usuário voltou o foco rapidamente)
                 if let Some(id) = close_timeout_for_init.borrow_mut().take() {
