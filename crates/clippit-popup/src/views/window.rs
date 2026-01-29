@@ -61,17 +61,28 @@ pub fn create_main_window(
         .build();
 
     // Auto-close on focus loss with intelligent delay (passa search_entry para verificar foco)
-    setup_auto_close(&window, &search_entry);
+    let close_timeout_id = setup_auto_close(&window, &search_entry);
+    
+    // Cancelar auto-close quando usuário digitar (proteção adicional)
+    let search_entry_for_typing = search_entry.clone();
+    search_entry.connect_changed(move |_| {
+        // Quando usuário digita, CANCELA qualquer timeout de fechamento pendente
+        if let Some(id) = close_timeout_id.borrow_mut().take() {
+            id.remove();
+            eprintln!("⚡ Usuário digitando - auto-close CANCELADO!");
+        }
+    });
 
     eprintln!("🔵 Window: adw::ApplicationWindow, 700x550 (auto-close inteligente 1500ms + system notifications)");
 
-    (window, list_box, scrolled, search_entry)
+    (window, list_box, scrolled, search_entry_for_typing)
 }
 
-fn setup_auto_close(window: &adw::ApplicationWindow, search_entry: &SearchEntry) {
+fn setup_auto_close(window: &adw::ApplicationWindow, search_entry: &SearchEntry) -> Rc<RefCell<Option<gtk::glib::SourceId>>> {
     let window_for_focus = window.clone();
     let search_entry_for_focus = search_entry.clone();
     let close_timeout_id: Rc<RefCell<Option<gtk::glib::SourceId>>> = Rc::new(RefCell::new(None));
+    let close_timeout_id_return = close_timeout_id.clone();
 
     // Delay inicial antes de habilitar auto-close (dar tempo para o usuário começar a usar)
     let window_for_init = window.clone();
@@ -130,4 +141,6 @@ fn setup_auto_close(window: &adw::ApplicationWindow, search_entry: &SearchEntry)
             }
         });
     });
+    
+    close_timeout_id_return
 }
