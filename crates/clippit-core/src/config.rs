@@ -13,6 +13,8 @@ pub struct Config {
     pub advanced: AdvancedConfig,
     #[serde(default)]
     pub autocomplete: AutocompleteConfig,
+    #[serde(default)]
+    pub ocr: OCRConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,6 +122,9 @@ pub struct FeaturesConfig {
 
     #[serde(default = "default_false")]
     pub sync_enabled: bool,
+
+    #[serde(default = "default_true")]
+    pub enable_ocr: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,6 +209,26 @@ pub struct AutocompleteAIConfig {
 
     /// API Key (se necessário)
     pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OCRConfig {
+    /// Idiomas para OCR (ex: "por+eng" para português e inglês)
+    #[serde(default = "default_ocr_languages")]
+    pub languages: String,
+
+    /// Timeout para processamento OCR (segundos)
+    #[serde(default = "default_ocr_timeout")]
+    pub timeout_seconds: u64,
+}
+
+impl Default for OCRConfig {
+    fn default() -> Self {
+        Self {
+            languages: default_ocr_languages(),
+            timeout_seconds: default_ocr_timeout(),
+        }
+    }
 }
 
 // Default functions
@@ -312,6 +337,14 @@ fn default_ai_model() -> String {
     "gpt-4".to_string()
 }
 
+// OCR defaults
+fn default_ocr_languages() -> String {
+    "por+eng".to_string()
+}
+fn default_ocr_timeout() -> u64 {
+    5
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -365,6 +398,7 @@ impl Default for Config {
                 capture_images: true,
                 capture_files: false,
                 sync_enabled: false,
+                enable_ocr: true,
             },
             privacy: PrivacyConfig {
                 ignore_sensitive_apps: true,
@@ -383,6 +417,7 @@ impl Default for Config {
                 ipc_socket: None,
             },
             autocomplete: AutocompleteConfig::default(),
+            ocr: OCRConfig::default(),
         }
     }
 }

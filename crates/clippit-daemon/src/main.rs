@@ -1,6 +1,7 @@
 mod autocomplete_manager;
 mod hotkey;
 mod monitor;
+mod ocr_processor;
 mod typing_monitor;
 
 use anyhow::Result;
@@ -116,6 +117,7 @@ fn handle_ipc_message(
                             thumbnail_data: e.thumbnail_data,
                             image_width: e.image_width,
                             image_height: e.image_height,
+                            ocr_text: e.ocr_text,
                             timestamp: e.timestamp,
                         })
                         .collect();
@@ -147,6 +149,7 @@ fn handle_ipc_message(
                             thumbnail_data: e.thumbnail_data, // Include thumbnail data
                             image_width: e.image_width,
                             image_height: e.image_height,
+                            ocr_text: e.ocr_text,
                             timestamp: e.timestamp,
                         })
                         .collect();
@@ -166,7 +169,14 @@ fn handle_ipc_message(
 
         IpcMessage::SearchHistory { query } => {
             let manager = history_manager.lock().unwrap();
-            match manager.search(&query) {
+            // If query is empty, return recent entries (1000 = effectively all)
+            let result = if query.trim().is_empty() {
+                manager.get_recent(1000)
+            } else {
+                manager.search(&query)
+            };
+            
+            match result {
                 Ok(entries) => {
                     let ipc_entries: Vec<HistoryEntry> = entries
                         .into_iter()
@@ -182,6 +192,7 @@ fn handle_ipc_message(
                             thumbnail_data: e.thumbnail_data,
                             image_width: e.image_width,
                             image_height: e.image_height,
+                            ocr_text: e.ocr_text,
                             timestamp: e.timestamp,
                         })
                         .collect();
@@ -202,11 +213,18 @@ fn handle_ipc_message(
 
         IpcMessage::SearchHistoryWithLimit { query, limit } => {
             let manager = history_manager.lock().unwrap();
-            match manager.search(&query) {
+            // If query is empty, return recent entries
+            let result = if query.trim().is_empty() {
+                manager.get_recent(limit)
+            } else {
+                manager.search(&query)
+            };
+            
+            match result {
                 Ok(entries) => {
                     let ipc_entries: Vec<HistoryEntry> = entries
                         .into_iter()
-                        .take(limit) // Limit results
+                        .take(limit) // Limit results (for search case)
                         .map(|e| HistoryEntry {
                             id: e.id,
                             content_type: match e.content_type {
@@ -219,6 +237,7 @@ fn handle_ipc_message(
                             thumbnail_data: e.thumbnail_data,
                             image_width: e.image_width,
                             image_height: e.image_height,
+                            ocr_text: e.ocr_text,
                             timestamp: e.timestamp,
                         })
                         .collect();
@@ -289,6 +308,7 @@ fn handle_ipc_message(
                         thumbnail_data: entry.thumbnail_data, // Include thumbnail data
                         image_width: entry.image_width,
                         image_height: entry.image_height,
+                        ocr_text: entry.ocr_text,
                         timestamp: entry.timestamp,
                     };
                     info!("✅ Returned full data for entry {}", id);

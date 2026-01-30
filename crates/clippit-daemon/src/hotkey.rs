@@ -144,9 +144,9 @@ fn notify_ui_show_popup() -> Result<()> {
     // Launch clippit-popup (Wayland-native, no window ID needed)
     info!("🚀 Opening popup...");
     eprintln!("🚀🚀🚀 EXECUTING: clippit-popup");
-    eprintln!("🔍 Binary path: /usr/local/bin/clippit-popup");
-
-    let result = std::process::Command::new("/usr/local/bin/clippit-popup")
+    
+    // Use 'clippit-popup' from PATH (supports both ~/.local/bin and /usr/local/bin)
+    let result = std::process::Command::new("clippit-popup")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::inherit())

@@ -183,6 +183,31 @@ fn create_image_row(row: &adw::ActionRow, entry: &clippit_ipc::HistoryEntry) {
 
         row.set_title(&image_info);
 
+        // Add OCR text as subtitle if available
+        if let Some(ocr_text) = &entry.ocr_text {
+            if !ocr_text.trim().is_empty() {
+                // Show ONLY first line, max 60 chars (compact preview)
+                let first_line = ocr_text.lines().next().unwrap_or("");
+                let char_limit = 60;
+                
+                let subtitle = if first_line.len() > char_limit {
+                    format!("{}...", &first_line[..char_limit])
+                } else {
+                    first_line.to_string()
+                };
+                
+                // CRITICAL: Escape markup characters to prevent GTK warnings
+                // Replace <, >, & with their HTML entities
+                let escaped_subtitle = subtitle
+                    .replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;");
+                
+                row.set_subtitle(&escaped_subtitle);
+                eprintln!("📝 OCR subtitle: '{}' (from {} chars total)", escaped_subtitle, ocr_text.len());
+            }
+        }
+
         // Process thumbnail (optimized: thumbnails are small and fast to decode)
         // Main optimization is limiting results to 100 via search_history_with_limit
         match create_thumbnail(data, 128) {

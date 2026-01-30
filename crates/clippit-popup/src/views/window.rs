@@ -2,6 +2,8 @@ use gtk::prelude::*;
 use gtk::{ScrolledWindow, SearchEntry};
 use libadwaita as adw;
 use rust_i18n::t;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// Creates the main popup window with list and search
 ///
@@ -13,6 +15,7 @@ pub fn create_main_window(
     gtk::ListBox,
     ScrolledWindow,
     SearchEntry,
+    Rc<RefCell<Option<gtk::glib::SourceId>>>,
 ) {
     // Create search entry
     let search_entry = gtk::SearchEntry::new();
@@ -58,28 +61,98 @@ pub fn create_main_window(
         .content(&main_box)
         .build();
 
-    // Auto-close on focus loss with intelligent delay
-    setup_auto_close(&window);
+    // Auto-close on focus loss with intelligent delay (retorna timeout_id para passar ao search_filter)
+    let close_timeout_id = setup_auto_close(&window, &search_entry);
 
-    eprintln!("🔵 Window: adw::ApplicationWindow, 700x550 (auto-close inteligente 500ms + system notifications)");
+    eprintln!("🔵 Window: adw::ApplicationWindow, 700x550 (auto-close inteligente 1500ms + system notifications)");
 
-    (window, list_box, scrolled, search_entry)
+    (window, list_box, scrolled, search_entry, close_timeout_id)
 }
 
-fn setup_auto_close(window: &adw::ApplicationWindow) {
+fn setup_auto_close(window: &adw::ApplicationWindow, search_entry: &SearchEntry) -> Rc<RefCell<Option<gtk::glib::SourceId>>> {
     let window_for_focus = window.clone();
+    let search_entry_for_focus = search_entry.clone();
+    let close_timeout_id: Rc<RefCell<Option<gtk::glib::SourceId>>> = Rc::new(RefCell::new(None));
+    let close_timeout_id_return = close_timeout_id.clone();
 
     // Delay inicial antes de habilitar auto-close (dar tempo para o usuário começar a usar)
     let window_for_init = window.clone();
+    let search_entry_for_init = search_entry.clone();
+    let close_timeout_for_init = close_timeout_id.clone();
+    
     gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(300), move || {
         eprintln!("🔵 Auto-close habilitado após 300ms");
 
         window_for_init.connect_is_active_notify(move |win| {
             if !win.is_active() {
-                eprintln!("🔴 Popup perdeu o foco - fechando imediatamente...");
+                // CRÍTICO: Não agendar timeout se há texto no campo de pesquisa
+                let search_text = search_entry_for_init.text();
+                if !search_text.is_empty() {
+                    eprintln!("⏸️  Popup perdeu foco MAS há texto ('{}') - auto-close DESABILITADO!", search_text);
+                    // Cancelar qualquer timeout existente (proteção adicional)
+                    if let Some(id) = close_timeout_for_init.borrow_mut().take() {
+                        // NÃO chamar remove() - apenas dropar o SourceId
+                        // O GTK remove automaticamente quando o SourceId é dropado
+                        drop(id);
+                        eprintln!("   ↩️  Timeout existente cancelado (via drop)");
+                    }
+                    return;
+                }
+                
+                eprintln!("🔴 Popup perdeu foco (campo vazio) - aguardando 3000ms...");
+                
+                // Cancelar timeout anterior se existir (usuário voltou o foco rapidamente)
+                if let Some(id) = close_timeout_for_init.borrow_mut().take() {
+                    drop(id); // NÃO chamar remove() - deixa o GTK limpar
+                    eprintln!("   ↩️  Timeout anterior cancelado (via drop)");
+                }
+                
+                // Agendar fechamento após 3000ms (tempo maior para evitar fechamento acidental)
                 let window_to_close = window_for_focus.clone();
-                window_to_close.close();
+                let search_entry_to_check = search_entry_for_focus.clone();
+                let timeout_id = gtk::glib::timeout_add_local_once(
+                    std::time::Duration::from_millis(3000),
+                    move || {
+                        eprintln!("🔔 Auto-close timeout disparou após 3000ms - verificando condições...");
+                        
+                        // VERIFICAÇÃO 1: Há texto no campo?
+                        let search_text = search_entry_to_check.text();
+                        if !search_text.is_empty() {
+                            eprintln!("   ⏸️  BLOQUEADO: há texto no campo ('{}') - NÃO fechando!", search_text);
+                            return;
+                        }
+                        eprintln!("   ✓ Campo de pesquisa vazio");
+                        
+                        // VERIFICAÇÃO 2: Janela tem foco?
+                        if window_to_close.is_active() {
+                            eprintln!("   ⏸️  BLOQUEADO: janela está ativa - NÃO fechando!");
+                            return;
+                        }
+                        eprintln!("   ✓ Janela não está ativa");
+                        
+                        // VERIFICAÇÃO 3: Campo de pesquisa tem foco?
+                        if search_entry_to_check.has_focus() {
+                            eprintln!("   ⏸️  BLOQUEADO: campo de pesquisa tem foco - NÃO fechando!");
+                            return;
+                        }
+                        eprintln!("   ✓ Campo não tem foco");
+                        
+                        // TODAS as verificações passaram - pode fechar
+                        eprintln!("   ✅ Fechando popup (sem foco por 3000ms, campo vazio, sem interação)");
+                        window_to_close.close();
+                    }
+                );
+                *close_timeout_for_init.borrow_mut() = Some(timeout_id);
+            } else {
+                eprintln!("🟢 Popup ganhou o foco - cancelando auto-close");
+                // Cancelar timeout se ganhar foco de volta
+                if let Some(id) = close_timeout_for_init.borrow_mut().take() {
+                    drop(id); // NÃO chamar remove() - deixa o GTK limpar
+                    eprintln!("   ↩️  Auto-close cancelado (foco recuperado via drop)");
+                }
             }
         });
     });
+    
+    close_timeout_id_return
 }

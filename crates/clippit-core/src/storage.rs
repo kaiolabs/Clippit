@@ -3,6 +3,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use std::path::Path;
+use std::time::Duration;
 
 pub struct Storage {
     conn: Connection,
@@ -24,6 +25,10 @@ impl Storage {
     }
 
     fn initialize(&self) -> Result<()> {
+        // Configure SQLite for concurrent access (OCR thread writes while monitor reads)
+        self.conn.pragma_update(None, "journal_mode", "WAL")?;
+        self.conn.busy_timeout(Duration::from_secs(5))?; // Wait up to 5s for locks
+
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS clipboard_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,30 +71,60 @@ impl Storage {
             [],
         );
 
-        // Create FTS5 virtual table for fast text search
+        // Migration: Add ocr_text column if it doesn't exist (for OCR feature)
         let _ = self.conn.execute(
-            "CREATE VIRTUAL TABLE IF NOT EXISTS clipboard_history_fts
-             USING fts5(content_text, content='clipboard_history', content_rowid='id')",
+            "ALTER TABLE clipboard_history ADD COLUMN ocr_text TEXT",
             [],
         );
 
-        // Trigger to keep FTS5 table synchronized on INSERT
+        // Check if FTS5 table has ocr_text column (migration)
+        let needs_fts_migration = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('clipboard_history_fts') WHERE name='ocr_text'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+            == 0;
+
+        if needs_fts_migration {
+            // Drop and recreate FTS5 table with ocr_text
+            let _ = self.conn.execute("DROP TABLE IF EXISTS clipboard_history_fts", []);
+            let _ = self.conn.execute("DROP TRIGGER IF EXISTS clipboard_history_ai", []);
+            let _ = self.conn.execute("DROP TRIGGER IF EXISTS clipboard_history_au", []);
+            let _ = self.conn.execute("DROP TRIGGER IF EXISTS clipboard_history_ad", []);
+        }
+
+        // Create FTS5 virtual table for fast text search (includes ocr_text)
+        // NOTE: NOT using external content to avoid trigger complexity and "malformed database" errors
+        // Data is duplicated in FTS5 table, but this is the recommended approach for reliability
+        let _ = self.conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS clipboard_history_fts
+             USING fts5(content_text, ocr_text)",
+            [],
+        );
+
+        // Trigger to keep FTS5 table synchronized on INSERT (includes ocr_text)
+        // COALESCE ensures NULL is converted to empty string (FTS5 doesn't support NULL)
         let _ = self.conn.execute(
             "CREATE TRIGGER IF NOT EXISTS clipboard_history_ai
              AFTER INSERT ON clipboard_history BEGIN
-                 INSERT INTO clipboard_history_fts(rowid, content_text)
-                 VALUES (new.id, new.content_text);
+                 INSERT INTO clipboard_history_fts(rowid, content_text, ocr_text)
+                 VALUES (new.id, COALESCE(new.content_text, ''), COALESCE(new.ocr_text, ''));
              END",
             [],
         );
 
-        // Trigger to keep FTS5 table synchronized on UPDATE
+        // Trigger to keep FTS5 table synchronized on UPDATE (includes ocr_text)
+        // COALESCE ensures NULL is converted to empty string (FTS5 doesn't support NULL)
+        // DELETE + INSERT approach is more reliable than UPDATE for FTS5
         let _ = self.conn.execute(
             "CREATE TRIGGER IF NOT EXISTS clipboard_history_au
              AFTER UPDATE ON clipboard_history BEGIN
-                 UPDATE clipboard_history_fts
-                 SET content_text = new.content_text
-                 WHERE rowid = new.id;
+                 DELETE FROM clipboard_history_fts WHERE rowid = old.id;
+                 INSERT INTO clipboard_history_fts(rowid, content_text, ocr_text)
+                 VALUES (new.id, COALESCE(new.content_text, ''), COALESCE(new.ocr_text, ''));
              END",
             [],
         );
@@ -117,10 +152,11 @@ impl Storage {
 
         if let (Ok(fts_cnt), Ok(main_cnt)) = (fts_count, main_count) {
             if fts_cnt == 0 && main_cnt > 0 {
-                // Rebuild FTS index from existing data
+                // Rebuild FTS index from existing data (includes ocr_text)
                 let _ = self.conn.execute(
-                    "INSERT INTO clipboard_history_fts(rowid, content_text)
-                     SELECT id, content_text FROM clipboard_history WHERE content_text IS NOT NULL",
+                    "INSERT INTO clipboard_history_fts(rowid, content_text, ocr_text)
+                     SELECT id, content_text, ocr_text FROM clipboard_history 
+                     WHERE content_text IS NOT NULL OR ocr_text IS NOT NULL",
                     [],
                 );
             }
@@ -138,8 +174,8 @@ impl Storage {
         let timestamp = entry.timestamp.to_rfc3339();
 
         self.conn.execute(
-            "INSERT INTO clipboard_history (content_type, content_text, content_data, image_path, thumbnail_data, image_width, image_height, timestamp)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO clipboard_history (content_type, content_text, content_data, image_path, thumbnail_data, image_width, image_height, ocr_text, timestamp)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 content_type_str,
                 entry.content_text,
@@ -148,6 +184,7 @@ impl Storage {
                 entry.thumbnail_data,
                 entry.image_width,
                 entry.image_height,
+                entry.ocr_text,
                 timestamp,
             ],
         )?;
@@ -157,7 +194,7 @@ impl Storage {
 
     pub fn get_recent(&self, limit: usize) -> Result<Vec<ClipboardEntry>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, content_type, content_text, content_data, image_path, thumbnail_data, image_width, image_height, timestamp
+            "SELECT id, content_type, content_text, content_data, image_path, thumbnail_data, image_width, image_height, ocr_text, timestamp
              FROM clipboard_history
              ORDER BY timestamp DESC
              LIMIT ?1",
@@ -171,7 +208,7 @@ impl Storage {
                 _ => ContentType::Text,
             };
 
-            let timestamp_str: String = row.get(8)?;
+            let timestamp_str: String = row.get(9)?;
             let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
                 .unwrap_or_else(|_| Utc::now().into())
                 .with_timezone(&Utc);
@@ -185,6 +222,7 @@ impl Storage {
                 thumbnail_data: row.get(5)?,
                 image_width: row.get(6)?,
                 image_height: row.get(7)?,
+                ocr_text: row.get(8)?,
                 timestamp,
             })
         })?;
@@ -210,6 +248,7 @@ impl Storage {
                     thumbnail_data,
                     image_width,
                     image_height,
+                    ocr_text,
                     timestamp
              FROM clipboard_history
              ORDER BY timestamp DESC
@@ -224,7 +263,7 @@ impl Storage {
                 _ => ContentType::Text,
             };
 
-            let timestamp_str: String = row.get(8)?;
+            let timestamp_str: String = row.get(9)?;
             let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
                 .unwrap_or_else(|_| Utc::now().into())
                 .with_timezone(&Utc);
@@ -238,6 +277,7 @@ impl Storage {
                 thumbnail_data: row.get(5)?, // Contains thumbnail for images
                 image_width: row.get(6)?,
                 image_height: row.get(7)?,
+                ocr_text: row.get(8)?,
                 timestamp,
             })
         })?;
@@ -266,6 +306,7 @@ impl Storage {
                     thumbnail_data,
                     image_width,
                     image_height,
+                    ocr_text,
                     timestamp
              FROM clipboard_history
              ORDER BY timestamp DESC
@@ -280,7 +321,7 @@ impl Storage {
                 _ => ContentType::Text,
             };
 
-            let timestamp_str: String = row.get(8)?;
+            let timestamp_str: String = row.get(9)?;
             let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
                 .unwrap_or_else(|_| Utc::now().into())
                 .with_timezone(&Utc);
@@ -294,6 +335,7 @@ impl Storage {
                 thumbnail_data: row.get(5)?,
                 image_width: row.get(6)?,
                 image_height: row.get(7)?,
+                ocr_text: row.get(8)?,
                 timestamp,
             })
         })?;
@@ -308,7 +350,7 @@ impl Storage {
 
     pub fn get_by_id(&self, id: i64) -> Result<Option<ClipboardEntry>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, content_type, content_text, content_data, image_path, thumbnail_data, image_width, image_height, timestamp
+            "SELECT id, content_type, content_text, content_data, image_path, thumbnail_data, image_width, image_height, ocr_text, timestamp
              FROM clipboard_history
              WHERE id = ?1",
         )?;
@@ -323,7 +365,7 @@ impl Storage {
                 _ => ContentType::Text,
             };
 
-            let timestamp_str: String = row.get(8)?;
+            let timestamp_str: String = row.get(9)?;
             let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
                 .unwrap_or_else(|_| Utc::now().into())
                 .with_timezone(&Utc);
@@ -337,6 +379,7 @@ impl Storage {
                 thumbnail_data: row.get(5)?,
                 image_width: row.get(6)?,
                 image_height: row.get(7)?,
+                ocr_text: row.get(8)?,
                 timestamp,
             }))
         } else {
@@ -415,12 +458,12 @@ impl Storage {
         if use_fts {
             // Fast FTS5 search with prefix matching
             // Add * to each word for prefix search: "lingua" → "lingua*"
+            // FTS5 will search in ALL columns (content_text AND ocr_text)
             let fts_query = query
                 .split_whitespace()
                 .map(|word| format!("{}*", word))
                 .collect::<Vec<_>>()
                 .join(" OR ");
-            let search_pattern = format!("%{}%", query);
 
             let mut stmt = self.conn.prepare(
                 "SELECT h.id, h.content_type, h.content_text,
@@ -432,28 +475,16 @@ impl Storage {
                         h.thumbnail_data,
                         h.image_width,
                         h.image_height,
+                        h.ocr_text,
                         h.timestamp
                  FROM clipboard_history h
                  INNER JOIN clipboard_history_fts fts ON h.id = fts.rowid
-                 WHERE fts.content_text MATCH ?1
-                 UNION
-                 SELECT id, content_type, content_text,
-                        CASE
-                            WHEN content_type = 'image' THEN NULL
-                            ELSE content_data
-                        END as content_data,
-                        image_path,
-                        thumbnail_data,
-                        image_width,
-                        image_height,
-                        timestamp
-                 FROM clipboard_history
-                 WHERE content_type = 'image' AND image_path LIKE ?2
-                 ORDER BY timestamp DESC",
+                 WHERE clipboard_history_fts MATCH ?1
+                 ORDER BY h.timestamp DESC",
             )?;
 
             let entries = stmt
-                .query_map(params![&fts_query, &search_pattern], |row| {
+                .query_map(params![&fts_query], |row| {
                     let content_type_str: String = row.get(1)?;
                     let content_type = match content_type_str.as_str() {
                         "text" => ContentType::Text,
@@ -461,7 +492,7 @@ impl Storage {
                         _ => ContentType::Text,
                     };
 
-                    let timestamp_str: String = row.get(8)?;
+                    let timestamp_str: String = row.get(9)?;
                     let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
                         .unwrap_or_else(|_| Utc::now().into())
                         .with_timezone(&Utc);
@@ -475,6 +506,7 @@ impl Storage {
                         thumbnail_data: row.get(5)?,
                         image_width: row.get(6)?,
                         image_height: row.get(7)?,
+                        ocr_text: row.get(8)?,
                         timestamp,
                     })
                 })?
@@ -495,10 +527,12 @@ impl Storage {
                         thumbnail_data,
                         image_width,
                         image_height,
+                        ocr_text,
                         timestamp
                  FROM clipboard_history
                  WHERE content_text LIKE ?1
                     OR image_path LIKE ?1
+                    OR ocr_text LIKE ?1
                  ORDER BY timestamp DESC",
             )?;
 
@@ -511,7 +545,7 @@ impl Storage {
                         _ => ContentType::Text,
                     };
 
-                    let timestamp_str: String = row.get(8)?;
+                    let timestamp_str: String = row.get(9)?;
                     let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
                         .unwrap_or_else(|_| Utc::now().into())
                         .with_timezone(&Utc);
@@ -525,6 +559,7 @@ impl Storage {
                         thumbnail_data: row.get(5)?,
                         image_width: row.get(6)?,
                         image_height: row.get(7)?,
+                        ocr_text: row.get(8)?,
                         timestamp,
                     })
                 })?
@@ -532,6 +567,15 @@ impl Storage {
 
             Ok(entries)
         }
+    }
+
+    /// Atualiza texto OCR de uma entrada existente (usado pelo OCR processor)
+    pub fn update_ocr_text(&self, id: i64, ocr_text: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE clipboard_history SET ocr_text = ?1 WHERE id = ?2",
+            params![ocr_text, id],
+        )?;
+        Ok(())
     }
 }
 

@@ -20,6 +20,7 @@ pub fn setup_search_filter(
     window: &adw::ApplicationWindow,
     app: &gtk::Application,
     entry_map: &Rc<RefCell<std::collections::HashMap<i32, i64>>>,
+    close_timeout_id: Option<Rc<RefCell<Option<gtk::glib::SourceId>>>>,
 ) {
     let list_box_for_search = list_box.clone();
     let window_for_search = window.clone();
@@ -72,15 +73,15 @@ pub fn setup_search_filter(
         let search_map_clone = search_map_for_search.clone();
 
         Rc::new(move |query: String| {
-            if query.trim().is_empty() {
-                eprintln!("🔍 Busca vazia - mantendo lista atual");
-                return;
-            }
-
             // Buscar no banco de dados com limite de 100 resultados
+            // Se query vazia, daemon retorna TODOS os resultados recentes (agora funciona!)
             eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            eprintln!("🔍 BUSCANDO NO BANCO: '{}'", query);
-            eprintln!("🔍 Query length: {} chars", query.len());
+            if query.trim().is_empty() {
+                eprintln!("🔍 BUSCA VAZIA - RETORNANDO TODOS OS RESULTADOS");
+            } else {
+                eprintln!("🔍 BUSCANDO NO BANCO: '{}'", query);
+                eprintln!("🔍 Query length: {} chars", query.len());
+            }
             eprintln!("🔍 Limite: 100 resultados");
             eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
@@ -236,16 +237,53 @@ pub fn setup_search_filter(
         })
     };
 
+    // PROTEÇÃO ADICIONAL: Cancelar auto-close quando campo ganha foco (antes mesmo de digitar)
+    let close_timeout_for_focus = close_timeout_id.clone();
+    let focus_controller = gtk::EventControllerFocus::new();
+    focus_controller.connect_enter(move |_controller| {
+        if let Some(ref close_id) = close_timeout_for_focus {
+            if let Some(id) = close_id.borrow_mut().take() {
+                drop(id); // NÃO chamar remove() - deixa o GTK limpar
+                eprintln!("🎯 Campo de pesquisa ganhou foco - auto-close CANCELADO (via drop)!");
+            }
+        }
+    });
+    search_entry.add_controller(focus_controller);
+
     // Conectar mudanças no campo de busca
     let suggestion_engine_for_changed = suggestion_engine.clone();
     let suggestions_popover_for_changed = suggestions_popover.clone();
     let perform_search_for_changed = perform_search.clone();
 
+    // Debounce: aguarda 300ms após parar de digitar antes de buscar
+    let search_timeout_id: Rc<RefCell<Option<gtk::glib::SourceId>>> = Rc::new(RefCell::new(None));
+    let search_timeout_for_changed = search_timeout_id.clone();
+    let close_timeout_for_changed = close_timeout_id.clone();
+
     search_entry.connect_changed(move |entry| {
         let text = entry.text().to_string();
 
-        // 🔍 BUSCA EM TEMPO REAL
-        perform_search_for_changed(text.clone());
+        // CRÍTICO: Cancelar auto-close quando usuário digita (proteção contra fechamento)
+        if let Some(ref close_id) = close_timeout_for_changed {
+            if let Some(id) = close_id.borrow_mut().take() {
+                drop(id); // NÃO chamar remove() - deixa o GTK limpar
+                eprintln!("⚡ Usuário digitando - auto-close CANCELADO (via drop)!");
+            }
+        }
+
+        // Cancelar busca anterior (debounce)
+        if let Some(id) = search_timeout_for_changed.borrow_mut().take() {
+            drop(id); // NÃO chamar remove() - deixa o GTK limpar
+        }
+
+        // 🔍 BUSCA COM DEBOUNCE (300ms após parar de digitar)
+        let perform_search_clone = perform_search_for_changed.clone();
+        let text_clone = text.clone();
+        let timeout_id = gtk::glib::timeout_add_local(std::time::Duration::from_millis(300), move || {
+            perform_search_clone(text_clone.clone());
+            gtk::glib::ControlFlow::Break
+        });
+        *search_timeout_for_changed.borrow_mut() = Some(timeout_id);
 
         // Autocompletar (só se habilitado)
         if let (Some(ref engine), Some(ref popover)) = (

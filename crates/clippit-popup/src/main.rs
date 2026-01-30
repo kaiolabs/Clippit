@@ -6,11 +6,13 @@ use libadwaita as adw;
 
 mod controllers;
 mod models;
+mod panic_handler;
 mod utils;
 mod views;
 
 use controllers::{setup_keyboard_navigation, setup_row_activation};
 use models::{new_entry_map, new_search_content_map};
+use panic_handler::setup_panic_handler;
 use utils::{apply_theme, load_custom_css};
 use views::{
     create_main_window, populate_history_list, setup_infinite_scroll, setup_search_filter,
@@ -22,6 +24,11 @@ const APP_ID: &str = "com.clippit.Clippit";
 rust_i18n::i18n!("../clippit-core/locales", fallback = "en");
 
 fn main() -> Result<()> {
+    // Configurar panic handler com modal GTK
+    setup_panic_handler();
+    
+    eprintln!("🚀 Clippit Popup Starting com panic handler visual...");
+    
     // Single instance check
     handle_lock_file()?;
 
@@ -99,32 +106,16 @@ fn handle_lock_file() -> Result<()> {
 
                     // Se processo está rodando (não é zombie)
                     if !stat.trim().is_empty() && !stat.trim().starts_with('Z') {
-                        eprintln!("🔄 Popup já rodando (PID: {}) - fechando (toggle)", pid);
-
-                        // Enviar SIGTERM para fechar
+                        eprintln!("🔄 Popup já rodando (PID: {}) - fechando (toggle behavior)", pid);
+                        
+                        // TOGGLE BEHAVIOR: sempre fecha quando atalho é pressionado novamente
                         let _ = std::process::Command::new("kill")
-                            .args(&["-TERM", &pid.to_string()])
+                            .arg(pid.to_string())
                             .output();
-
-                        // Aguardar processo fechar (até 500ms)
-                        for i in 0..10 {
-                            std::thread::sleep(std::time::Duration::from_millis(50));
-
-                            let check = std::process::Command::new("ps")
-                                .args(&["-p", &pid.to_string()])
-                                .output();
-
-                            if let Ok(output) = check {
-                                if !output.status.success() {
-                                    eprintln!("✅ Popup fechado após {}ms", (i + 1) * 50);
-                                    break;
-                                }
-                            }
-                        }
-
-                        // Limpar lock file
+                        
+                        std::thread::sleep(std::time::Duration::from_millis(200));
                         std::fs::remove_file(lock_file).ok();
-                        eprintln!("✅ Toggle completo - saindo");
+                        eprintln!("✅ Popup fechado - pressione atalho novamente para abrir");
                         std::process::exit(0);
                     } else {
                         eprintln!(
@@ -156,7 +147,7 @@ fn build_ui(app: &Application) {
     load_custom_css();
 
     // Create main window structure (no toast overlay - using system notifications)
-    let (window, list_box, scrolled, search_entry) = create_main_window(app);
+    let (window, list_box, scrolled, search_entry, close_timeout_id) = create_main_window(app);
 
     // Create data structures
     let entry_map = new_entry_map();
@@ -187,6 +178,7 @@ fn build_ui(app: &Application) {
     let entry_map_clone = entry_map.clone();
     let search_map_clone = search_map.clone();
     let search_entry_clone = search_entry.clone();
+    let close_timeout_id_clone = close_timeout_id.clone();
 
     gtk::glib::idle_add_local_once(move || {
         // Remove skeleton loaders
@@ -218,7 +210,7 @@ fn build_ui(app: &Application) {
             }
         });
 
-        // Setup search filtering (with ability to reload list)
+        // Setup search filtering (with ability to reload list) + passar close_timeout_id
         setup_search_filter(
             &list_box_clone,
             &search_entry_clone,
@@ -226,6 +218,7 @@ fn build_ui(app: &Application) {
             &window_clone,
             &app_clone,
             &entry_map_clone,
+            Some(close_timeout_id_clone),
         );
 
         // Setup row activation (click)

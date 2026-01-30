@@ -9,6 +9,8 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 
+use crate::ocr_processor;
+
 pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Result<()> {
     info!("Starting clipboard monitor (Wayland-native with arboard)...");
 
@@ -99,20 +101,13 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
                                 hasher.update(&png_bytes);
                                 let current_hash = format!("{:x}", hasher.finalize());
 
-                                info!("🔍 Image hash comparison:");
-                                info!("   Current hash: {}...", &current_hash[..12]);
-                                info!(
-                                    "   Last hash: {:?}",
-                                    last_image_hash.as_ref().map(|h| &h[..12])
-                                );
-                                info!(
-                                    "   Are different? {}",
-                                    last_image_hash.as_ref() != Some(&current_hash)
-                                );
-
                                 // Only save if different from last image
                                 if last_image_hash.as_ref() != Some(&current_hash) {
-                                    info!("📸 New image detected, optimizing and saving...");
+                                    info!(
+                                        "📸 New image detected (PNG: {} bytes, hash: {}...), optimizing...",
+                                        png_bytes.len(),
+                                        &current_hash[..12]
+                                    );
 
                                     // Optimize if needed (max 2048px)
                                     match optimize_image(png_bytes.clone(), 2048) {
@@ -128,6 +123,9 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
                                                         image_path, width, height
                                                     );
 
+                                                    // Clone image_path antes de mover para entry
+                                                    let image_path_for_ocr = image_path.clone();
+
                                                     let entry =
                                                         ClipboardEntry::new_image_with_dimensions(
                                                             image_path, thumbnail, width, height,
@@ -140,6 +138,32 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
                                                             info!("✅ Saved image entry with id {} (with thumbnail)", id);
                                                             last_image_hash =
                                                                 Some(current_hash.clone());
+
+                                                            // Disparar OCR em background se habilitado
+                                                            if config.features.enable_ocr {
+                                                                let path_clone = image_path_for_ocr;
+                                                                let languages =
+                                                                    config.ocr.languages.clone();
+                                                                let db_path = dirs::data_local_dir()
+                                                                    .expect("Failed to get data directory")
+                                                                    .join("clippit")
+                                                                    .join("history.db")
+                                                                    .to_str()
+                                                                    .expect("Path to string failed")
+                                                                    .to_string();
+
+                                                                info!("🔍 Starting OCR processing in background for entry {}", id);
+
+                                                                tokio::spawn(async move {
+                                                                    ocr_processor::process_ocr_for_entry(
+                                                                        id,
+                                                                        path_clone,
+                                                                        languages,
+                                                                        db_path,
+                                                                    )
+                                                                    .await;
+                                                                });
+                                                            }
                                                         }
                                                         Ok(None) => {
                                                             info!("⏭️  Image duplicate, skipped");
@@ -164,6 +188,11 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
                                             error!("❌ Failed to optimize image: {}", e);
                                         }
                                     }
+                                } else {
+                                    // CRITICAL: Update hash even for duplicates to avoid infinite loop!
+                                    // Without this, daemon keeps processing same image forever
+                                    // Use trace level to avoid log spam (clipboard has same image constantly)
+                                    last_image_hash = Some(current_hash);
                                 }
                             } else {
                                 warn!(
@@ -205,7 +234,7 @@ fn convert_image_data_to_png(img_data: &ImageData) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
     dynamic_img.write_to(&mut Cursor::new(&mut buf), ImageFormat::Png)?;
 
-    info!("📸 Converted clipboard image to PNG ({} bytes)", buf.len());
+    // Reduced to trace to avoid log spam (runs every 80ms)
     Ok(buf)
 }
 

@@ -17,6 +17,7 @@ pub struct ClipboardEntry {
     pub thumbnail_data: Option<Vec<u8>>, // 128x128 thumbnail for images
     pub image_width: Option<u32>,      // Image width in pixels (avoid loading full image)
     pub image_height: Option<u32>,     // Image height in pixels (avoid loading full image)
+    pub ocr_text: Option<String>,      // OCR extracted text from images (processed in background)
     pub timestamp: DateTime<Utc>,
 }
 
@@ -31,6 +32,7 @@ impl ClipboardEntry {
             thumbnail_data: None,
             image_width: None,
             image_height: None,
+            ocr_text: None,
             timestamp: Utc::now(),
         }
     }
@@ -45,6 +47,7 @@ impl ClipboardEntry {
             thumbnail_data: thumbnail,
             image_width: None,
             image_height: None,
+            ocr_text: None, // Will be filled later by OCR processor
             timestamp: Utc::now(),
         }
     }
@@ -64,6 +67,7 @@ impl ClipboardEntry {
             thumbnail_data: thumbnail,
             image_width: Some(width),
             image_height: Some(height),
+            ocr_text: None, // Will be filled later by OCR processor
             timestamp: Utc::now(),
         }
     }

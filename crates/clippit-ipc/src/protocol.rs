@@ -19,6 +19,7 @@ pub struct HistoryEntry {
     pub thumbnail_data: Option<Vec<u8>>,
     pub image_width: Option<u32>, // Image dimensions (avoid loading full image)
     pub image_height: Option<u32>,
+    pub ocr_text: Option<String>,      // OCR extracted text from images
     pub timestamp: DateTime<Utc>,
 }
 

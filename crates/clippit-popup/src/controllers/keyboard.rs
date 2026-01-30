@@ -48,6 +48,8 @@ pub fn setup_keyboard_navigation(
     let focus_search_str_for_closure = focus_search_str.clone();
 
     key_controller.connect_key_pressed(move |_, key, _, modifiers| {
+        eprintln!("🔑 Key pressed: {:?} with modifiers: {:?}", key, modifiers);
+        
         // Check if this is the configured hotkey (for toggle)
         if is_configured_hotkey(key, modifiers, &hotkey_str_for_closure) {
             eprintln!("🔵 Configured hotkey pressed while popup open - closing (toggle)");
@@ -64,7 +66,7 @@ pub fn setup_keyboard_navigation(
 
         match key {
             gtk::gdk::Key::Escape => {
-                eprintln!("🔵 ESC pressed - closing popup");
+                eprintln!("🚨 [CLOSE TRIGGER] ESC pressed - closing popup");
                 window_nav.close();
                 gtk::glib::Propagation::Stop
             }

@@ -8,8 +8,10 @@ echo ""
 
 # Mostrar versão atual instalada
 echo "📦 Versão atual instalada:"
-if [ -f /usr/local/bin/clippit-daemon ]; then
-    timeout 1 /usr/local/bin/clippit-daemon --version 2>/dev/null | head -1 | sed 's/^/   /' || echo "   (não disponível ou versão antiga)"
+if [ -f ~/.local/bin/clippit-daemon ]; then
+    timeout 1 ~/.local/bin/clippit-daemon --version 2>/dev/null | head -1 | sed 's/^/   /' || echo "   (não disponível ou versão antiga)"
+elif [ -f /usr/local/bin/clippit-daemon ]; then
+    timeout 1 /usr/local/bin/clippit-daemon --version 2>/dev/null | head -1 | sed 's/^/   /' || echo "   (versão antiga em /usr/local/bin)"
 else
     echo "   (não instalado)"
 fi
@@ -18,6 +20,79 @@ echo ""
 # Mostrar versão que será instalada
 NOVA_VERSAO=$(grep "^version" Cargo.toml | head -1 | cut -d'"' -f2)
 echo "🚀 Versão que será instalada: $NOVA_VERSAO"
+echo ""
+
+# Verificar TODAS as dependências do sistema
+echo "🔍 Verificando dependências do sistema..."
+DEPS_TO_INSTALL=()
+
+# 1. Tesseract OCR (necessário para feature OCR v1.10.0+)
+if ! command -v tesseract &> /dev/null; then
+    echo "⚠️  Tesseract OCR não instalado (necessário para OCR)"
+    DEPS_TO_INSTALL+=(tesseract-ocr libtesseract-dev libleptonica-dev tesseract-ocr-por tesseract-ocr-eng)
+elif ! pkg-config --exists lept; then
+    echo "⚠️  libleptonica-dev não instalado (necessário para compilação OCR)"
+    DEPS_TO_INSTALL+=(libleptonica-dev)
+elif ! pkg-config --exists tesseract; then
+    echo "⚠️  libtesseract-dev não instalado (necessário para compilação OCR)"
+    DEPS_TO_INSTALL+=(libtesseract-dev)
+else
+    echo "✅ Tesseract OCR instalado"
+    
+    # Verificar idiomas
+    if ! tesseract --list-langs 2>/dev/null | grep -q "por"; then
+        echo "⚠️  Dados português não instalados"
+        DEPS_TO_INSTALL+=(tesseract-ocr-por)
+    fi
+    if ! tesseract --list-langs 2>/dev/null | grep -q "eng"; then
+        echo "⚠️  Dados inglês não instalados"
+        DEPS_TO_INSTALL+=(tesseract-ocr-eng)
+    fi
+fi
+
+# 2. wmctrl (necessário para gerenciamento de foco do popup v1.11.2+)
+if ! command -v wmctrl &> /dev/null; then
+    echo "⚠️  wmctrl não instalado (necessário para foco do popup)"
+    DEPS_TO_INSTALL+=(wmctrl)
+else
+    echo "✅ wmctrl instalado"
+fi
+
+# Instalar todas as dependências faltantes de uma vez
+if [ ${#DEPS_TO_INSTALL[@]} -gt 0 ]; then
+    echo ""
+    echo "📦 Instalando dependências faltantes: ${DEPS_TO_INSTALL[*]}"
+    
+    # Tentar instalar com sudo
+    if sudo -n true 2>/dev/null; then
+        # sudo sem senha disponível
+        sudo apt-get update -qq
+        sudo apt-get install -y "${DEPS_TO_INSTALL[@]}"
+        
+        if [ $? -eq 0 ]; then
+            echo "✅ Todas as dependências instaladas com sucesso!"
+        else
+            echo "❌ Falha ao instalar algumas dependências"
+            echo "   Execute manualmente: sudo apt-get install -y ${DEPS_TO_INSTALL[*]}"
+        fi
+    else
+        # Precisa de senha
+        echo ""
+        echo "⚠️  Instalação de dependências requer senha sudo"
+        echo "   Execute manualmente: sudo apt-get install -y ${DEPS_TO_INSTALL[*]}"
+        echo ""
+        echo "⏭️  Continuando compilação sem instalar dependências..."
+        echo "   (algumas funcionalidades podem não funcionar corretamente)"
+        echo ""
+    fi
+else
+    echo "✅ Todas as dependências já instaladas!"
+fi
+
+echo ""
+echo "📋 Versões instaladas:"
+echo "   Tesseract: $(tesseract --version 2>&1 | head -1)"
+echo "   wmctrl: $(wmctrl -v 2>&1 | head -1)"
 echo ""
 
 # Compilar tudo
@@ -62,71 +137,75 @@ if ps aux | grep -E "clippit-(daemon|popup|dashboard|ibus|tooltip)" | grep -v gr
     sleep 1
 fi
 
-# Verificar novamente e usar fuser como último recurso
-if ps aux | grep -E "clippit-(daemon|popup|dashboard|ibus|tooltip)" | grep -v grep > /dev/null; then
-    echo "⚠️  Usando fuser para forçar término dos processos..."
-    sudo fuser -k /usr/local/bin/clippit-daemon 2>/dev/null || true
-    sudo fuser -k /usr/local/bin/clippit-popup 2>/dev/null || true
-    sudo fuser -k /usr/local/bin/clippit-dashboard 2>/dev/null || true
-    sudo fuser -k /usr/local/bin/clippit-ibus 2>/dev/null || true
-    sudo fuser -k /usr/local/bin/clippit-tooltip 2>/dev/null || true
-    sleep 1
-fi
-
 # Limpar lock files
 rm -f /tmp/clippit-popup.lock 2>/dev/null || true
 
-# Remover binários antigos primeiro
-echo "🗑️  Removendo binários antigos..."
-sudo rm -f /usr/local/bin/clippit-daemon
-sudo rm -f /usr/local/bin/clippit-popup
-sudo rm -f /usr/local/bin/clippit-dashboard
-sudo rm -f /usr/local/bin/clippit-ibus
-sudo rm -f /usr/local/bin/clippit-tooltip
+# Criar diretórios se não existirem
+echo "📁 Criando diretórios..."
+mkdir -p ~/.local/bin
+mkdir -p ~/.local/share/clippit
 
-# Verificar se remoção foi bem sucedida
-if [ -f /usr/local/bin/clippit-ibus ]; then
-    echo "⚠️  clippit-ibus ainda está em uso, forçando remoção..."
-    sudo fuser -k /usr/local/bin/clippit-ibus 2>/dev/null || true
-    sleep 1
-    sudo rm -f /usr/local/bin/clippit-ibus
+# Remover binários antigos de ~/.local/bin
+echo "🗑️  Removendo binários antigos..."
+rm -f ~/.local/bin/clippit-daemon 2>/dev/null || true
+rm -f ~/.local/bin/clippit-popup 2>/dev/null || true
+rm -f ~/.local/bin/clippit-dashboard 2>/dev/null || true
+rm -f ~/.local/bin/clippit-tooltip 2>/dev/null || true
+
+# Remover de /usr/local/bin também (instalações antigas - requer sudo)
+if [ -f /usr/local/bin/clippit-daemon ] || [ -f /usr/local/bin/clippit-popup ]; then
+    echo "   ⚠️  Detectadas instalações antigas em /usr/local/bin"
+    if sudo -n true 2>/dev/null; then
+        sudo rm -f /usr/local/bin/clippit-* 2>/dev/null || true
+        echo "   ✅ Limpeza de /usr/local/bin concluída"
+    else
+        echo "   ⏭️  Pulando limpeza /usr/local/bin (requer sudo)"
+        echo "   💡 Execute manualmente: sudo rm -f /usr/local/bin/clippit-*"
+    fi
 fi
 
-# Instalar binários novos
-echo "📦 Instalando binários novos..."
-sudo cp target/release/clippit-daemon /usr/local/bin/clippit-daemon
-sudo cp target/release/clippit-popup /usr/local/bin/clippit-popup
-sudo cp target/release/clippit-dashboard /usr/local/bin/clippit-dashboard
-sudo cp target/release/clippit-tooltip /usr/local/bin/clippit-tooltip
+# Instalar binários novos em ~/.local/bin (NÃO requer sudo!)
+echo "📦 Instalando binários atualizados em ~/.local/bin..."
+cp -f target/release/clippit-daemon ~/.local/bin/
+cp -f target/release/clippit-popup ~/.local/bin/
+cp -f target/release/clippit-dashboard ~/.local/bin/
+cp -f target/release/clippit-tooltip ~/.local/bin/
 
 # Dar permissões de execução
-sudo chmod +x /usr/local/bin/clippit-daemon
-sudo chmod +x /usr/local/bin/clippit-popup
-sudo chmod +x /usr/local/bin/clippit-dashboard
-sudo chmod +x /usr/local/bin/clippit-tooltip
+chmod +x ~/.local/bin/clippit-daemon
+chmod +x ~/.local/bin/clippit-popup
+chmod +x ~/.local/bin/clippit-dashboard
+chmod +x ~/.local/bin/clippit-tooltip
 
-# Instalar IBus Component (Autocomplete Global)
+# Instalar IBus Component (Autocomplete Global) - requer sudo
 echo "⌨️  Instalando IBus Component (Autocomplete Global)..."
 if [ -f "target/release/clippit-ibus" ]; then
-    # Tentar copiar, se falhar por estar em uso, forçar
-    if ! sudo cp target/release/clippit-ibus /usr/local/bin/clippit-ibus 2>/dev/null; then
-        echo "⚠️  Arquivo em uso, forçando atualização..."
-        sudo fuser -k /usr/local/bin/clippit-ibus 2>/dev/null || true
-        sleep 1
-        sudo cp target/release/clippit-ibus /usr/local/bin/clippit-ibus
+    if sudo -n true 2>/dev/null; then
+        # sudo disponível - instalar normalmente
+        if ! sudo cp target/release/clippit-ibus /usr/local/bin/clippit-ibus 2>/dev/null; then
+            echo "⚠️  Arquivo em uso, forçando atualização..."
+            sudo fuser -k /usr/local/bin/clippit-ibus 2>/dev/null || true
+            sleep 1
+            sudo cp target/release/clippit-ibus /usr/local/bin/clippit-ibus
+        fi
+        sudo chmod +x /usr/local/bin/clippit-ibus
+        
+        # Instalar XML component definition
+        sudo mkdir -p /usr/share/ibus/component
+        sudo cp crates/clippit-ibus/data/clippit.xml /usr/share/ibus/component/
+        
+        # Reiniciar IBus (se estiver rodando)
+        if command -v ibus &> /dev/null; then
+            ibus restart &>/dev/null &
+        fi
+        
+        echo "✅ IBus Component instalado (configure em Settings → Keyboard → Input Sources)"
+    else
+        echo "⏭️  Pulando instalação IBus (requer sudo)"
+        echo "   💡 Para autocomplete global, execute:"
+        echo "      sudo cp target/release/clippit-ibus /usr/local/bin/"
+        echo "      sudo cp crates/clippit-ibus/data/clippit.xml /usr/share/ibus/component/"
     fi
-    sudo chmod +x /usr/local/bin/clippit-ibus
-    
-    # Instalar XML component definition
-    sudo mkdir -p /usr/share/ibus/component
-    sudo cp crates/clippit-ibus/data/clippit.xml /usr/share/ibus/component/
-    
-    # Reiniciar IBus (se estiver rodando)
-    if command -v ibus &> /dev/null; then
-        ibus restart &>/dev/null &
-    fi
-    
-    echo "✅ IBus Component instalado (configure em Settings → Keyboard → Input Sources)"
 else
     echo "⚠️  clippit-ibus não encontrado, pulando instalação do IBus"
 fi
@@ -137,8 +216,8 @@ echo "🎨 Instalando ícone..."
 # Verificar se o arquivo existe
 if [ ! -f "assets/logo_clippit.png" ]; then
     echo "⚠️  Arquivo de ícone não encontrado!"
-else
-    # Instalar em múltiplos tamanhos para melhor compatibilidade
+elif sudo -n true 2>/dev/null; then
+    # sudo disponível - instalar em /usr/share
     for size in 48 128 256 512; do
         sudo mkdir -p /usr/share/icons/hicolor/${size}x${size}/apps
         # Se tiver imagemagick, redimensiona; senão usa o original
@@ -155,14 +234,28 @@ else
     # Atualizar cache de ícones
     sudo gtk-update-icon-cache -f /usr/share/icons/hicolor/ 2>/dev/null || true
     echo "✅ Ícone instalado em múltiplos tamanhos"
+else
+    # sem sudo - instalar em ~/.local
+    mkdir -p ~/.local/share/icons/hicolor/256x256/apps
+    cp -f assets/logo_clippit.png ~/.local/share/icons/hicolor/256x256/apps/clippit.png
+    gtk-update-icon-cache -f ~/.local/share/icons/hicolor/ 2>/dev/null || true
+    echo "✅ Ícone instalado em ~/.local/share/icons"
 fi
 
 # Instalar arquivo .desktop (importante para Wayland)
-echo "📋 Instalando arquivo .desktop..."
-sudo mkdir -p /usr/share/applications
-sudo cp assets/clippit.desktop /usr/share/applications/clippit.desktop
-sudo chmod 644 /usr/share/applications/clippit.desktop
-sudo update-desktop-database /usr/share/applications/ 2>/dev/null || true
+echo "🖥️  Instalando arquivo .desktop..."
+if sudo -n true 2>/dev/null; then
+    sudo mkdir -p /usr/share/applications
+    sudo cp assets/clippit.desktop /usr/share/applications/clippit.desktop
+    sudo chmod 644 /usr/share/applications/clippit.desktop
+    sudo update-desktop-database /usr/share/applications/ 2>/dev/null || true
+    echo "✅ Arquivo .desktop instalado"
+else
+    mkdir -p ~/.local/share/applications
+    cp -f assets/clippit.desktop ~/.local/share/applications/clippit.desktop
+    update-desktop-database ~/.local/share/applications/ 2>/dev/null || true
+    echo "✅ Arquivo .desktop instalado em ~/.local/share/applications"
+fi
 
 # Verificar se foram copiados
 echo "✅ Verificando instalação..."
@@ -185,7 +278,7 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/clippit-daemon
+ExecStart=%h/.local/bin/clippit-daemon
 Restart=on-failure
 RestartSec=5
 
@@ -280,15 +373,13 @@ if [ "$XDG_SESSION_TYPE" = "wayland" ] && command -v gsettings &> /dev/null; the
         EXISTING_BINDING=$(gsettings get org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/ binding 2>/dev/null | tr -d "'")
     fi
     
-    if [ -n "$EXISTING_BINDING" ]; then
+    if [ -n "$EXISTING_BINDING" ] && [ "$EXISTING_BINDING" != "@as []" ]; then
         echo "   ✅ Atalho já configurado: $EXISTING_BINDING"
-        echo ""
-        read -p "   Deseja reconfigurar? (s/N): " -n 1 -r RECONFIG
-        echo ""
-        if [[ ! $RECONFIG =~ ^[Ss]$ ]]; then
-            echo "   ⏭️  Mantendo atalho existente"
-            SKIP_HOTKEY_SETUP=true
-        fi
+        echo "   💡 Para alterar: clippit-dashboard → Hotkeys"
+        echo "   ⏭️  Mantendo sua configuração (não será sobrescrita)"
+        SKIP_HOTKEY_SETUP=true
+        HOTKEY_CONFIGURED="true"
+        return 0
     else
         echo "   Deseja configurar o atalho automaticamente agora?"
         echo ""
@@ -328,7 +419,8 @@ if [ "$XDG_SESSION_TYPE" = "wayland" ] && command -v gsettings &> /dev/null; the
         NEW_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/"
         
         gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$NEW_PATH name "Clippit - Show History" 2>/dev/null
-        gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$NEW_PATH command "/usr/local/bin/clippit-popup" 2>/dev/null
+        # Use full path to ensure GNOME can find the binary (GNOME doesn't use user's PATH)
+        gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$NEW_PATH command "$HOME/.local/bin/clippit-popup" 2>/dev/null
         gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$NEW_PATH binding "$GNOME_HOTKEY" 2>/dev/null
         
         # Adicionar à lista de atalhos personalizados
@@ -358,7 +450,7 @@ if [ "$XDG_SESSION_TYPE" = "wayland" ] && command -v gsettings &> /dev/null; the
             echo "   📝 Configure manualmente:"
             echo "      Configurações → Teclado → Atalhos → Adicionar"
             echo "      Nome: Clippit - Show History"
-            echo "      Comando: /usr/local/bin/clippit-popup"
+            echo "      Comando: clippit-popup"
             echo "      Atalho: $MODIFIER + $KEY"
         fi
     else
@@ -366,7 +458,7 @@ if [ "$XDG_SESSION_TYPE" = "wayland" ] && command -v gsettings &> /dev/null; the
         echo "   📝 Para configurar manualmente depois:"
         echo "      Configurações → Teclado → Atalhos → Adicionar"
         echo "      Nome: Clippit - Show History"
-        echo "      Comando: /usr/local/bin/clippit-popup"
+        echo "      Comando: clippit-popup"
         echo "      Atalho: Escolha sua combinação"
         echo ""
         echo "   💡 Ou execute: ./scripts/setup-wayland-hotkey.sh"
@@ -374,6 +466,20 @@ if [ "$XDG_SESSION_TYPE" = "wayland" ] && command -v gsettings &> /dev/null; the
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+fi
+
+# Forçar atualização do cache de apps e ícones
+echo ""
+echo "🔄 Atualizando cache de aplicativos e ícones..."
+update-desktop-database ~/.local/share/applications 2>/dev/null || true
+gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor 2>/dev/null || true
+xdg-desktop-menu forceupdate 2>/dev/null || true
+
+# Recarregar GNOME Shell overview (se disponível)
+if command -v gdbus &> /dev/null; then
+    gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
+        --method org.gnome.Shell.Eval "Main.overview.hide(); Main.overview.show();" &>/dev/null || true
+    echo "✅ Menu de aplicativos atualizado!"
 fi
 
 # Mensagem final de teste
