@@ -278,7 +278,7 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/clippit-daemon
+ExecStart=%h/.local/bin/clippit-daemon
 Restart=on-failure
 RestartSec=5
 
