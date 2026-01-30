@@ -373,15 +373,13 @@ if [ "$XDG_SESSION_TYPE" = "wayland" ] && command -v gsettings &> /dev/null; the
         EXISTING_BINDING=$(gsettings get org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/ binding 2>/dev/null | tr -d "'")
     fi
     
-    if [ -n "$EXISTING_BINDING" ]; then
+    if [ -n "$EXISTING_BINDING" ] && [ "$EXISTING_BINDING" != "@as []" ]; then
         echo "   ✅ Atalho já configurado: $EXISTING_BINDING"
-        echo ""
-        read -p "   Deseja reconfigurar? (s/N): " -n 1 -r RECONFIG
-        echo ""
-        if [[ ! $RECONFIG =~ ^[Ss]$ ]]; then
-            echo "   ⏭️  Mantendo atalho existente"
-            SKIP_HOTKEY_SETUP=true
-        fi
+        echo "   💡 Para alterar: clippit-dashboard → Hotkeys"
+        echo "   ⏭️  Mantendo sua configuração (não será sobrescrita)"
+        SKIP_HOTKEY_SETUP=true
+        HOTKEY_CONFIGURED="true"
+        return 0
     else
         echo "   Deseja configurar o atalho automaticamente agora?"
         echo ""
