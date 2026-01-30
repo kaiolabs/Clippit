@@ -6,11 +6,13 @@ use libadwaita as adw;
 
 mod controllers;
 mod models;
+mod panic_handler;
 mod utils;
 mod views;
 
 use controllers::{setup_keyboard_navigation, setup_row_activation};
 use models::{new_entry_map, new_search_content_map};
+use panic_handler::setup_panic_handler;
 use utils::{apply_theme, load_custom_css};
 use views::{
     create_main_window, populate_history_list, setup_infinite_scroll, setup_search_filter,
@@ -22,6 +24,11 @@ const APP_ID: &str = "com.clippit.Clippit";
 rust_i18n::i18n!("../clippit-core/locales", fallback = "en");
 
 fn main() -> Result<()> {
+    // Configurar panic handler com modal GTK
+    setup_panic_handler();
+    
+    eprintln!("🚀 Clippit Popup Starting com panic handler visual...");
+    
     // Single instance check
     handle_lock_file()?;
 
@@ -99,22 +106,16 @@ fn handle_lock_file() -> Result<()> {
 
                     // Se processo está rodando (não é zombie)
                     if !stat.trim().is_empty() && !stat.trim().starts_with('Z') {
-                        eprintln!("🔄 Popup já rodando (PID: {}) - dando foco ao invés de fechar", pid);
+                        eprintln!("🔄 Popup já rodando (PID: {}) - fechando (toggle behavior)", pid);
                         
-                        // Tentar dar foco à janela existente ao invés de matar o processo
-                        // Usa wmctrl ou xdotool para focar a janela do popup
-                        let focus_success = std::process::Command::new("wmctrl")
-                            .args(&["-a", "Clippit"])
-                            .output()
-                            .map(|o| o.status.success())
-                            .unwrap_or(false);
+                        // TOGGLE BEHAVIOR: sempre fecha quando atalho é pressionado novamente
+                        let _ = std::process::Command::new("kill")
+                            .arg(pid.to_string())
+                            .output();
                         
-                        if focus_success {
-                            eprintln!("✅ Foco dado ao popup existente - saindo");
-                        } else {
-                            eprintln!("⚠️  wmctrl não disponível - popup já aberto mas não conseguiu dar foco");
-                        }
-                        
+                        std::thread::sleep(std::time::Duration::from_millis(200));
+                        std::fs::remove_file(lock_file).ok();
+                        eprintln!("✅ Popup fechado - pressione atalho novamente para abrir");
                         std::process::exit(0);
                     } else {
                         eprintln!(

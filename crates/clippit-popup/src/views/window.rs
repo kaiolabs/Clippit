@@ -91,39 +91,55 @@ fn setup_auto_close(window: &adw::ApplicationWindow, search_entry: &SearchEntry)
                     eprintln!("⏸️  Popup perdeu foco MAS há texto ('{}') - auto-close DESABILITADO!", search_text);
                     // Cancelar qualquer timeout existente (proteção adicional)
                     if let Some(id) = close_timeout_for_init.borrow_mut().take() {
-                        let _ = id.remove(); // Ignore error if source was already removed
-                        eprintln!("   ↩️  Timeout existente cancelado");
+                        // NÃO chamar remove() - apenas dropar o SourceId
+                        // O GTK remove automaticamente quando o SourceId é dropado
+                        drop(id);
+                        eprintln!("   ↩️  Timeout existente cancelado (via drop)");
                     }
                     return;
                 }
                 
-                eprintln!("🔴 Popup perdeu foco (campo vazio) - aguardando 1500ms...");
+                eprintln!("🔴 Popup perdeu foco (campo vazio) - aguardando 3000ms...");
                 
                 // Cancelar timeout anterior se existir (usuário voltou o foco rapidamente)
                 if let Some(id) = close_timeout_for_init.borrow_mut().take() {
-                    let _ = id.remove(); // Ignore error if source was already removed
-                    eprintln!("   ↩️  Timeout anterior cancelado");
+                    drop(id); // NÃO chamar remove() - deixa o GTK limpar
+                    eprintln!("   ↩️  Timeout anterior cancelado (via drop)");
                 }
                 
-                // Agendar fechamento após 1500ms (dar tempo para retornar foco)
+                // Agendar fechamento após 3000ms (tempo maior para evitar fechamento acidental)
                 let window_to_close = window_for_focus.clone();
                 let search_entry_to_check = search_entry_for_focus.clone();
                 let timeout_id = gtk::glib::timeout_add_local_once(
-                    std::time::Duration::from_millis(1500),
+                    std::time::Duration::from_millis(3000),
                     move || {
-                        // Verificar novamente se há texto no campo antes de fechar
+                        eprintln!("🔔 Auto-close timeout disparou após 3000ms - verificando condições...");
+                        
+                        // VERIFICAÇÃO 1: Há texto no campo?
                         let search_text = search_entry_to_check.text();
                         if !search_text.is_empty() {
-                            eprintln!("   ⏸️  Ainda há texto no campo ('{}') - NÃO fechando!", search_text);
+                            eprintln!("   ⏸️  BLOQUEADO: há texto no campo ('{}') - NÃO fechando!", search_text);
                             return;
                         }
+                        eprintln!("   ✓ Campo de pesquisa vazio");
                         
-                        if !window_to_close.is_active() {
-                            eprintln!("   ✅ Fechando popup (sem foco por 1500ms, campo vazio)");
-                            window_to_close.close();
-                        } else {
-                            eprintln!("   ⏸️  Não fechando - foco recuperado!");
+                        // VERIFICAÇÃO 2: Janela tem foco?
+                        if window_to_close.is_active() {
+                            eprintln!("   ⏸️  BLOQUEADO: janela está ativa - NÃO fechando!");
+                            return;
                         }
+                        eprintln!("   ✓ Janela não está ativa");
+                        
+                        // VERIFICAÇÃO 3: Campo de pesquisa tem foco?
+                        if search_entry_to_check.has_focus() {
+                            eprintln!("   ⏸️  BLOQUEADO: campo de pesquisa tem foco - NÃO fechando!");
+                            return;
+                        }
+                        eprintln!("   ✓ Campo não tem foco");
+                        
+                        // TODAS as verificações passaram - pode fechar
+                        eprintln!("   ✅ Fechando popup (sem foco por 3000ms, campo vazio, sem interação)");
+                        window_to_close.close();
                     }
                 );
                 *close_timeout_for_init.borrow_mut() = Some(timeout_id);
@@ -131,8 +147,8 @@ fn setup_auto_close(window: &adw::ApplicationWindow, search_entry: &SearchEntry)
                 eprintln!("🟢 Popup ganhou o foco - cancelando auto-close");
                 // Cancelar timeout se ganhar foco de volta
                 if let Some(id) = close_timeout_for_init.borrow_mut().take() {
-                    let _ = id.remove(); // Ignore error if source was already removed
-                    eprintln!("   ↩️  Auto-close cancelado (foco recuperado)");
+                    drop(id); // NÃO chamar remove() - deixa o GTK limpar
+                    eprintln!("   ↩️  Auto-close cancelado (foco recuperado via drop)");
                 }
             }
         });

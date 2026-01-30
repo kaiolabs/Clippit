@@ -421,8 +421,8 @@ if [ "$XDG_SESSION_TYPE" = "wayland" ] && command -v gsettings &> /dev/null; the
         NEW_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/"
         
         gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$NEW_PATH name "Clippit - Show History" 2>/dev/null
-        # Use 'clippit-popup' from PATH instead of hardcoded path (supports both ~/.local/bin and /usr/local/bin)
-        gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$NEW_PATH command "clippit-popup" 2>/dev/null
+        # Use full path to ensure GNOME can find the binary (GNOME doesn't use user's PATH)
+        gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$NEW_PATH command "$HOME/.local/bin/clippit-popup" 2>/dev/null
         gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$NEW_PATH binding "$GNOME_HOTKEY" 2>/dev/null
         
         # Adicionar à lista de atalhos personalizados

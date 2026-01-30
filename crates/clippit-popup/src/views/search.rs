@@ -237,6 +237,19 @@ pub fn setup_search_filter(
         })
     };
 
+    // PROTEÇÃO ADICIONAL: Cancelar auto-close quando campo ganha foco (antes mesmo de digitar)
+    let close_timeout_for_focus = close_timeout_id.clone();
+    let focus_controller = gtk::EventControllerFocus::new();
+    focus_controller.connect_enter(move |_controller| {
+        if let Some(ref close_id) = close_timeout_for_focus {
+            if let Some(id) = close_id.borrow_mut().take() {
+                drop(id); // NÃO chamar remove() - deixa o GTK limpar
+                eprintln!("🎯 Campo de pesquisa ganhou foco - auto-close CANCELADO (via drop)!");
+            }
+        }
+    });
+    search_entry.add_controller(focus_controller);
+
     // Conectar mudanças no campo de busca
     let suggestion_engine_for_changed = suggestion_engine.clone();
     let suggestions_popover_for_changed = suggestions_popover.clone();
@@ -253,14 +266,14 @@ pub fn setup_search_filter(
         // CRÍTICO: Cancelar auto-close quando usuário digita (proteção contra fechamento)
         if let Some(ref close_id) = close_timeout_for_changed {
             if let Some(id) = close_id.borrow_mut().take() {
-                let _ = id.remove(); // Ignore error if source was already removed
-                eprintln!("⚡ Usuário digitando - auto-close CANCELADO!");
+                drop(id); // NÃO chamar remove() - deixa o GTK limpar
+                eprintln!("⚡ Usuário digitando - auto-close CANCELADO (via drop)!");
             }
         }
 
         // Cancelar busca anterior (debounce)
         if let Some(id) = search_timeout_for_changed.borrow_mut().take() {
-            let _ = id.remove(); // Ignore error if source was already removed
+            drop(id); // NÃO chamar remove() - deixa o GTK limpar
         }
 
         // 🔍 BUSCA COM DEBOUNCE (300ms após parar de digitar)

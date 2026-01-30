@@ -7,6 +7,30 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [1.11.10] - 2026-01-29
+
+### 🐛 Bug Fixes CRÍTICOS
+- **Corrigido crash fatal do popup**: Resolvido panic causado por tentativa de remover `SourceId` já removido
+  - Substituído `.remove()` por `drop()` em todos os timeouts para evitar double-free
+  - Popup não fecha mais inesperadamente durante uso
+  - Navegação com Tab e interações agora funcionam corretamente
+
+### ✨ Melhorias
+- **Modal de erro visual**: Implementado panic handler com interface GTK
+  - Mostra erro completo com stack trace quando ocorre panic
+  - Botão "📋 Copiar Erro" para facilitar reportar bugs
+  - Erro é exibido em janela scrollável ao invés de apenas crashar
+  - Requer `RUST_BACKTRACE=1` para stack trace completo
+
+### 🔧 Correções de Estabilidade
+- Logs detalhados de todas as teclas pressionadas para debug
+- Proteção tripla antes de fechar popup (campo vazio + sem foco + sem interação)
+- Tempo de auto-close aumentado de 1500ms para 3000ms
+- Cancelamento preventivo de auto-close ao ganhar foco no campo de pesquisa
+- Comportamento toggle do atalho (Super+V) funcionando corretamente
+
+---
+
 ## [1.10.5] - 2026-01-28
 
 ### 🎯 OCR Completo - Busca e Exibição Funcionando!
