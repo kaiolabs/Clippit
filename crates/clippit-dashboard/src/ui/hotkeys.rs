@@ -7,6 +7,44 @@ use rust_i18n::t;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// Converte formato Clippit (ctrl+kp_1) para formato GNOME (<Primary>KP_1)
+fn convert_to_gnome_format(modifier: &str, key: &str) -> String {
+    let mut parts = Vec::new();
+    
+    // Converter modificadores
+    for mod_part in modifier.split('+') {
+        let mod_trimmed = mod_part.trim().to_lowercase();
+        match mod_trimmed.as_str() {
+            "ctrl" | "control" => parts.push("Primary"),
+            "super" | "meta" | "win" => parts.push("Super"),
+            "alt" => parts.push("Alt"),
+            "shift" => parts.push("Shift"),
+            "none" | "" => {}
+            _ => {}
+        }
+    }
+    
+    // Converter tecla
+    let key_upper = key.to_uppercase();
+    let gnome_key = if key.starts_with("kp_") {
+        // Numpad keys: kp_1 -> KP_1
+        format!("KP_{}", &key[3..])
+    } else if key.len() == 1 {
+        // Single letter: v -> v
+        key_upper.clone()
+    } else {
+        // Function keys, etc: f1 -> F1
+        key_upper.clone()
+    };
+    
+    // Montar formato GNOME: <Primary><Super>KP_1
+    if parts.is_empty() {
+        gnome_key
+    } else {
+        format!("<{}>{}", parts.join("><"), gnome_key)
+    }
+}
+
 pub fn create_page() -> gtk::Widget {
     let config = Config::load().unwrap_or_default();
 
@@ -279,6 +317,24 @@ fn show_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
                             modifier_final.to_uppercase(),
                             key_final.to_uppercase()
                         );
+
+                        // 🔄 SYNC: Atualizar gsettings do GNOME para refletir globalmente!
+                        eprintln!("🔄 Sincronizando com GNOME gsettings...");
+                        let gnome_binding = convert_to_gnome_format(&modifier_final, &key_final);
+                        let sync_result = std::process::Command::new("gsettings")
+                            .args(&[
+                                "set",
+                                "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/",
+                                "binding",
+                                &gnome_binding,
+                            ])
+                            .output();
+                        
+                        if sync_result.is_ok() {
+                            eprintln!("✅ Atalho sincronizado com GNOME: {}", gnome_binding);
+                        } else {
+                            eprintln!("⚠️  Não foi possível sincronizar com GNOME (não afeta funcionamento)");
+                        }
 
                         // Alterar conteúdo do dialog para mostrar sucesso (centralizado)
                         let success_box = gtk::Box::new(gtk::Orientation::Vertical, 24);
