@@ -470,6 +470,20 @@ if [ "$XDG_SESSION_TYPE" = "wayland" ] && command -v gsettings &> /dev/null; the
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 fi
 
+# Forçar atualização do cache de apps e ícones
+echo ""
+echo "🔄 Atualizando cache de aplicativos e ícones..."
+update-desktop-database ~/.local/share/applications 2>/dev/null || true
+gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor 2>/dev/null || true
+xdg-desktop-menu forceupdate 2>/dev/null || true
+
+# Recarregar GNOME Shell overview (se disponível)
+if command -v gdbus &> /dev/null; then
+    gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
+        --method org.gnome.Shell.Eval "Main.overview.hide(); Main.overview.show();" &>/dev/null || true
+    echo "✅ Menu de aplicativos atualizado!"
+fi
+
 # Mensagem final de teste
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🎯 Teste o Clippit:"
