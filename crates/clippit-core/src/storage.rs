@@ -72,10 +72,9 @@ impl Storage {
         );
 
         // Migration: Add ocr_text column if it doesn't exist (for OCR feature)
-        let _ = self.conn.execute(
-            "ALTER TABLE clipboard_history ADD COLUMN ocr_text TEXT",
-            [],
-        );
+        let _ = self
+            .conn
+            .execute("ALTER TABLE clipboard_history ADD COLUMN ocr_text TEXT", []);
 
         // Check if FTS5 table has ocr_text column (migration)
         let needs_fts_migration = self
@@ -90,10 +89,18 @@ impl Storage {
 
         if needs_fts_migration {
             // Drop and recreate FTS5 table with ocr_text
-            let _ = self.conn.execute("DROP TABLE IF EXISTS clipboard_history_fts", []);
-            let _ = self.conn.execute("DROP TRIGGER IF EXISTS clipboard_history_ai", []);
-            let _ = self.conn.execute("DROP TRIGGER IF EXISTS clipboard_history_au", []);
-            let _ = self.conn.execute("DROP TRIGGER IF EXISTS clipboard_history_ad", []);
+            let _ = self
+                .conn
+                .execute("DROP TABLE IF EXISTS clipboard_history_fts", []);
+            let _ = self
+                .conn
+                .execute("DROP TRIGGER IF EXISTS clipboard_history_ai", []);
+            let _ = self
+                .conn
+                .execute("DROP TRIGGER IF EXISTS clipboard_history_au", []);
+            let _ = self
+                .conn
+                .execute("DROP TRIGGER IF EXISTS clipboard_history_ad", []);
         }
 
         // Create FTS5 virtual table for fast text search (includes ocr_text)

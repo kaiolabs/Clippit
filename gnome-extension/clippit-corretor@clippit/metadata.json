@@ -1,0 +1,10 @@
+{
+  "uuid": "clippit-corretor@clippit",
+  "name": "Clippit",
+  "description": "Launcher, clipboard history, spell checker and local AI assistant (Clippit).",
+  "shell-version": [
+    "46"
+  ],
+  "version": 1,
+  "url": "https://github.com/kaiolabs/Clippit"
+}

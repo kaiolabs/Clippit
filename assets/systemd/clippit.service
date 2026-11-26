@@ -1,0 +1,13 @@
+[Unit]
+Description=Clippit Clipboard Manager
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/clippit-daemon
+Restart=on-failure
+RestartSec=5s
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=default.target

@@ -1,466 +1,69 @@
-# 📋 Clippit - Gerenciador de Área de Transferência para Linux
+# Clippit
 
-<div align="center">
+**A local-first clipboard manager, launcher and AI assistant for GNOME.** Everything runs on your
+computer: clipboard history, a Raycast-style launcher, a spell checker for any text field, a reply
+assistant and an AI chat that can actually use your system. Nothing goes to the cloud unless you ask
+for a web search.
 
-![Clippit Logo](assets/logo_clippit.png)
+🇧🇷 [Leia em português](README.pt-BR.md)
 
-**Um gerenciador de área de transferência moderno, rápido e elegante para Linux (Wayland)**
+## What it does
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
-[![GTK4](https://img.shields.io/badge/GTK-4.6+-green.svg)](https://www.gtk.org/)
+| | Default shortcut |
+|---|---|
+| **Launcher** — apps, files, websites, math and unit conversions, system controls, window tiling, emoji, snippets | `Alt+Space` |
+| **Clipboard history** — text, links, code and images; screenshots are OCR'd so you can search the text inside them; pin, transform, paste | `Alt+C` |
+| **AI chat** — a local LLM with 38 tools: web search, open apps, move windows, volume/brightness, read and organize files, convert PDFs and images, git status, background build tasks, notes, reminders… | `Alt+I` |
+| **Text actions** — summarize, translate, explain or rewrite the selected text | `Alt+A` |
+| **Spell checker** — a badge next to any text field; one key fixes everything | `Alt+O` / `Alt+S` |
+| **Reply assistant** — reads the conversation in the focused window (WhatsApp, Slack…) and suggests replies | `Alt+K` |
+| **Game mode** — moves the AI off the GPU; games are detected automatically | `Ctrl+Shift+E` |
+| **Doctor** — checks every part of Clippit every 2 minutes and fixes what breaks | — |
 
-[Instalação](#-instalação) • [Uso](#-uso) • [Compilar](#-compilar-do-código-fonte) • [Contribuir](#-contribuindo)
+Every shortcut can be changed in **Settings → Atalhos**, and the AI models in **Settings → Corretor**.
+The settings app also has a **Funcionalidades** page that explains each feature.
 
-</div>
+> The interface is in Brazilian Portuguese for now. Translations are welcome.
 
----
+## Requirements
 
-## ✨ **Features**
+- **GNOME Shell 46 on Wayland** (tested on Zorin OS 18, based on Ubuntu 24.04). Other versions may need a
+  one-line change in `metadata.json`.
+- Debian/Ubuntu packages (the installer lists the missing ones).
+- [Rust](https://rustup.rs) to build.
+- For the AI: about 4 GB of disk. A GPU with Vulkan (NVIDIA, AMD or Intel) makes it fast; it also runs on
+  the CPU with the small model.
 
-- 📋 **Captura Automática** - Monitora e salva tudo que você copia
-- 🖼️ **Suporte a Imagens** - Salva prints e imagens copiadas
-- 🔍 **Busca Inteligente** - Encontre rapidamente o que procura com pesquisa em tempo real
-- ⌨️ **Atalho Global** - Pressione `Super+V` para abrir instantaneamente
-- 💾 **Histórico Persistente** - Seus dados salvos em SQLite
-- 🎨 **Interface Moderna** - Design limpo com GTK4 e libadwaita
-- ⚡ **Ultra Rápido** - Escrito em Rust, zero latência
-- 🔒 **Baixo Consumo** - Menos de 20MB de RAM
-- 🗑️ **Gerenciamento Fácil** - Delete itens individualmente ou limpe tudo
-- ⚙️ **Configurável** - Dashboard intuitivo para ajustar preferências
-- 🚀 **Autocomplete Global** - 🆕 Sugestões inteligentes enquanto você digita em **qualquer aplicativo**!
-
----
-
-## 🖼️ **Screenshots**
-
-### Popup Principal (Super+V)
-![Clippit Popup](docs/screenshot-popup.png)
-*Interface rápida e elegante para acessar seu histórico*
-
-### Dashboard de Configurações
-![Clippit Dashboard](docs/screenshot-dashboard.png)
-*Central de controle com todas as opções*
-
-### 🚀 Autocomplete Global (NOVO!)
-Sugestões inteligentes aparecem enquanto você digita em **qualquer aplicativo** - como no celular, mas no desktop! Pressione **Tab** para aceitar a sugestão.
-
----
-
-## 🚀 **Instalação**
-
-### 📦 **Opção 1: Pacote .deb (Recomendado)**
-
-**Para Ubuntu 22.04+, Debian 12+, Linux Mint 21+:**
-
-1. Baixe o arquivo `.deb` da [última release](releases)
-2. Instale:
+## Install
 
 ```bash
-sudo dpkg -i clippit_1.0.0_amd64.deb
-sudo apt install -f
+git clone https://github.com/kaiolabs/Clippit.git
+cd Clippit
+./scripts/install.sh --deps
 ```
 
-3. Inicie o serviço:
+The installer builds everything, installs it for your user only (`~/.local`), starts the services,
+sets up the shortcuts and offers to download the AI engine ([llama.cpp](https://github.com/ggml-org/llama.cpp))
+and the default models ([Qwen 3.5](https://huggingface.co/unsloth)). On the first install, log out and
+back in so GNOME loads the extension.
 
-```bash
-systemctl --user enable --now clippit
-```
+To remove it: `./scripts/uninstall.sh` (your data is only deleted if you say so).
 
-**Pronto!** Pressione `Super+V` para usar! 🎉
+## Privacy
 
----
+- History, AI, spell checking, voice dictation and OCR run locally.
+- The internet is only used when you ask (web search, news, exchange rates, weather) and to download
+  models.
+- The AI never reads files that look like keys or passwords, and anything that changes your system
+  (moving files, killing a program, running a command) waits for you to press **Rodar**.
 
-### 🔧 **Opção 2: Compilar do Código-Fonte**
+## Documentation
 
-**Quer compilar você mesmo? Veja o guia completo:**  
-👉 [BUILD_FOR_USERS.md](BUILD_FOR_USERS.md)
+- [Contributing](CONTRIBUTING.md) — how the project is organized, how to run it in development, the
+  scripts, the rules for code, commits and pull requests.
+- [Configuration](docs/configuration.md) — every setting in `config.toml` and `corretor.conf`.
+- [Changelog](CHANGELOG.md)
 
-**Resumo rápido:**
+## License
 
-```bash
-# 1. Instalar dependências
-sudo apt update && sudo apt install -y \
-    curl build-essential pkg-config \
-    libgtk-4-dev libadwaita-1-dev libsqlite3-dev \
-    xdotool yad ibus
-
-# 2. Instalar Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source $HOME/.cargo/env
-
-# 3. Compilar
-cargo build --release
-
-# 4. Criar pacote .deb
-./scripts/build-deb-simple.sh
-
-# 5. Instalar
-sudo dpkg -i clippit_*.deb
-```
-
----
-
-## 📖 **Uso**
-
-### ⌨️ **Atalhos de Teclado**
-
-#### **Histórico de Clipboard:**
-| Atalho | Ação |
-|--------|------|
-| `Super+V` | Abrir popup do histórico |
-| `↑` `↓` | Navegar pelos itens |
-| `Enter` | Copiar item selecionado |
-| `Delete` | Apagar item selecionado |
-| `Esc` | Fechar popup |
-| `Ctrl+F` | Focar na busca |
-
-#### **Autocomplete Global:** 🆕
-| Ação | Resultado |
-|------|-----------|
-| Digite `"cód"` | Popup com sugestões: "código", "códigos"... |
-| `Tab` | Aceita sugestão e injeta texto completo |
-| `↑` `↓` | Navega entre sugestões |
-| `Esc` | Fecha popup de sugestões |
-| `Ctrl+Shift+A` | Liga/desliga autocomplete (configurável) |
-
-### 🎛️ **Dashboard de Configurações**
-
-Abra o dashboard para:
-- 📊 Ver estatísticas de uso
-- 🗑️ Limpar todo o histórico
-- 📏 Configurar tamanho máximo de imagens
-- 🖼️ Ativar/desativar captura de imagens
-- 🎨 Personalizar aparência
-- 🚀 **Configurar Autocomplete Global**:
-  - Ativar/desativar
-  - Número mínimo de caracteres
-  - Atraso antes de mostrar sugestões
-  - Apps ignorados (ex: campos de senha)
-  - Tecla de atalho para ligar/desligar
-  - Número máximo de sugestões
-
-Abra via menu de aplicativos ou:
-```bash
-clippit-dashboard
-```
-
-### 📂 **Localização dos Dados**
-
-```
-~/.local/share/clippit/
-├── history.db          # Banco de dados SQLite
-└── images/            # Imagens salvas
-```
-
----
-
-## 🛠️ **Gerenciamento do Daemon**
-
-```bash
-# Ver status
-systemctl --user status clippit
-
-# Parar
-systemctl --user stop clippit
-
-# Reiniciar
-systemctl --user restart clippit
-
-# Desativar autostart
-systemctl --user disable clippit
-
-# Ver logs em tempo real
-journalctl --user -u clippit -f
-```
-
----
-
-## 🏗️ **Arquitetura**
-
-```
-clippit/
-├── crates/
-│   ├── clippit-core/       # 🧠 Lógica de negócio e histórico
-│   ├── clippit-daemon/     # 👁️ Monitor de clipboard e hotkeys
-│   ├── clippit-ipc/        # 📡 Comunicação inter-processos
-│   ├── clippit-popup/      # 🎨 Interface popup (Super+V)
-│   └── clippit-dashboard/  # ⚙️ Dashboard de configurações
-├── assets/                 # 🖼️ Ícones e recursos
-├── scripts/                # 🔧 Scripts de build e instalação
-└── docs/                   # 📚 Documentação
-```
-
-### 🔄 **Fluxo de Funcionamento**
-
-```
-┌─────────────┐      ┌──────────────┐      ┌────────────┐
-│  Clipboard  │ ───> │    Daemon    │ ───> │  Database  │
-│  (Wayland)  │      │  (Monitor)   │      │  (SQLite)  │
-└─────────────┘      └──────────────┘      └────────────┘
-                            │
-                            │ IPC
-                            ▼
-                     ┌──────────────┐
-                     │    Popup     │ <─── Super+V
-                     │  (GTK4 UI)   │
-                     └──────────────┘
-```
-
----
-
-## 🔧 **Requisitos de Sistema**
-
-### **Sistema Operacional:**
-- ✅ Ubuntu 22.04+ (Jammy, Noble)
-- ✅ Debian 12+ (Bookworm)
-- ✅ Linux Mint 21+
-- ✅ Pop!_OS 22.04+
-- ✅ Zorin OS 17+
-- ✅ Wayland (GNOME, KDE Plasma, Sway)
-
-### **Dependências Runtime:**
-- `GTK4 4.6+` - Interface gráfica
-- `libadwaita 1.2+` - Componentes modernos
-- `xdotool` - Injeção de texto (autocomplete)
-- `yad` ou `zenity` - Popup de sugestões
-- `ibus` - Captura de teclado global
-
-### **Hardware:**
-- CPU: Qualquer processador x86_64
-- RAM: ~20MB (daemon + UI)
-- Disco: ~50MB (instalação)
-
----
-
-## 🐛 **Troubleshooting**
-
-<details>
-<summary><b>❌ Daemon não inicia</b></summary>
-
-```bash
-# Verificar se há outra instância rodando
-ps aux | grep clippit-daemon
-
-# Matar processos antigos
-pkill clippit-daemon
-
-# Remover socket antigo
-rm /tmp/clippit.sock
-
-# Reiniciar
-systemctl --user restart clippit
-```
-</details>
-
-<details>
-<summary><b>⌨️ Atalho Super+V não funciona</b></summary>
-
-1. Verifique conflitos com outros atalhos:
-   ```bash
-   gsettings list-recursively | grep -i "super+v"
-   ```
-
-2. Verifique se o daemon está rodando:
-   ```bash
-   systemctl --user status clippit
-   ```
-
-3. Veja os logs para erros:
-   ```bash
-   journalctl --user -u clippit -n 50
-   ```
-</details>
-
-<details>
-<summary><b>📋 Clipboard não captura</b></summary>
-
-1. Verifique se está usando Wayland:
-   ```bash
-   echo $XDG_SESSION_TYPE
-   # Deve mostrar: wayland
-   ```
-
-2. Reinicie o daemon:
-   ```bash
-   systemctl --user restart clippit
-   ```
-
-3. Verifique os logs:
-   ```bash
-   journalctl --user -u clippit -n 50
-   ```
-</details>
-
-<details>
-<summary><b>🖼️ Imagens não aparecem</b></summary>
-
-1. Verifique permissões da pasta de imagens:
-   ```bash
-   ls -la ~/.local/share/clippit/images/
-   ```
-
-2. Ative captura de imagens no dashboard:
-   ```bash
-   clippit-dashboard
-   ```
-</details>
-
-<details>
-<summary><b>💾 Banco de dados corrompido</b></summary>
-
-```bash
-# Fazer backup
-cp ~/.local/share/clippit/history.db ~/.local/share/clippit/history.db.bak
-
-# Limpar e recriar
-rm ~/.local/share/clippit/history.db
-systemctl --user restart clippit
-```
-</details>
-
-<details>
-<summary><b>🚀 Autocomplete não aparece</b></summary>
-
-```bash
-# Verificar se está ativado
-clippit-dashboard  # Aba "Autocompletar"
-
-# Instalar dependências necessárias
-sudo apt install xdotool yad ibus
-
-# Ver logs em tempo real
-journalctl --user -u clippit -f
-
-# Reiniciar daemon
-systemctl --user restart clippit
-```
-</details>
-
-<details>
-<summary><b>💬 Autocomplete rouba foco / não injeta texto</b></summary>
-
-**Popup rouba foco:**
-- O popup deve aparecer como "overlay fantasma" sem roubar foco
-- Certifique-se de ter `yad` instalado e atualizado: `sudo apt upgrade yad`
-- Alternativa: Use `notify-send` (mais discreto, mas menos visual)
-
-**Não injeta texto:**
-```bash
-# Testar xdotool manualmente
-xdotool type "teste"
-
-# Se não funcionar, pode ser limitação do Wayland
-# Apps Wayland-native podem bloquear injeção de texto
-
-# Solução: Force app em modo XWayland
-GDK_BACKEND=x11 nome-do-app
-```
-
-**Compatibilidade:**
-- ✅ Funciona: Firefox, Chrome, VS Code, gedit, LibreOffice
-- ⚠️ Limitado: Apps GNOME Wayland-native (Text Editor, etc.)
-</details>
-
----
-
-## 🗺️ **Roadmap**
-
-### ✅ **v1.0 - Lançamento Inicial**
-- [x] Captura de texto
-- [x] Captura de imagens
-- [x] Histórico persistente
-- [x] Atalho global Super+V
-- [x] Interface GTK4 moderna
-- [x] Dashboard de configurações
-- [x] Busca no histórico
-- [x] Pacote .deb
-- [x] Suporte nativo a Wayland
-
-### ✅ **v1.9 - Autocomplete Global** 🆕
-- [x] Captura de teclado global (rdev)
-- [x] Sugestões baseadas em histórico
-- [x] Popup overlay "fantasma" (sem roubar foco)
-- [x] Navegação com setas (↑↓)
-- [x] Injeção automática de texto (Tab)
-- [x] Configuração completa via dashboard
-- [x] Filtro de apps ignorados
-- [x] Atalho para ligar/desligar
-- [x] Pesquisa em tempo real
-
-### 🚧 **v2.0 - Melhorias & IA** (Em desenvolvimento)
-- [ ] Sugestões com IA (completar frases, contexto)
-- [ ] Correção ortográfica automática
-- [ ] Tradução em tempo real
-- [ ] Snippets e templates personalizados
-- [ ] Fixar itens favoritos
-- [ ] Categorias/tags
-- [ ] Estatísticas detalhadas
-- [ ] Temas customizados
-- [ ] Importar/exportar histórico
-
-### 🔮 **v3.0 - Futuro**
-- [ ] Sincronização entre máquinas
-- [ ] Aplicativo mobile companion
-- [ ] Plugins/extensões
-- [ ] OCR em imagens
-- [ ] Criptografia de dados sensíveis
-- [ ] Suporte a mais protocolos (X11, Windows, macOS)
-
----
-
-## 🤝 **Contribuindo**
-
-Contribuições são muito bem-vindas! 🎉
-
-### **Como Contribuir:**
-
-1. 🍴 Faça um Fork do projeto
-2. 🌱 Crie uma branch para sua feature (`git checkout -b feature/MinhaFeature`)
-3. ✍️ Commit suas mudanças (`git commit -m 'Adiciona MinhaFeature'`)
-4. 📤 Push para a branch (`git push origin feature/MinhaFeature`)
-5. 🔃 Abra um Pull Request
-
-### **Encontrou um Bug?**
-
-Abra uma [issue](issues) com:
-- 📝 Descrição detalhada do problema
-- 🖥️ Informações do sistema (Ubuntu version, GTK version)
-- 📋 Logs relevantes (`journalctl --user -u clippit`)
-- 🔄 Passos para reproduzir
-
----
-
-## 📄 **Licença**
-
-Este projeto está licenciado sob a **MIT License** - veja o arquivo [LICENSE](LICENSE) para detalhes.
-
----
-
-## 🙏 **Agradecimentos**
-
-- [GTK Project](https://www.gtk.org/) - Framework UI
-- [libadwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/) - Componentes modernos
-- [Rust Community](https://www.rust-lang.org/) - Linguagem incrível
-- [Wayland](https://wayland.freedesktop.org/) - Protocolo de display moderno
-- [arboard](https://github.com/1Password/arboard) - Clipboard cross-platform
-
----
-
-## 📞 **Contato & Suporte**
-
-- 🐛 **Issues:** [GitHub Issues](issues)
-- 💬 **Discussões:** [GitHub Discussions](discussions)
-- 📧 **Email:** clippit@example.com
-
----
-
-<div align="center">
-
-**Feito com ❤️ e ☕ em Rust**
-
-Se este projeto te ajudou, considere dar uma ⭐!
-
-[⬆ Voltar ao topo](#-clippit---gerenciador-de-área-de-transferência-para-linux)
-
-</div>
+[MIT](LICENSE)

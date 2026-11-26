@@ -1,128 +1,27 @@
-# Clippit - Arquivo de Configuração
-# Copie para ~/.config/clippit/config.toml
+# Clippit — history settings (daemon and popup).
+# The daemon creates ~/.config/clippit/config.toml on first run; this file shows every option.
+# Most of it is easier to change in the settings app (Geral). AI, shortcuts and the spell checker
+# are configured in ~/.config/clippit/corretor.conf — see docs/configuration.md.
 
 [general]
-# Limite máximo de itens no histórico
-max_history_items = 100
-
-# Intervalo de polling do clipboard (em milissegundos)
-poll_interval_ms = 200
-
-# Tamanho máximo de texto (em bytes)
-max_text_size = 10485760  # 10MB
-
-# Tamanho máximo de imagem (em bytes)
-max_image_size = 52428800  # 50MB
+max_history_items = 100        # items kept; older ones are removed
+poll_interval_ms = 200         # how often the clipboard is checked
+max_text_size = 10485760       # bytes; larger texts are not saved
 
 [hotkeys]
-# Atalho para abrir histórico
-# Modificadores: super, ctrl, alt, shift
-# Teclas: a-z, 0-9, f1-f12, etc.
-show_history_modifier = "super"
-show_history_key = "v"
-
-# Atalho alternativo (opcional)
-# show_history_alt_modifier = "ctrl+shift"
-# show_history_alt_key = "v"
+show_history_modifier = "alt"  # Alt+C opens the history
+show_history_key = "c"
 
 [ui]
-# Tema da interface: "dark" ou "light"
-theme = "dark"
-
-# Fonte principal
-font_family = "Nunito"
-font_size = 14
-
-# Cores do tema escuro
-[ui.colors.dark]
-background = "#1e1e1e"
-foreground = "#ffffff"
-selection = "#264f78"
-border = "#454545"
-
-# Cores do tema claro
-[ui.colors.light]
-background = "#ffffff"
-foreground = "#000000"
-selection = "#0078d4"
-border = "#cccccc"
-
-[ui.window]
-# Largura da janela popup (em pixels)
-width = 600
-
-# Altura máxima (em pixels)
-max_height = 400
-
-# Posição: "center", "cursor", "top-right", "bottom-right"
-position = "center"
-
-# Opacidade da janela (0.0 a 1.0)
-opacity = 0.95
-
-[features]
-# Capturar texto automaticamente
-capture_text = true
-
-# Capturar imagens automaticamente
-capture_images = true
-
-# Capturar arquivos automaticamente
-capture_files = false
-
-# Sincronização com cloud (requer configuração adicional)
-sync_enabled = false
+language = "pt"                # "pt" or "en" (settings app and popup)
+show_notifications = true      # popup only
 
 [privacy]
-# Ignorar aplicativos sensíveis (gerenciadores de senha, etc)
-ignore_sensitive_apps = true
+enable_image_capture = true    # save copied images and screenshots
+max_image_size_mb = 10
 
-# Lista de aplicativos a ignorar (por window class)
-ignored_apps = [
-    "keepassxc",
-    "bitwarden",
-    "1password",
-]
+[features]
+enable_ocr = true              # read the text in images so it can be searched
 
-# Limpar histórico ao fechar
-clear_on_exit = false
-
-[autocomplete]
-# Habilitar autocomplete global (feature avançada)
-# ⚠️ Desabilitado por padrão - requer IBus configurado
-enabled = false
-
-# Número máximo de sugestões a mostrar
-max_suggestions = 3
-
-# Caracteres mínimos para mostrar sugestões
-min_chars = 2
-
-# Delay antes de mostrar sugestões (ms)
-delay_ms = 300
-
-# Mostrar em campos de senha (não recomendado)
-show_in_passwords = false
-
-# Apps onde autocomplete deve ser ignorado
-ignored_apps = [
-    "gnome-terminal",
-    "tilix",
-    "keepassxc",
-    "bitwarden",
-    "1password",
-]
-
-# Atalho para ativar/desativar temporariamente
-toggle_modifier = "ctrl+shift"
-toggle_key = "kp_end"
-
-[advanced]
-# Nível de log: "error", "warn", "info", "debug", "trace"
-log_level = "info"
-
-# Localização do banco de dados (deixe vazio para padrão)
-# database_path = "/custom/path/history.db"
-
-# Socket IPC customizado (deixe vazio para padrão)
-# ipc_socket = "/tmp/clippit-custom.sock"
+[ocr]
+languages = "por+eng"          # Tesseract languages

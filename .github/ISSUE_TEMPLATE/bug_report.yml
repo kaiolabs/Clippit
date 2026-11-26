@@ -1,0 +1,30 @@
+name: Bug report
+description: Something in Clippit doesn't work
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Doctor report
+      description: Output of `clippit-doutor --relatorio`.
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "`journalctl --user --since '10 min ago' | grep -i clippit`"
+      render: text
+  - type: input
+    id: system
+    attributes:
+      label: System
+      placeholder: Ubuntu 24.04, GNOME 46, NVIDIA RTX 3050
+    validations:
+      required: true

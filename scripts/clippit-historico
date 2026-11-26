@@ -1,0 +1,12 @@
+#!/bin/sh
+# Atalho do Clippit (Alt+C): abre o Histórico no lançador
+# (vidro, prévia ao lado). Se a extensão do GNOME não estiver ativa, cai no
+# popup GTK antigo.
+#   clippit-historico        → histórico
+#   clippit-historico ia     → tela da IA
+tela="${1:-historico}"
+if gdbus call --session --dest com.clippit.Lancador --object-path /com/clippit/Lancador \
+    --method com.clippit.Lancador.Abrir "$tela" >/dev/null 2>&1; then
+    exit 0
+fi
+exec "$HOME/.local/bin/clippit-popup"

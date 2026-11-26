@@ -1,0 +1,237 @@
+#!/usr/bin/env -S python3 -I
+"""clippit-busca — buscas do lançador do Clippit (Alt+Espaço).
+
+    clippit-busca historico [TEXTO]   → itens do histórico da área de transferência (JSON)
+    clippit-busca arquivos TEXTO      → arquivos pelo nome, pelo índice do GNOME (JSON)
+    clippit-busca copiar ID           → põe um item do histórico na área de transferência
+    clippit-busca apagar ID           → apaga um item (e a imagem dele), como o popup do Clippit
+    clippit-busca fixar ID            → fixa um item no topo (guarda uma cópia: não some com o tempo)
+    clippit-busca desafixar ID        → tira dos fixados (ID p…)
+    clippit-busca emoji               → lista de emoji com nomes em português (JSON, em cache)
+
+Fora o "apagar", o banco do histórico é aberto em modo somente leitura.
+"""
+
+import json
+import os
+import shutil
+import time
+import sqlite3
+import subprocess
+import sys
+import urllib.parse
+
+DATA = os.path.join(os.path.expanduser("~"), ".local/share/clippit")
+DB = os.path.join(DATA, "history.db")
+FIXADOS = os.path.join(DATA, "fixados.json")
+FIXADOS_DIR = os.path.join(DATA, "fixados")
+
+
+def _pins():
+    try:
+        with open(FIXADOS, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def _save_pins(items):
+    os.makedirs(DATA, exist_ok=True)
+    tmp = FIXADOS + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(items, f, ensure_ascii=False)
+    os.replace(tmp, FIXADOS)
+
+
+def _db():
+    return sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=3)
+
+
+def historico(query="", limit=60):
+    pins = [p for p in _pins() if not query or query.lower() in (p.get("texto", "") + " " + p.get("ocr", "")).lower()]
+    pinned_from = {p.get("origem") for p in _pins()}
+    return [{**p, "fixado": True} for p in pins] + [h for h in _historico(query, limit) if h["id"] not in pinned_from]
+
+
+def _historico(query="", limit=60):
+    sql = ("SELECT id, content_type, content_text, image_path, ocr_text, timestamp "
+           "FROM clipboard_history")
+    args = []
+    if query:
+        sql += " WHERE content_text LIKE ? OR ocr_text LIKE ?"
+        args = [f"%{query}%", f"%{query}%"]
+    sql += " ORDER BY timestamp DESC LIMIT ?"
+    args.append(limit)
+    out = []
+    with _db() as c:
+        for id_, kind, text, img, ocr, ts in c.execute(sql, args):
+            out.append({
+                "id": id_,
+                "tipo": kind,
+                "texto": (text or "").strip()[:2000],
+                "ocr": (ocr or "").strip()[:1500],
+                "imagem": img or "",
+                "quando": ts,
+            })
+    return out
+
+
+def copiar(id_):
+    if str(id_).startswith("p"):
+        p = next((x for x in _pins() if x["id"] == id_), None)
+        if not p:
+            return False
+        if p["tipo"] == "image" and p.get("imagem") and os.path.exists(p["imagem"]):
+            with open(p["imagem"], "rb") as f:
+                subprocess.Popen(["wl-copy", "--type", "image/png"], stdin=f, start_new_session=True)
+        else:
+            subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE, start_new_session=True).communicate(p.get("texto", "").encode())
+        return True
+    with _db() as c:
+        row = c.execute("SELECT content_type, content_text, image_path FROM clipboard_history WHERE id = ?",
+                        (int(id_),)).fetchone()
+    if not row:
+        return False
+    kind, text, img = row
+    if kind == "image" and img and os.path.exists(img):
+        with open(img, "rb") as f:
+            subprocess.Popen(["wl-copy", "--type", "image/png"], stdin=f, start_new_session=True)
+    else:
+        p = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE, start_new_session=True)
+        p.communicate((text or "").encode())
+    return True
+
+
+def fixar(id_):
+    with _db() as c:
+        row = c.execute("SELECT content_type, content_text, image_path, ocr_text, timestamp FROM clipboard_history "
+                        "WHERE id = ?", (int(id_),)).fetchone()
+    if not row:
+        return False
+    kind, text, img, ocr, ts = row
+    pins = [p for p in _pins() if p.get("origem") != int(id_)]
+    pid = f"p{int(time.time() * 1000)}"
+    item = {"id": pid, "origem": int(id_), "tipo": kind, "texto": (text or "")[:20000], "ocr": (ocr or "")[:4000],
+            "imagem": "", "quando": ts}
+    if kind == "image" and img and os.path.exists(img):
+        os.makedirs(FIXADOS_DIR, exist_ok=True)
+        item["imagem"] = os.path.join(FIXADOS_DIR, pid + os.path.splitext(img)[1])
+        shutil.copy2(img, item["imagem"])  # cópia: o Clippit pode apagar a original
+    _save_pins([item] + pins)
+    return True
+
+
+def desafixar(id_):
+    pins = _pins()
+    keep = [p for p in pins if p["id"] != id_]
+    for p in pins:
+        if p["id"] == id_ and p.get("imagem", "").startswith(FIXADOS_DIR) and os.path.exists(p["imagem"]):
+            os.remove(p["imagem"])
+    _save_pins(keep)
+    return len(keep) != len(pins)
+
+
+def apagar(id_):
+    """Mesmo que o Clippit faz: apaga a imagem do item (se houver) e a linha."""
+    if str(id_).startswith("p"):
+        return desafixar(id_)
+    with sqlite3.connect(DB, timeout=5) as c:
+        row = c.execute("SELECT image_path FROM clipboard_history WHERE id = ?", (int(id_),)).fetchone()
+        if not row:
+            return False
+        if row[0]:
+            try:
+                os.remove(row[0])
+            except OSError:
+                pass
+        c.execute("DELETE FROM clipboard_history WHERE id = ?", (int(id_),))
+    return True
+
+
+CATEGORIAS = {"Smileys & Emotion": "Sorrisos e emoções", "People & Body": "Pessoas", "Animals & Nature": "Animais e natureza",
+              "Food & Drink": "Comida e bebida", "Travel & Places": "Viagens e lugares", "Activities": "Atividades",
+              "Objects": "Objetos", "Symbols": "Símbolos", "Flags": "Bandeiras"}
+
+
+def emoji():
+    """Emoji do IBus (nomes em português e inglês), na ordem do Unicode e com a
+    categoria. Sem variações de cor de pele e sem cópias. Fica em cache."""
+    cache = os.path.join(os.path.expanduser("~"), ".cache", "clippit", "emoji-v2.json")
+    src = [f"/usr/share/ibus/dicts/emoji-{lang}.dict" for lang in ("pt", "en")]
+    stamp = max((os.path.getmtime(p) for p in src if os.path.exists(p)), default=0)
+    if os.path.exists(cache) and os.path.getmtime(cache) >= stamp:
+        with open(cache, encoding="utf-8") as f:
+            return f.read()
+    import gi
+    gi.require_version("IBus", "1.0")
+    from gi.repository import IBus
+    out, seen = {}, set()
+    tones = {chr(c) for c in range(0x1F3FB, 0x1F400)}
+    for p in src:
+        if not os.path.exists(p):
+            continue
+        for d in IBus.EmojiData.load(p):
+            e = d.get_emoji()
+            cat = CATEGORIAS.get(d.get_category())
+            if e in out:
+                item = out[e]
+            elif not cat or any(t in e for t in tones) or e.replace("\ufe0f", "") in seen:
+                continue
+            else:
+                seen.add(e.replace("\ufe0f", ""))
+                item = out[e] = {"e": e, "d": d.get_description(), "c": cat, "w": []}
+            for w in [d.get_description(), *(d.get_annotations() or [])]:
+                if w and w not in item["w"]:
+                    item["w"].append(w)
+    data = json.dumps(list(out.values()), ensure_ascii=False)
+    os.makedirs(os.path.dirname(cache), exist_ok=True)
+    with open(cache, "w", encoding="utf-8") as f:
+        f.write(data)
+    return data
+
+
+def arquivos(query, limit=8):
+    q = query.lower().replace("\\", "").replace("'", "\\'")
+    sparql = ("SELECT DISTINCT ?url WHERE { ?f nie:url ?url ; nfo:fileName ?n . "
+              f"FILTER(CONTAINS(LCASE(?n), '{q}')) }} ORDER BY DESC(nfo:fileLastModified(?f)) LIMIT {limit}")
+    try:
+        res = subprocess.run(["tracker3", "sparql", "--dbus-service", "org.freedesktop.Tracker3.Miner.Files",
+                              "-q", sparql], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    out = []
+    for line in res.splitlines():
+        line = line.strip()
+        if not line.startswith("file://"):
+            continue
+        path = urllib.parse.unquote(line[len("file://"):])
+        if not os.path.exists(path):
+            continue
+        out.append({"uri": line, "nome": os.path.basename(path),
+                    "pasta": os.path.dirname(path).replace(os.path.expanduser("~"), "~", 1)})
+    return out
+
+
+def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    arg = " ".join(sys.argv[2:]).strip()
+    if cmd == "historico":
+        print(json.dumps(historico(arg), ensure_ascii=False))
+    elif cmd == "arquivos":
+        print(json.dumps(arquivos(arg) if len(arg) >= 2 else [], ensure_ascii=False))
+    elif cmd == "apagar":
+        print(json.dumps({"ok": apagar(arg)}))
+    elif cmd == "emoji":
+        print(emoji())
+    elif cmd == "fixar":
+        print(json.dumps({"ok": fixar(arg)}))
+    elif cmd == "desafixar":
+        print(json.dumps({"ok": desafixar(arg)}))
+    elif cmd == "copiar":
+        print(json.dumps({"ok": copiar(arg)}))
+    else:
+        print(__doc__)
+
+
+if __name__ == "__main__":
+    main()
