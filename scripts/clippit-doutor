@@ -42,6 +42,11 @@ def tool(name):
 
 EXT = "clippit-corretor@clippit"
 
+
+def gnome_session():
+    """No GNOME a interface é a extensão; nos outros (Hyprland, Sway…) é o clippit-shell (Quickshell)."""
+    return run(["pgrep", "-x", "gnome-shell"])[0] == 0
+
 # Arquivos de dados em JSON (o que quebrar aqui derruba uma função inteira).
 DATA_FILES = [os.path.join(DATA, "aprendizado", "trocas.json"), os.path.join(DATA, "aprendizado", "pessoas.json"),
               os.path.join(DATA, "fixados.json"), os.path.join(DATA, "lembretes.json"), os.path.join(DATA, "notas.json"),
@@ -53,6 +58,7 @@ SAFE = {
     "reiniciar_ia": "desliga o servidor da IA (ele sobe sozinho no próximo uso)",
     "religar_extensao": "desliga e liga a extensão do Clippit no GNOME",
     "religar_extensoes_gnome": "volta a permitir extensões no GNOME (ele desliga todas depois de uma queda)",
+    "reiniciar_interface": "reinicia a interface do Clippit (clippit-shell, fora do GNOME)",
     "consertar_dados": "conserta os arquivos de dados do Clippit (guarda cópia antes)",
     "restaurar_atalhos": "recoloca os atalhos Alt+C e Alt+Espaço",
     "limpar_marcas": "apaga marcas temporárias velhas (pedido de parar, etc.)",
@@ -138,6 +144,18 @@ def fix_religar_extensao():
     return run(["gnome-extensions", "enable", EXT])[0] == 0
 
 
+def fix_reiniciar_interface():
+    if run(["systemctl", "--user", "cat", "clippit-shell.service"])[0] == 0:
+        return run(["systemctl", "--user", "restart", "clippit-shell"], timeout=30)[0] == 0
+    run(["pkill", "-f", "quickshell.*clippit"])
+    try:
+        subprocess.Popen([tool("clippit-shell")], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except OSError:
+        return False
+
+
 def fix_religar_extensoes_gnome():
     run(["gsettings", "set", "org.gnome.shell", "disable-user-extensions", "false"])
     return run(["gnome-extensions", "enable", EXT])[0] == 0
@@ -186,6 +204,8 @@ def fix_consertar_dados():
 
 
 def fix_restaurar_atalhos():
+    if not gnome_session():
+        return fix_reiniciar_interface()  # o clippit-shell registra os atalhos ao subir
     base = "org.gnome.settings-daemon.plugins.media-keys"
     path = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/"
     _, cur, _ = run(["gsettings", "get", base, "custom-keybindings"])
@@ -230,6 +250,31 @@ def check_all(st, verbose=False):
     """Devolve [(parte, situação, corrigido?)]."""
     out = []
 
+    if gnome_session():
+        check_gnome(st, out)
+    else:
+        check_shell(st, out)
+    check_common(st, out)
+    return out
+
+
+def check_shell(st, out):
+    """Fora do GNOME: o clippit-shell (Quickshell) tem de estar de pé e respondendo."""
+    if shell_call("Janelas") is None:
+        st["ext_mudo"] = st.get("ext_mudo", 0) + 1
+        if st["ext_mudo"] >= 2:  # duas checagens seguidas
+            why = "a interface do Clippit (clippit-shell) parou de responder"
+            ok = apply(st, "reiniciar_interface", why)
+            out.append(("Interface", why, ok))
+            st["ext_mudo"] = 0
+        else:
+            out.append(("Interface", "conferindo (não respondeu agora)", None))
+    else:
+        st["ext_mudo"] = 0
+        out.append(("Interface", "ok", None))
+
+
+def check_gnome(st, out):
     # 0) Atalhos primeiro: a extensão só consegue reservar o Alt+Espaço se ele estiver livre.
     _, menu, _ = run(["gsettings", "get", "org.gnome.desktop.wm.keybindings", "activate-window-menu"])
     _, alt_c, _ = run(["gsettings", "get", "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"
@@ -270,6 +315,8 @@ def check_all(st, verbose=False):
                 apply(st, "religar_extensao", "o atalho Alt+Espaço foi devolvido; a extensão precisa pegá-lo")
             out.append(("Extensão", "ok", None))
 
+
+def check_common(st, out):
     # 3) Serviço do histórico.
     _, active, _ = run(["systemctl", "--user", "is-active", "clippit"])
     if active != "active":

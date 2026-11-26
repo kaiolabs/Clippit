@@ -89,6 +89,17 @@ in
       description = "The Clippit package. Override `llama-cpp` for a GPU build of the AI, or set `withAI = false`.";
     };
 
+    quickshell = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Run the Quickshell interface (`clippit-shell`) instead of the GNOME extension, for Hyprland,
+        Sway, niri and other wlroots-style compositors: launcher, spell checker next to the cursor,
+        reply assistant and AI chat. It registers its own shortcuts with Hyprland and Sway. The
+        compositor must export WAYLAND_DISPLAY (and HYPRLAND_INSTANCE_SIGNATURE) to systemd.
+      '';
+    };
+
     gnomeExtension = mkOption {
       type = types.bool;
       default = true;
@@ -204,6 +215,21 @@ in
         ];
       };
       Install.WantedBy = [ "default.target" ];
+    };
+
+    systemd.user.services.clippit-shell = lib.mkIf cfg.quickshell {
+      Unit = {
+        Description = "Interface do Clippit (Quickshell, fora do GNOME)";
+        PartOf = [ "graphical-session.target" ];
+        After = [ "graphical-session.target" ];
+      };
+      Service = {
+        ExecStart = lib.getExe' cfg.package "clippit-shell";
+        Restart = "on-failure";
+        RestartSec = "3s";
+        Environment = [ "PATH=${servicePath}" ];
+      };
+      Install.WantedBy = [ "graphical-session.target" ];
     };
 
     systemd.user.services.clippit-doutor = lib.mkIf cfg.doctor {

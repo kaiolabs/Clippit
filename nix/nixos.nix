@@ -20,6 +20,12 @@ in
       description = "The Clippit package.";
     };
 
+    quickshell = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Run the Quickshell interface (`clippit-shell`) for Hyprland, Sway, niri… instead of the GNOME extension.";
+    };
+
     doctor = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -37,6 +43,10 @@ in
       path = [ "/run/current-system/sw" ];
     };
     systemd.user.services.clippit-doutor.path = [ "/run/current-system/sw" ];
+    systemd.user.services.clippit-shell = lib.mkIf cfg.quickshell {
+      wantedBy = [ "graphical-session.target" ];
+      path = [ "/run/current-system/sw" ];
+    };
     systemd.user.timers.clippit-doutor.wantedBy = lib.mkIf cfg.doctor [ "timers.target" ];
   };
 }

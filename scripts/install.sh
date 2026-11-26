@@ -30,6 +30,9 @@ for a in "$@"; do
     esac
 done
 
+# GNOME uses the Shell extension; Hyprland, Sway, niri… use the Quickshell interface.
+if [[ "${XDG_CURRENT_DESKTOP:-}" == *GNOME* ]] || pgrep -x gnome-shell >/dev/null; then GNOME=1; else GNOME=0; fi
+
 say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 ok() { printf '    ✓ %s\n' "$*"; }
 warn() { printf '    ! %s\n' "$*"; }
@@ -63,25 +66,26 @@ ok "rust $(rustc --version | cut -d' ' -f2)"
 
 # ---------------------------------------------------------------- 2. build
 say "Building (release)"
-cargo build --release --manifest-path "$ROOT/Cargo.toml" -p clippit-daemon -p clippit-popup -p clippit-dashboard
+cargo build --release --manifest-path "$ROOT/Cargo.toml" -p clippit-daemon -p clippit-popup -p clippit-dashboard -p clippit-wl
 ok "built"
 
 # ---------------------------------------------------------------- 3. binaries and scripts
 say "Installing to $BIN"
 mkdir -p "$BIN"
 systemctl --user stop clippit.service 2>/dev/null || true
-for b in clippit-daemon clippit-popup clippit-dashboard; do
+for b in clippit-daemon clippit-popup clippit-dashboard clippit-wl; do
     install -m755 "$ROOT/target/release/$b" "$BIN/$b"
 done
 # Scripts are linked, so a `git pull` updates them.
-for s in clippit-correct clippit-busca clippit-historico clippit-doutor clippit-jogos-nvidia; do
+for s in clippit-correct clippit-busca clippit-historico clippit-doutor clippit-jogos-nvidia clippit-shell; do
     chmod +x "$ROOT/scripts/$s"
     ln -sfn "$ROOT/scripts/$s" "$BIN/$s"
 done
 ok "binaries and scripts"
 case ":$PATH:" in *":$BIN:"*) ;; *) warn "$BIN is not in your PATH (add it to ~/.profile)";; esac
 
-# ---------------------------------------------------------------- 4. GNOME extension
+# ---------------------------------------------------------------- 4. interface
+if ((GNOME)); then
 say "Installing the GNOME Shell extension"
 mkdir -p "$EXT_DIR"
 ln -sfn "$ROOT/gnome-extension/$EXT_UUID" "$EXT_DIR/$EXT_UUID"
@@ -91,6 +95,17 @@ if gnome-extensions enable "$EXT_UUID" 2>/dev/null; then
 else
     warn "GNOME only sees new extensions after you log out and back in. Then run:"
     warn "  gnome-extensions enable $EXT_UUID"
+fi
+else
+say "Installing the Quickshell interface (${XDG_CURRENT_DESKTOP:-not GNOME})"
+for c in quickshell wtype grim wl-copy; do
+    command -v "$c" >/dev/null || warn "Missing: $c (the launcher, the spell checker or the screenshots need it)"
+done
+mkdir -p "$HOME/.config/systemd/user"
+cp "$ROOT/assets/systemd/clippit-shell.service" "$HOME/.config/systemd/user/"
+systemctl --user daemon-reload
+systemctl --user enable --now clippit-shell.service
+ok "clippit-shell.service (the compositor needs WAYLAND_DISPLAY in the systemd environment)"
 fi
 
 # ---------------------------------------------------------------- 5. services
@@ -104,6 +119,7 @@ ok "clipboard history (clippit.service) and doctor (clippit-doutor.timer)"
 
 # ---------------------------------------------------------------- 6. shortcuts and menu entry
 say "Shortcuts and menu entry"
+if ((GNOME)); then
 KB=org.gnome.settings-daemon.plugins.media-keys
 KP=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/
 cur=$(gsettings get $KB custom-keybindings)
@@ -119,6 +135,9 @@ ok "Alt+C opens the history"
 if gsettings get org.gnome.desktop.wm.keybindings activate-window-menu | grep -q "<Alt>space"; then
     gsettings set org.gnome.desktop.wm.keybindings activate-window-menu "[]"
     ok "freed Alt+Space (it was GNOME's window menu)"
+fi
+else
+ok "clippit-shell registers Alt+Space, Alt+C, Alt+I… with the compositor by itself"
 fi
 mkdir -p "$APPS" "$HOME/.local/share/icons/hicolor/256x256/apps"
 install -m644 "$ROOT/assets/logo_clippit.png" "$HOME/.local/share/icons/hicolor/256x256/apps/clippit.png"
