@@ -13,6 +13,7 @@ use clippit_ipc::IpcClient;
 use rust_i18n::t;
 
 /// Sets up the REAL DATABASE SEARCH (no limit) with autocomplete
+#[allow(clippy::too_many_arguments)] // tudo é estado da janela que a busca precisa compartilhar
 pub fn setup_search_filter(
     list_box: &gtk::ListBox,
     search_entry: &gtk::SearchEntry,
@@ -21,6 +22,7 @@ pub fn setup_search_filter(
     app: &gtk::Application,
     entry_map: &Rc<RefCell<std::collections::HashMap<i32, i64>>>,
     close_timeout_id: Option<Rc<RefCell<Option<gtk::glib::SourceId>>>>,
+    suppress_search: Rc<std::cell::Cell<bool>>,
 ) {
     let list_box_for_search = list_box.clone();
     let window_for_search = window.clone();
@@ -149,6 +151,8 @@ pub fn setup_search_filter(
                                 row.set_title(&escaped_content);
                             }
                             clippit_ipc::ContentType::Image => {
+                                crate::controllers::remember_entry(hist_entry);
+                                crate::views::lightbox::add_expand_button(&row, hist_entry.id);
                                 let thumbnail_source = hist_entry
                                     .thumbnail_data
                                     .as_ref()
@@ -176,7 +180,7 @@ pub fn setup_search_filter(
                                     match create_thumbnail(data, 128) {
                                         Ok(pixbuf) => {
                                             let picture = gtk::Image::from_pixbuf(Some(&pixbuf));
-                                            picture.set_pixel_size(128);
+                                            picture.set_pixel_size(88);
                                             picture.set_margin_start(4);
                                             picture.set_margin_end(4);
                                             picture.set_margin_top(4);
@@ -243,7 +247,7 @@ pub fn setup_search_filter(
     focus_controller.connect_enter(move |_controller| {
         if let Some(ref close_id) = close_timeout_for_focus {
             if let Some(id) = close_id.borrow_mut().take() {
-                drop(id); // NÃO chamar remove() - deixa o GTK limpar
+                let _ = id; // NÃO chamar remove() - deixa o GTK limpar
                 eprintln!("🎯 Campo de pesquisa ganhou foco - auto-close CANCELADO (via drop)!");
             }
         }
@@ -263,26 +267,38 @@ pub fn setup_search_filter(
     search_entry.connect_changed(move |entry| {
         let text = entry.text().to_string();
 
+        // Reset ao reabrir o popup (limpar o campo) não deve disparar busca
+        if suppress_search.get() {
+            if let Some(id) = search_timeout_for_changed.borrow_mut().take() {
+                let _ = id;
+            }
+            if let Some(ref popover) = suggestions_popover_for_changed {
+                popover.borrow().hide();
+            }
+            return;
+        }
+
         // CRÍTICO: Cancelar auto-close quando usuário digita (proteção contra fechamento)
         if let Some(ref close_id) = close_timeout_for_changed {
             if let Some(id) = close_id.borrow_mut().take() {
-                drop(id); // NÃO chamar remove() - deixa o GTK limpar
+                let _ = id; // NÃO chamar remove() - deixa o GTK limpar
                 eprintln!("⚡ Usuário digitando - auto-close CANCELADO (via drop)!");
             }
         }
 
         // Cancelar busca anterior (debounce)
         if let Some(id) = search_timeout_for_changed.borrow_mut().take() {
-            drop(id); // NÃO chamar remove() - deixa o GTK limpar
+            let _ = id; // NÃO chamar remove() - deixa o GTK limpar
         }
 
         // 🔍 BUSCA COM DEBOUNCE (300ms após parar de digitar)
         let perform_search_clone = perform_search_for_changed.clone();
         let text_clone = text.clone();
-        let timeout_id = gtk::glib::timeout_add_local(std::time::Duration::from_millis(300), move || {
-            perform_search_clone(text_clone.clone());
-            gtk::glib::ControlFlow::Break
-        });
+        let timeout_id =
+            gtk::glib::timeout_add_local(std::time::Duration::from_millis(300), move || {
+                perform_search_clone(text_clone.clone());
+                gtk::glib::ControlFlow::Break
+            });
         *search_timeout_for_changed.borrow_mut() = Some(timeout_id);
 
         // Autocompletar (só se habilitado)
@@ -295,7 +311,7 @@ pub fn setup_search_filter(
                     eprintln!("💡 Buscando sugestões para palavra: '{}'", current_word);
                     let suggestions = engine
                         .borrow()
-                        .get_suggestions(&current_word, max_suggestions as usize);
+                        .get_suggestions(&current_word, max_suggestions);
 
                     eprintln!("💡 Encontradas {} sugestões", suggestions.len());
                     for (i, sug) in suggestions.iter().enumerate() {
@@ -354,11 +370,10 @@ pub fn setup_search_filter(
                             eprintln!("   → Copying entry ID: {}", entry_id);
 
                             use crate::controllers::copy_to_clipboard;
+                            // Copia antes de esconder (Wayland exige janela com foco).
                             copy_to_clipboard(entry_id);
-
-                            eprintln!("   → Closing window after copy");
                             window_for_keys.close();
-                            app_for_keys.quit();
+                            let _ = &app_for_keys;
                             return gtk::glib::Propagation::Stop;
                         } else {
                             eprintln!("   ⚠️  No entry_id found for row index {}", row_index);
@@ -442,12 +457,19 @@ pub fn setup_search_filter(
     }
 }
 
-/// Extrair a palavra sendo digitada na posição do cursor
-fn extract_current_word(text: &str, cursor_pos: i32) -> Option<String> {
-    let pos = cursor_pos as usize;
-    if pos > text.len() {
-        return None;
+/// Converte posição em caracteres (como o GTK reporta) para índice em bytes.
+/// Retorna None se a posição estiver além do fim do texto.
+fn char_pos_to_byte(text: &str, char_pos: usize) -> Option<usize> {
+    if char_pos == text.chars().count() {
+        return Some(text.len());
     }
+    text.char_indices().nth(char_pos).map(|(i, _)| i)
+}
+
+/// Extrair a palavra sendo digitada na posição do cursor
+/// (`cursor_pos` é em caracteres, como `entry.position()`)
+fn extract_current_word(text: &str, cursor_pos: i32) -> Option<String> {
+    let pos = char_pos_to_byte(text, cursor_pos.max(0) as usize)?;
 
     // Encontrar início da palavra (voltar até espaço/início)
     let start = text[..pos]
@@ -472,18 +494,42 @@ fn extract_current_word(text: &str, cursor_pos: i32) -> Option<String> {
 /// Substituir palavra parcial pela sugestão completa
 fn complete_current_word(entry: &gtk::SearchEntry, suggestion: &str) {
     let text = entry.text().to_string();
-    let cursor_pos = entry.position() as usize;
+    let cursor_chars = entry.position();
+    let Some(cursor_pos) = char_pos_to_byte(&text, cursor_chars.max(0) as usize) else {
+        return;
+    };
 
-    if let Some(current_word) = extract_current_word(&text, cursor_pos as i32) {
-        // Encontrar posição da palavra atual
-        if let Some(word_start) = text[..cursor_pos].rfind(&current_word) {
+    if let Some(current_word) = extract_current_word(&text, cursor_chars) {
+        // Encontrar posição da palavra atual (procura até o fim da palavra, que pode
+        // estar depois do cursor)
+        let search_end = (cursor_pos + current_word.len()).min(text.len());
+        let search_end = (search_end..=text.len())
+            .find(|&i| text.is_char_boundary(i))
+            .unwrap_or(text.len());
+        if let Some(word_start) = text[..search_end].rfind(&current_word) {
             let word_end = word_start + current_word.len();
 
             // Substituir palavra
             let new_text = format!("{}{}{}", &text[..word_start], suggestion, &text[word_end..]);
 
             entry.set_text(&new_text);
-            entry.set_position((word_start + suggestion.len()) as i32);
+            // GTK espera posição em caracteres, não bytes
+            let new_pos = text[..word_start].chars().count() + suggestion.chars().count();
+            entry.set_position(new_pos as i32);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_word_with_multibyte_chars() {
+        // cursor em caracteres: "ação te|" -> posição 7
+        assert_eq!(extract_current_word("ação te", 7), Some("te".to_string()));
+        assert_eq!(extract_current_word("não", 3), Some("não".to_string()));
+        assert_eq!(extract_current_word("— ab", 4), Some("ab".to_string()));
+        assert_eq!(extract_current_word("ab", 10), None);
     }
 }

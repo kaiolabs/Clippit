@@ -9,6 +9,9 @@ use rust_i18n::t;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// Quantidade de itens da carga inicial
+pub const INITIAL_ITEMS: usize = 30;
+
 // Estrutura para gerenciar o estado de carregamento
 pub struct LoadMoreState {
     pub items_loaded: usize,
@@ -28,8 +31,30 @@ pub fn populate_history_list(
 ) {
     // OPTIMIZED: Use metadata query (fast, no image data loaded)
     // Initial load: 30 items
-    match IpcClient::query_history_metadata(30) {
+    match IpcClient::query_history_metadata(INITIAL_ITEMS) {
         Ok(entries) => {
+            // Popup residente: se a lista já mostra exatamente essas entradas, não
+            // recria nenhum widget (reabrir fica instantâneo)
+            let new_ids: Vec<i64> = entries.iter().map(|e| e.id).collect();
+            let current_ids: Vec<i64> = {
+                let map = entry_map.borrow();
+                (0..map.len() as i32)
+                    .filter_map(|i| map.get(&i).copied())
+                    .collect()
+            };
+            let list_len = list_box.observe_children().n_items() as usize;
+            if !new_ids.is_empty() && new_ids == current_ids && list_len == new_ids.len() {
+                eprintln!("⚡ Lista já atualizada - reaproveitando {} itens", list_len);
+                return;
+            }
+
+            // Limpar lista atual (skeletons, busca anterior, itens do scroll infinito)
+            while let Some(child) = list_box.first_child() {
+                list_box.remove(&child);
+            }
+            entry_map.borrow_mut().clear();
+            search_map.borrow_mut().clear();
+
             eprintln!(
                 "✅ Got {} metadata entries from history (images without data)",
                 entries.len()
@@ -81,6 +106,11 @@ pub fn populate_history_list(
         }
         Err(e) => {
             eprintln!("❌ Failed to query history: {}", e);
+            while let Some(child) = list_box.first_child() {
+                list_box.remove(&child);
+            }
+            entry_map.borrow_mut().clear();
+            search_map.borrow_mut().clear();
             let empty_row = adw::ActionRow::new();
             empty_row.set_title("Erro ao carregar histórico");
             empty_row.set_subtitle(&format!("Erro: {}", e));
@@ -114,6 +144,8 @@ fn create_text_row(row: &adw::ActionRow, entry: &clippit_ipc::HistoryEntry) {
 }
 
 fn create_image_row(row: &adw::ActionRow, entry: &clippit_ipc::HistoryEntry) {
+    crate::controllers::remember_entry(entry);
+    crate::views::lightbox::add_expand_button(row, entry.id);
     eprintln!(
         "📸 Processing image entry {}: has_thumbnail={}, has_content={}, has_path={}",
         entry.id,
@@ -189,22 +221,30 @@ fn create_image_row(row: &adw::ActionRow, entry: &clippit_ipc::HistoryEntry) {
                 // Show ONLY first line, max 60 chars (compact preview)
                 let first_line = ocr_text.lines().next().unwrap_or("");
                 let char_limit = 60;
-                
-                let subtitle = if first_line.len() > char_limit {
-                    format!("{}...", &first_line[..char_limit])
+
+                // Count chars, not bytes: OCR text often has multi-byte chars (—, ã, ©)
+                let subtitle = if first_line.chars().count() > char_limit {
+                    format!(
+                        "{}...",
+                        first_line.chars().take(char_limit).collect::<String>()
+                    )
                 } else {
                     first_line.to_string()
                 };
-                
+
                 // CRITICAL: Escape markup characters to prevent GTK warnings
                 // Replace <, >, & with their HTML entities
                 let escaped_subtitle = subtitle
                     .replace('&', "&amp;")
                     .replace('<', "&lt;")
                     .replace('>', "&gt;");
-                
+
                 row.set_subtitle(&escaped_subtitle);
-                eprintln!("📝 OCR subtitle: '{}' (from {} chars total)", escaped_subtitle, ocr_text.len());
+                eprintln!(
+                    "📝 OCR subtitle: '{}' (from {} chars total)",
+                    escaped_subtitle,
+                    ocr_text.len()
+                );
             }
         }
 
@@ -213,7 +253,7 @@ fn create_image_row(row: &adw::ActionRow, entry: &clippit_ipc::HistoryEntry) {
         match create_thumbnail(data, 128) {
             Ok(pixbuf) => {
                 let picture = gtk::Image::from_pixbuf(Some(&pixbuf));
-                picture.set_pixel_size(128);
+                picture.set_pixel_size(88);
                 picture.set_margin_start(4);
                 picture.set_margin_end(4);
                 picture.set_margin_top(4);
@@ -250,9 +290,9 @@ pub fn setup_infinite_scroll(
     app: &gtk::Application,
     entry_map: &Rc<RefCell<std::collections::HashMap<i32, i64>>>,
     search_map: &Rc<RefCell<std::collections::HashMap<i32, String>>>,
-) {
+) -> Rc<RefCell<LoadMoreState>> {
     let load_state = Rc::new(RefCell::new(LoadMoreState {
-        items_loaded: 30, // Já carregamos 30 inicialmente
+        items_loaded: INITIAL_ITEMS, // Já carregamos 30 inicialmente
         is_loading: false,
         has_more: true,
     }));
@@ -340,4 +380,5 @@ pub fn setup_infinite_scroll(
     });
 
     eprintln!("✅ Infinite scroll configured");
+    load_state
 }

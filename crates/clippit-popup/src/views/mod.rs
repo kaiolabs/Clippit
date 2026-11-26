@@ -1,7 +1,6 @@
-pub mod autocomplete_popup;
 pub mod buttons;
-pub mod floating_autocomplete;
 pub mod image_preview;
+pub mod lightbox;
 pub mod list_item;
 pub mod search;
 pub mod suggestions_popover;

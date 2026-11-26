@@ -264,6 +264,17 @@ else
 fi
 rm -f "$DESKTOP_TMP"
 
+# Popup residente: pré-carregar no login para o atalho abrir instantaneamente
+echo "⚡ Configurando popup pré-carregado (autostart)..."
+mkdir -p ~/.config/autostart
+sed "s|^Exec=clippit-popup|Exec=$HOME/.local/bin/clippit-popup|" \
+    assets/clippit-popup-autostart.desktop > ~/.config/autostart/clippit-popup.desktop
+# Iniciar já agora em background (o anterior foi encerrado acima)
+if [ -n "$WAYLAND_DISPLAY" ] || [ -n "$DISPLAY" ]; then
+    setsid ~/.local/bin/clippit-popup --background >/dev/null 2>&1 < /dev/null &
+    echo "✅ Popup residente iniciado em background"
+fi
+
 # Verificar se foram copiados
 echo "✅ Verificando instalação..."
 echo ""

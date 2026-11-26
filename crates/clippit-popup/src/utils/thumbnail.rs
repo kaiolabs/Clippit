@@ -31,7 +31,7 @@ pub fn create_thumbnail(image_data: &[u8], size: u32) -> Result<gdk_pixbuf::Pixb
     loader.write(&buf)?;
     loader.close()?;
 
-    Ok(loader
+    loader
         .pixbuf()
-        .ok_or_else(|| anyhow::anyhow!("Failed to load pixbuf"))?)
+        .ok_or_else(|| anyhow::anyhow!("Failed to load pixbuf"))
 }

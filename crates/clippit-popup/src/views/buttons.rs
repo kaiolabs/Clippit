@@ -9,8 +9,8 @@ use crate::controllers::copy_to_clipboard;
 pub fn add_delete_button(row: &adw::ActionRow, entry_id: i64, list_box: &gtk::ListBox) {
     let delete_button = gtk::Button::from_icon_name("user-trash-symbolic");
     delete_button.set_valign(gtk::Align::Center);
-    delete_button.add_css_class("flat");
-    delete_button.add_css_class("circular");
+    delete_button.add_css_class("clip-action");
+    delete_button.add_css_class("clip-delete");
     delete_button.set_tooltip_text(Some(&t!("popup.delete_item_tooltip")));
 
     let delete_entry_id = entry_id;
@@ -60,9 +60,9 @@ pub fn add_copy_button(
 ) {
     let copy_button = gtk::Button::from_icon_name("edit-copy-symbolic");
     copy_button.set_valign(gtk::Align::Center);
-    copy_button.add_css_class("flat");
-    copy_button.add_css_class("circular");
-    copy_button.set_tooltip_text(Some("Copiar para clipboard"));
+    copy_button.add_css_class("clip-action");
+    copy_button.add_css_class("clip-copy");
+    copy_button.set_tooltip_text(Some(&t!("popup.copy_tooltip")));
 
     let button_entry_id = entry_id;
     let window_clone = window.clone();
@@ -71,13 +71,10 @@ pub fn add_copy_button(
     copy_button.connect_clicked(move |_| {
         eprintln!("🔵 Copy button clicked for entry ID: {}", button_entry_id);
 
-        // Copy to clipboard (shows system notification and waits for it to be sent)
+        // Copia antes de esconder (Wayland exige janela com foco). Popup é residente.
         copy_to_clipboard(button_entry_id);
-
-        // Close immediately - notification was already sent
-        eprintln!("🔵 Closing window (notification sent)...");
         window_clone.close();
-        app_clone.quit();
+        let _ = &app_clone;
     });
 
     row.add_suffix(&copy_button);
