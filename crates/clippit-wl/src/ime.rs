@@ -6,17 +6,17 @@ use anyhow::Result;
 use serde::Deserialize;
 use serde_json::json;
 use smithay_client_toolkit::compositor::{CompositorHandler, CompositorState};
+use smithay_client_toolkit::output::{OutputHandler, OutputState};
 use smithay_client_toolkit::reexports::calloop::timer::{TimeoutAction, Timer};
 use smithay_client_toolkit::reexports::calloop::{LoopHandle, RegistrationToken};
-use smithay_client_toolkit::output::{OutputHandler, OutputState};
 use smithay_client_toolkit::registry::{ProvidesRegistryState, RegistryState};
 use smithay_client_toolkit::seat::pointer::{PointerEvent, PointerEventKind, PointerHandler};
 use smithay_client_toolkit::seat::{Capability, SeatHandler, SeatState};
 use smithay_client_toolkit::shm::slot::SlotPool;
 use smithay_client_toolkit::shm::{Shm, ShmHandler};
 use smithay_client_toolkit::{
-    delegate_compositor, delegate_output, delegate_pointer, delegate_registry, delegate_seat, delegate_shm,
-    registry_handlers,
+    delegate_compositor, delegate_output, delegate_pointer, delegate_registry, delegate_seat,
+    delegate_shm, registry_handlers,
 };
 use wayland_client::globals::GlobalList;
 use wayland_client::protocol::{wl_output, wl_pointer, wl_seat, wl_shm, wl_surface};
@@ -89,10 +89,16 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(globals: &GlobalList, qh: &QueueHandle<State>, handle: LoopHandle<'static, State>) -> Result<Self> {
+    pub fn new(
+        globals: &GlobalList,
+        qh: &QueueHandle<State>,
+        handle: LoopHandle<'static, State>,
+    ) -> Result<Self> {
         let compositor = CompositorState::bind(globals, qh)?;
         let shm = Shm::bind(globals, qh)?;
-        let manager = globals.bind::<ZwpInputMethodManagerV2, _, _>(qh, 1..=1, ()).ok();
+        let manager = globals
+            .bind::<ZwpInputMethodManagerV2, _, _>(qh, 1..=1, ())
+            .ok();
         let mut state = State {
             registry: RegistryState::new(globals),
             seats: SeatState::new(globals, qh),
@@ -145,7 +151,11 @@ impl State {
             return;
         };
         match cmd {
-            Command::Edit { before, after, text } => self.edit(before, after, &text),
+            Command::Edit {
+                before,
+                after,
+                text,
+            } => self.edit(before, after, &text),
             Command::Badge(look) => {
                 if look != self.look {
                     self.look = look;
@@ -186,8 +196,14 @@ impl State {
 
     fn emit_field(&self) {
         let f = &self.field;
-        let cursor = f.text.get(..f.cursor.min(f.text.len())).map_or(0, |s| s.chars().count());
-        let anchor = f.text.get(..f.anchor.min(f.text.len())).map_or(0, |s| s.chars().count());
+        let cursor = f
+            .text
+            .get(..f.cursor.min(f.text.len()))
+            .map_or(0, |s| s.chars().count());
+        let anchor = f
+            .text
+            .get(..f.anchor.min(f.text.len()))
+            .map_or(0, |s| s.chars().count());
         emit(json!({
             "ev": "field", "active": f.active, "text": f.text, "cursor": cursor, "anchor": anchor,
             "purpose": f.purpose, "hints": f.hints,
@@ -199,11 +215,14 @@ impl State {
         if want && self.spin.is_none() {
             let token = self
                 .handle
-                .insert_source(Timer::from_duration(Duration::from_millis(33)), |_, _, state| {
-                    state.angle = (state.angle + 0.26) % (2.0 * std::f64::consts::PI);
-                    state.draw();
-                    TimeoutAction::ToDuration(Duration::from_millis(33))
-                })
+                .insert_source(
+                    Timer::from_duration(Duration::from_millis(33)),
+                    |_, _, state| {
+                        state.angle = (state.angle + 0.26) % (2.0 * std::f64::consts::PI);
+                        state.draw();
+                        TimeoutAction::ToDuration(Duration::from_millis(33))
+                    },
+                )
                 .ok();
             self.spin = token;
         } else if !want {
@@ -232,7 +251,8 @@ impl State {
                 Err(_) => return,
             },
         };
-        let Ok((buffer, canvas)) = pool.create_buffer(w, h, stride, wl_shm::Format::Argb8888) else {
+        let Ok((buffer, canvas)) = pool.create_buffer(w, h, stride, wl_shm::Format::Argb8888)
+        else {
             return;
         };
         let n = canvas.len().min(data.len());
@@ -248,27 +268,54 @@ impl State {
 }
 
 impl Dispatch<ZwpInputMethodManagerV2, ()> for State {
-    fn event(_: &mut Self, _: &ZwpInputMethodManagerV2, _: <ZwpInputMethodManagerV2 as wayland_client::Proxy>::Event,
-             _: &(), _: &Connection, _: &QueueHandle<Self>) {}
+    fn event(
+        _: &mut Self,
+        _: &ZwpInputMethodManagerV2,
+        _: <ZwpInputMethodManagerV2 as wayland_client::Proxy>::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
 }
 
 impl Dispatch<ZwpInputPopupSurfaceV2, ()> for State {
-    fn event(_: &mut Self, _: &ZwpInputPopupSurfaceV2, _: zwp_input_popup_surface_v2::Event, _: &(), _: &Connection,
-             _: &QueueHandle<Self>) {}
+    fn event(
+        _: &mut Self,
+        _: &ZwpInputPopupSurfaceV2,
+        _: zwp_input_popup_surface_v2::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
 }
 
 impl Dispatch<ZwpInputMethodV2, ()> for State {
-    fn event(state: &mut Self, _: &ZwpInputMethodV2, event: zwp_input_method_v2::Event, _: &(), _: &Connection,
-             _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        _: &ZwpInputMethodV2,
+        event: zwp_input_method_v2::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         use zwp_input_method_v2::Event;
         match event {
             Event::Activate => {
-                state.pending = Field { active: true, ..Field::default() };
+                state.pending = Field {
+                    active: true,
+                    ..Field::default()
+                };
             }
             Event::Deactivate => {
                 state.pending.active = false;
             }
-            Event::SurroundingText { text, cursor, anchor } => {
+            Event::SurroundingText {
+                text,
+                cursor,
+                anchor,
+            } => {
                 state.pending.text = text;
                 state.pending.cursor = cursor as usize;
                 state.pending.anchor = anchor as usize;
@@ -300,19 +347,43 @@ impl Dispatch<ZwpInputMethodV2, ()> for State {
 }
 
 impl CompositorHandler for State {
-    fn scale_factor_changed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface, factor: i32) {
+    fn scale_factor_changed(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_surface::WlSurface,
+        factor: i32,
+    ) {
         if factor != self.scale {
             self.scale = factor.max(1);
             self.draw();
         }
     }
-    fn transform_changed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface,
-                         _: wl_output::Transform) {}
+    fn transform_changed(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_surface::WlSurface,
+        _: wl_output::Transform,
+    ) {
+    }
     fn frame(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface, _: u32) {}
-    fn surface_enter(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface,
-                     _: &wl_output::WlOutput) {}
-    fn surface_leave(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface,
-                     _: &wl_output::WlOutput) {}
+    fn surface_enter(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_surface::WlSurface,
+        _: &wl_output::WlOutput,
+    ) {
+    }
+    fn surface_leave(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_surface::WlSurface,
+        _: &wl_output::WlOutput,
+    ) {
+    }
 }
 
 impl OutputHandler for State {
@@ -337,23 +408,44 @@ impl SeatHandler for State {
     fn new_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat) {
         self.bind_input_method();
     }
-    fn new_capability(&mut self, _: &Connection, qh: &QueueHandle<Self>, seat: wl_seat::WlSeat, cap: Capability) {
+    fn new_capability(
+        &mut self,
+        _: &Connection,
+        qh: &QueueHandle<Self>,
+        seat: wl_seat::WlSeat,
+        cap: Capability,
+    ) {
         if cap == Capability::Pointer {
             let _ = self.seats.get_pointer(qh, &seat);
         }
     }
-    fn remove_capability(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat, _: Capability) {}
+    fn remove_capability(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: wl_seat::WlSeat,
+        _: Capability,
+    ) {
+    }
     fn remove_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat) {}
 }
 
 impl PointerHandler for State {
-    fn pointer_frame(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_pointer::WlPointer,
-                     events: &[PointerEvent]) {
+    fn pointer_frame(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_pointer::WlPointer,
+        events: &[PointerEvent],
+    ) {
         for ev in events {
             if Some(&ev.surface) != self.surface.as_ref() {
                 continue;
             }
-            let part = self.layout.as_ref().and_then(|l| l.part_at(ev.position.0, ev.position.1, &self.look));
+            let part = self
+                .layout
+                .as_ref()
+                .and_then(|l| l.part_at(ev.position.0, ev.position.1, &self.look));
             match ev.kind {
                 PointerEventKind::Enter { .. } | PointerEventKind::Motion { .. } => {
                     if part != self.hover {
@@ -368,7 +460,9 @@ impl PointerHandler for State {
                 }
                 PointerEventKind::Press { button: 0x110, .. } => {
                     if let Some(part) = part {
-                        emit(json!({"ev": "badge", "part": if part == Part::Fix { "fix" } else { "label" }}));
+                        emit(
+                            json!({"ev": "badge", "part": if part == Part::Fix { "fix" } else { "label" }}),
+                        );
                     }
                 }
                 _ => {}

@@ -44,7 +44,7 @@ pub struct Layout {
 impl Layout {
     pub fn part_at(&self, x: f64, y: f64, look: &Look) -> Option<Part> {
         let (x, y) = (x as i32, y as i32);
-        if y < MARGIN || y > MARGIN + H {
+        if !(MARGIN..=MARGIN + H).contains(&y) {
             return None;
         }
         if x >= self.label_x && x <= self.label_x + self.label_w {
@@ -74,7 +74,11 @@ pub fn layout(look: &Look) -> Layout {
     let label_w = text_width(&look.label) + (2.0 * PAD_X) as i32;
     let label_x = MARGIN + RING + GAP;
     let fix_x = label_x + label_w + GAP;
-    let right = if look.fix { fix_x + FIX_W } else { label_x + label_w };
+    let right = if look.fix {
+        fix_x + FIX_W
+    } else {
+        label_x + label_w
+    };
     Layout {
         width: right + MARGIN,
         height: H + 2 * MARGIN,
@@ -103,7 +107,13 @@ fn rgb(hex: u32, a: f64) -> (f64, f64, f64, f64) {
     )
 }
 
-fn piece(cr: &cairo::Context, x: f64, w: f64, fill: (f64, f64, f64, f64), border: Option<(f64, f64, f64, f64)>) {
+fn piece(
+    cr: &cairo::Context,
+    x: f64,
+    w: f64,
+    fill: (f64, f64, f64, f64),
+    border: Option<(f64, f64, f64, f64)>,
+) {
     let y = MARGIN as f64;
     let h = H as f64;
     // Soft shadow under each piece.
@@ -134,7 +144,13 @@ pub fn render(look: &Look, hover: Option<Part>, angle: f64, scale: i32) -> (Layo
 
         if look.busy {
             let x = MARGIN as f64;
-            piece(&cr, x, RING as f64, rgb(0x1e1e1e, 1.0), Some(rgb(0x333333, 1.0)));
+            piece(
+                &cr,
+                x,
+                RING as f64,
+                rgb(0x1e1e1e, 1.0),
+                Some(rgb(0x333333, 1.0)),
+            );
             let (cx, cy, r) = (x + RING as f64 / 2.0, MARGIN as f64 + H as f64 / 2.0, 5.5);
             cr.set_line_width(2.0);
             cr.set_source_rgba(1.0, 1.0, 1.0, 0.12);
@@ -149,7 +165,13 @@ pub fn render(look: &Look, hover: Option<Part>, angle: f64, scale: i32) -> (Layo
         let hovered = hover == Some(Part::Label);
         let fill = if hovered { rgb(0x2c2c2c, 1.0) } else { glass };
         let border = if hovered { rgb(0x424242, 1.0) } else { line };
-        piece(&cr, lay.label_x as f64, lay.label_w as f64, fill, Some(border));
+        piece(
+            &cr,
+            lay.label_x as f64,
+            lay.label_w as f64,
+            fill,
+            Some(border),
+        );
         let color = match look.state.as_str() {
             "ok" => rgb(0x4ade80, 1.0),
             "issues" | "error" => rgb(0xff6b6b, 1.0),
@@ -167,10 +189,17 @@ pub fn render(look: &Look, hover: Option<Part>, angle: f64, scale: i32) -> (Layo
         pangocairo::functions::show_layout(&cr, &layout);
 
         if look.fix {
-            let fill = if hover == Some(Part::Fix) { rgb(0x6cb0ff, 1.0) } else { rgb(0x4c9dff, 1.0) };
+            let fill = if hover == Some(Part::Fix) {
+                rgb(0x6cb0ff, 1.0)
+            } else {
+                rgb(0x4c9dff, 1.0)
+            };
             piece(&cr, lay.fix_x as f64, FIX_W as f64, fill, None);
             // ✓
-            let (x, y) = (lay.fix_x as f64 + FIX_W as f64 / 2.0, MARGIN as f64 + H as f64 / 2.0);
+            let (x, y) = (
+                lay.fix_x as f64 + FIX_W as f64 / 2.0,
+                MARGIN as f64 + H as f64 / 2.0,
+            );
             cr.set_source_rgba(1.0, 1.0, 1.0, 1.0);
             cr.set_line_width(2.0);
             cr.set_line_cap(cairo::LineCap::Round);
