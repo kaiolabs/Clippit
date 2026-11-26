@@ -1,0 +1,6 @@
+# Versão fixa do Rust: o CI e quem contribui usam a mesma, então o clippy
+# acusa as mesmas coisas em todo lugar (rustup baixa esta versão sozinho).
+[toolchain]
+channel = "1.92.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

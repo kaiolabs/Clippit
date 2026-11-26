@@ -25,9 +25,11 @@ jobs:
           sudo apt-get install -y libgtk-4-dev libadwaita-1-dev libtesseract-dev libleptonica-dev \
             libclang-dev clang libx11-dev libxcb1-dev libxdo-dev pkg-config
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+      # A versão vem do rust-toolchain.toml (a mesma de quem desenvolve).
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install || rustup show
+          rustc --version
 
       - uses: Swatinem/rust-cache@v2
 
