@@ -49,7 +49,7 @@ pub fn setup_keyboard_navigation(
 
     key_controller.connect_key_pressed(move |_, key, _, modifiers| {
         eprintln!("🔑 Key pressed: {:?} with modifiers: {:?}", key, modifiers);
-        
+
         // Check if this is the configured hotkey (for toggle)
         if is_configured_hotkey(key, modifiers, &hotkey_str_for_closure) {
             eprintln!("🔵 Configured hotkey pressed while popup open - closing (toggle)");
@@ -65,6 +65,8 @@ pub fn setup_keyboard_navigation(
         }
 
         match key {
+            // Esc com imagem ampliada: só fecha a imagem, não o popup
+            gtk::gdk::Key::Escape if crate::views::lightbox::hide() => gtk::glib::Propagation::Stop,
             gtk::gdk::Key::Escape => {
                 eprintln!("🚨 [CLOSE TRIGGER] ESC pressed - closing popup");
                 window_nav.close();
@@ -99,19 +101,54 @@ pub fn setup_keyboard_navigation(
                     gtk::glib::Propagation::Proceed // Deixa o popover processar
                 }
             }
-            gtk::gdk::Key::Tab => {
-                // Se search_entry tem foco, deixa o autocomplete processar
-                if search_entry_for_key.has_focus() {
-                    gtk::glib::Propagation::Proceed
-                } else {
-                    gtk::glib::Propagation::Proceed
-                }
-            }
+            // Tab segue para o campo de busca ou para o popover, conforme o foco.
+            gtk::gdk::Key::Tab => gtk::glib::Propagation::Proceed,
             _ => gtk::glib::Propagation::Proceed,
         }
     });
 
     window.add_controller(key_controller);
+
+    // Fase de CAPTURA: roda antes do widget com foco. Necessário porque o campo de
+    // busca (GtkSearchEntry) consome o Esc quando tem foco, e aí o controlador acima
+    // (fase Bubble) nunca recebia a tecla — o Esc não fechava nada.
+    let capture = gtk::EventControllerKey::new();
+    capture.set_propagation_phase(gtk::PropagationPhase::Capture);
+    let window_cap = window.clone();
+    let list_cap = list_box.clone();
+    let entry_map_cap = entry_map.clone();
+    let search_cap = search_entry.clone();
+    capture.connect_key_pressed(move |_, key, _, _| {
+        use crate::views::lightbox;
+        if lightbox::is_visible() {
+            // Imagem ampliada: Esc/Espaço fecham só a imagem; + - 0 1 Enter tratados lá
+            if matches!(key, gtk::gdk::Key::Escape | gtk::gdk::Key::space) {
+                lightbox::hide();
+                return gtk::glib::Propagation::Stop;
+            }
+            if lightbox::handle_key(key) {
+                return gtk::glib::Propagation::Stop;
+            }
+            return gtk::glib::Propagation::Proceed;
+        }
+        // Espaço (fora da busca): amplia a imagem selecionada. Em item de texto não
+        // faz nada — sem isso o GTK "ativava" a linha e copiava/fechava sem querer.
+        if key == gtk::gdk::Key::space && !search_cap.has_focus() {
+            if let Some(row) = list_cap.selected_row() {
+                if let Some(&id) = entry_map_cap.borrow().get(&row.index()) {
+                    lightbox::show_entry(id);
+                }
+            }
+            return gtk::glib::Propagation::Stop;
+        }
+        if key == gtk::gdk::Key::Escape {
+            eprintln!("🚨 ESC - escondendo popup");
+            window_cap.close();
+            return gtk::glib::Propagation::Stop;
+        }
+        gtk::glib::Propagation::Proceed
+    });
+    window.add_controller(capture);
 
     eprintln!(
         "🔵 Keyboard navigation setup: ↑↓ to navigate, Enter to copy, ESC or {} to close",
@@ -194,13 +231,11 @@ pub fn setup_row_activation(
         if let Some(&entry_id) = entry_map_for_row.borrow().get(&row_index) {
             eprintln!("🔵 Copying entry ID: {}", entry_id);
 
-            // Copy to clipboard (shows system notification and waits for it to be sent)
+            // Copia antes de esconder (Wayland exige janela com foco), depois esconde.
+            // O popup fica residente: close() só esconde (ver main.rs).
             copy_to_clipboard(entry_id);
-
-            // Close immediately - notification was already sent
-            eprintln!("🔵 Closing window (notification sent)...");
             window_for_row.close();
-            app_for_row.quit();
+            let _ = &app_for_row;
         }
     });
 }
@@ -220,13 +255,10 @@ fn handle_enter_key(
         if let Some(&entry_id) = entry_map.borrow().get(&row_index) {
             eprintln!("🔵 Enter pressed - copying entry ID: {}", entry_id);
 
-            // Copy to clipboard (shows system notification and waits for it to be sent)
+            // Copia antes de esconder (Wayland exige janela com foco). Popup é residente.
             copy_to_clipboard(entry_id);
-
-            // Close immediately - notification was already sent
-            eprintln!("🔵 Closing window (notification sent)...");
             window.close();
-            app.quit();
+            let _ = app;
         } else {
             eprintln!("⚠️  No entry_id found for row index {}", row_index);
         }

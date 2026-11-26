@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Clippit Popup (pré-carregado)
+Comment=Mantém o histórico do Clippit pronto para abrir instantaneamente
+Exec=clippit-popup --background
+Icon=clippit
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=3

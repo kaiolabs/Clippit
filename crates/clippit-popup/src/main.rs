@@ -1,8 +1,10 @@
 use anyhow::Result;
 use clippit_core::{set_language, Config};
 use gtk::prelude::*;
-use gtk::Application;
+use gtk::{gio, Application};
 use libadwaita as adw;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 mod controllers;
 mod models;
@@ -14,6 +16,7 @@ use controllers::{setup_keyboard_navigation, setup_row_activation};
 use models::{new_entry_map, new_search_content_map};
 use panic_handler::setup_panic_handler;
 use utils::{apply_theme, load_custom_css};
+use views::list_item::LoadMoreState;
 use views::{
     create_main_window, populate_history_list, setup_infinite_scroll, setup_search_filter,
 };
@@ -23,41 +26,91 @@ const APP_ID: &str = "com.clippit.Clippit";
 // Initialize i18n pointing to the same locales as clippit-core
 rust_i18n::i18n!("../clippit-core/locales", fallback = "en");
 
-fn main() -> Result<()> {
-    // Configurar panic handler com modal GTK
-    setup_panic_handler();
-    
-    eprintln!("🚀 Clippit Popup Starting com panic handler visual...");
-    
-    // Single instance check
-    handle_lock_file()?;
+/// Lock file das versões antigas (toggle via SIGTERM). Não é mais usado: o toggle agora
+/// é feito pela própria GApplication (instância única via D-Bus).
+const LEGACY_LOCK_FILE: &str = "/tmp/clippit-popup.lock";
 
-    // Setup signal handler for SIGTERM (triggered when hotkey is pressed again)
-    // This must be done before GTK init to avoid thread safety issues
+/// Popup residente:
+/// - A 1ª execução vira a instância principal e fica rodando com a janela escondida.
+/// - Execuções seguintes (atalho do GNOME / daemon) só mandam "activate" via D-Bus para
+///   a instância principal e saem em poucos ms, sem inicializar GTK.
+/// - "activate" alterna: janela visível → esconde; escondida → atualiza a lista e mostra.
+/// - `--background`: só pré-carrega (usado no login), não mostra a janela.
+fn main() -> Result<()> {
+    let background = std::env::args().any(|a| a == "--background");
+
+    let app = Application::builder().application_id(APP_ID).build();
+
+    // Handlers precisam existir ANTES do register(): é nele que o "startup" é emitido
+    let popup: Rc<RefCell<Option<Rc<Popup>>>> = Rc::new(RefCell::new(None));
+
+    let popup_for_startup = popup.clone();
+    app.connect_startup(move |app| {
+        // Só roda na instância principal (dentro do register())
+        setup_panic_handler();
+        std::fs::remove_file(LEGACY_LOCK_FILE).ok();
+        adw::init().expect("Failed to initialize libadwaita");
+        *popup_for_startup.borrow_mut() = Some(build_ui(app));
+    });
+
+    // Com --background a primeira ativação (emitida pelo próprio run) só pré-carrega
+    let skip_first_activate = Cell::new(background);
+    app.connect_activate(move |_| {
+        let Some(popup) = popup.borrow().clone() else {
+            return;
+        };
+        if skip_first_activate.replace(false) {
+            eprintln!("💤 Pré-carregado em background - aguardando atalho");
+            return;
+        }
+        if popup.window.is_visible() {
+            eprintln!("🔄 Atalho com popup aberto - escondendo (toggle)");
+            popup.window.close();
+        } else {
+            show_popup(&popup);
+        }
+    });
+
+    // Registrar antes de qualquer inicialização pesada para descobrir se já existe
+    // uma instância residente
+    if let Err(e) = app.register(gio::Cancellable::NONE) {
+        eprintln!(
+            "⚠️  Falha ao registrar GApplication: {} (seguindo sem instância única)",
+            e
+        );
+    }
+
+    if app.is_remote() {
+        if background {
+            // Já existe instância residente - nada a fazer
+            return Ok(());
+        }
+        // Envia "activate" (toggle) para a instância residente e sai
+        app.run_with_args(&Vec::<String>::new());
+        return Ok(());
+    }
+
+    // ===== Daqui para baixo: instância principal (residente) =====
+    eprintln!(
+        "🚀 Clippit Popup (residente) iniciado{}",
+        if background { " em background" } else { "" }
+    );
+
+    // SIGTERM encerra a instância residente de forma limpa
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     let should_quit = Arc::new(AtomicBool::new(false));
     let should_quit_clone = should_quit.clone();
-
     unsafe {
         signal_hook::low_level::register(signal_hook::consts::SIGTERM, move || {
-            eprintln!("🛑 Received SIGTERM - marking for quit...");
             should_quit_clone.store(true, Ordering::Relaxed);
         })
         .ok();
     }
-
-    // Initialize GTK
-    adw::init().expect("Failed to initialize libadwaita");
-
-    // Create application
-    let app = Application::builder().application_id(APP_ID).build();
-
-    // Periodically check if we should quit
     let app_for_quit = app.clone();
-    gtk::glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+    gtk::glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
         if should_quit.load(Ordering::Relaxed) {
-            eprintln!("🛑 Quitting application due to SIGTERM...");
+            eprintln!("🛑 SIGTERM recebido - encerrando popup residente");
             app_for_quit.quit();
             gtk::glib::ControlFlow::Break
         } else {
@@ -65,21 +118,10 @@ fn main() -> Result<()> {
         }
     });
 
-    app.connect_activate(build_ui);
+    // Mantém o processo vivo com a janela escondida
+    let _hold = app.hold();
 
-    // Clean up lock file when app quits
-    app.connect_shutdown(|_| {
-        eprintln!("🔓 Removing lock file on shutdown...");
-        std::fs::remove_file("/tmp/clippit-popup.lock").ok();
-    });
-
-    // Run application
     let exit_code = app.run_with_args(&Vec::<String>::new());
-
-    // Extra safety: remove lock on exit
-    eprintln!("🔓 Removing lock file on exit...");
-    std::fs::remove_file("/tmp/clippit-popup.lock").ok();
-
     if exit_code.value() == 0 {
         Ok(())
     } else {
@@ -90,77 +132,39 @@ fn main() -> Result<()> {
     }
 }
 
-fn handle_lock_file() -> Result<()> {
-    let lock_file = std::path::Path::new("/tmp/clippit-popup.lock");
-
-    if lock_file.exists() {
-        if let Ok(content) = std::fs::read_to_string(lock_file) {
-            if let Ok(pid) = content.trim().parse::<u32>() {
-                // Verificar se processo está rodando
-                let check = std::process::Command::new("ps")
-                    .args(&["-p", &pid.to_string(), "-o", "stat="])
-                    .output();
-
-                if let Ok(output) = check {
-                    let stat = String::from_utf8_lossy(&output.stdout);
-
-                    // Se processo está rodando (não é zombie)
-                    if !stat.trim().is_empty() && !stat.trim().starts_with('Z') {
-                        eprintln!("🔄 Popup já rodando (PID: {}) - fechando (toggle behavior)", pid);
-                        
-                        // TOGGLE BEHAVIOR: sempre fecha quando atalho é pressionado novamente
-                        let _ = std::process::Command::new("kill")
-                            .arg(pid.to_string())
-                            .output();
-                        
-                        std::thread::sleep(std::time::Duration::from_millis(200));
-                        std::fs::remove_file(lock_file).ok();
-                        eprintln!("✅ Popup fechado - pressione atalho novamente para abrir");
-                        std::process::exit(0);
-                    } else {
-                        eprintln!(
-                            "💀 Limpando lock file de processo zombie/inexistente (PID: {})",
-                            pid
-                        );
-                        std::fs::remove_file(lock_file).ok();
-                    }
-                } else {
-                    eprintln!("⚠️  Removendo lock file - não foi possível verificar processo");
-                    std::fs::remove_file(lock_file).ok();
-                }
-            }
-        }
-    }
-
-    let my_pid = std::process::id();
-    std::fs::write(lock_file, my_pid.to_string())?;
-    eprintln!("🔒 Created lock file with PID: {}", my_pid);
-
-    Ok(())
+/// Estado da janela residente
+struct Popup {
+    window: adw::ApplicationWindow,
+    app: Application,
+    list_box: gtk::ListBox,
+    scrolled: gtk::ScrolledWindow,
+    search_entry: gtk::SearchEntry,
+    entry_map: models::EntryMap,
+    search_map: models::SearchContentMap,
+    load_state: Rc<RefCell<LoadMoreState>>,
+    suppress_search: Rc<Cell<bool>>,
 }
 
-fn build_ui(app: &Application) {
-    // Load configuration and apply settings
+/// Cria a janela e todos os handlers UMA vez (na inicialização da instância residente)
+fn build_ui(app: &Application) -> Rc<Popup> {
     let config = Config::load().unwrap_or_default();
     set_language(&config.ui.language);
     apply_theme(&config);
     load_custom_css();
 
-    // Create main window structure (no toast overlay - using system notifications)
     let (window, list_box, scrolled, search_entry, close_timeout_id) = create_main_window(app);
+    window.add_css_class("clippit-popup");
 
-    // Create data structures
+    // Fechar = esconder (o processo continua residente para reabrir instantaneamente)
+    window.connect_close_request(|win| {
+        win.set_visible(false);
+        gtk::glib::Propagation::Stop
+    });
+
     let entry_map = new_entry_map();
     let search_map = new_search_content_map();
+    let suppress_search = Rc::new(Cell::new(false));
 
-    // Add minimal skeleton loaders (3 instead of 5)
-    add_skeleton_loaders(&list_box, 3);
-
-    // 🚀 SHOW WINDOW IMMEDIATELY (before loading data)
-    window.present_with_time(gtk::gdk::CURRENT_TIME);
-    window.set_focus_visible(true);
-
-    // Setup keyboard navigation first (so ESC works immediately)
     setup_keyboard_navigation(
         &window,
         app,
@@ -169,140 +173,70 @@ fn build_ui(app: &Application) {
         &entry_map,
         &search_entry,
     );
+    setup_search_filter(
+        &list_box,
+        &search_entry,
+        &search_map,
+        &window,
+        app,
+        &entry_map,
+        Some(close_timeout_id),
+        suppress_search.clone(),
+    );
+    setup_row_activation(&list_box, &entry_map, &window, app);
+    let load_state =
+        setup_infinite_scroll(&scrolled, &list_box, &window, app, &entry_map, &search_map);
 
-    // Load data asynchronously using idle_add (more efficient than timeout)
-    let list_box_clone = list_box.clone();
-    let scrolled_clone = scrolled.clone();
-    let window_clone = window.clone();
-    let app_clone = app.clone();
-    let entry_map_clone = entry_map.clone();
-    let search_map_clone = search_map.clone();
-    let search_entry_clone = search_entry.clone();
-    let close_timeout_id_clone = close_timeout_id.clone();
+    // Pré-carrega a lista (a 1ª abertura já encontra os widgets prontos)
+    populate_history_list(&list_box, &window, app, &entry_map, &search_map);
+    // Pré-aquecer: cria a superfície/renderer e calcula o layout das linhas agora,
+    // com a janela ainda escondida, para a 1ª abertura também ser instantânea
+    WidgetExt::realize(&window);
+    let _ = WidgetExt::measure(&window, gtk::Orientation::Vertical, 700);
 
-    gtk::glib::idle_add_local_once(move || {
-        // Remove skeleton loaders
-        remove_skeleton_loaders(&list_box_clone);
-
-        // Populate history list with entries
-        populate_history_list(
-            &list_box_clone,
-            &window_clone,
-            &app_clone,
-            &entry_map_clone,
-            &search_map_clone,
-        );
-
-        // ⚠️ IMPORTANTE: Garantir que primeiro item está selecionado E focado
-        // Usar timeout para garantir que GTK processou a lista completamente
-        let list_box_for_focus = list_box_clone.clone();
-        gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(50), move || {
-            // Selecionar primeiro item explicitamente
-            if let Some(first_row) = list_box_for_focus.row_at_index(0) {
-                list_box_for_focus.select_row(Some(&first_row));
-                eprintln!("✅ Primeiro item selecionado explicitamente");
-
-                // Dar foco ao primeiro item (não ao list_box)
-                first_row.grab_focus();
-                eprintln!("✅ Foco dado ao primeiro item");
-            } else {
-                eprintln!("⚠️  Nenhum item encontrado para focar");
-            }
-        });
-
-        // Setup search filtering (with ability to reload list) + passar close_timeout_id
-        setup_search_filter(
-            &list_box_clone,
-            &search_entry_clone,
-            &search_map_clone,
-            &window_clone,
-            &app_clone,
-            &entry_map_clone,
-            Some(close_timeout_id_clone),
-        );
-
-        // Setup row activation (click)
-        setup_row_activation(&list_box_clone, &entry_map_clone, &window_clone, &app_clone);
-
-        // Setup infinite scroll
-        setup_infinite_scroll(
-            &scrolled_clone,
-            &list_box_clone,
-            &window_clone,
-            &app_clone,
-            &entry_map_clone,
-            &search_map_clone,
-        );
-    });
+    Rc::new(Popup {
+        window,
+        app: app.clone(),
+        list_box,
+        scrolled,
+        search_entry,
+        entry_map,
+        search_map,
+        load_state,
+        suppress_search,
+    })
 }
 
-fn add_skeleton_loaders(list_box: &gtk::ListBox, count: usize) {
-    use gtk::prelude::*;
+/// Reseta o estado (busca, scroll, seleção), atualiza a lista e mostra a janela
+fn show_popup(p: &Popup) {
+    let t = std::time::Instant::now();
 
-    // Add skeleton rows that match the real item design
-    for i in 0..count {
-        let row = gtk::ListBoxRow::new();
-        row.set_widget_name(&format!("skeleton-{}", i));
+    crate::views::lightbox::hide();
 
-        // Main horizontal box
-        let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 12);
-        hbox.set_margin_top(12);
-        hbox.set_margin_bottom(12);
-        hbox.set_margin_start(12);
-        hbox.set_margin_end(12);
+    // Limpar busca anterior sem disparar uma nova busca
+    p.suppress_search.set(true);
+    p.search_entry.set_text("");
+    p.suppress_search.set(false);
 
-        // Skeleton thumbnail (matches real thumbnail: 48x48, rounded)
-        let skeleton_thumb = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        skeleton_thumb.set_width_request(48);
-        skeleton_thumb.set_height_request(48);
-        skeleton_thumb.set_valign(gtk::Align::Center);
-        skeleton_thumb.add_css_class("skeleton-thumb");
-        skeleton_thumb.add_css_class("skeleton-pulse");
-
-        // Vertical box for title + subtitle
-        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 4);
-        vbox.set_hexpand(true);
-        vbox.set_valign(gtk::Align::Center);
-
-        // Skeleton title
-        let skeleton_title = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-        skeleton_title.set_height_request(14);
-        skeleton_title.set_width_request(280);
-        skeleton_title.set_halign(gtk::Align::Start);
-        skeleton_title.add_css_class("skeleton-text");
-        skeleton_title.add_css_class("skeleton-pulse");
-
-        // Skeleton subtitle
-        let skeleton_subtitle = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-        skeleton_subtitle.set_height_request(10);
-        skeleton_subtitle.set_width_request(180);
-        skeleton_subtitle.set_halign(gtk::Align::Start);
-        skeleton_subtitle.add_css_class("skeleton-text");
-        skeleton_subtitle.add_css_class("skeleton-pulse");
-
-        vbox.append(&skeleton_title);
-        vbox.append(&skeleton_subtitle);
-
-        hbox.append(&skeleton_thumb);
-        hbox.append(&vbox);
-
-        row.set_child(Some(&hbox));
-        list_box.append(&row);
+    // Atualiza só se houver entradas novas (senão reaproveita os widgets)
+    populate_history_list(&p.list_box, &p.window, &p.app, &p.entry_map, &p.search_map);
+    {
+        let mut st = p.load_state.borrow_mut();
+        st.items_loaded = p.entry_map.borrow().len();
+        st.has_more = true;
+        st.is_loading = false;
     }
-}
 
-fn remove_skeleton_loaders(list_box: &gtk::ListBox) {
-    use gtk::prelude::*;
-
-    // Remove all skeleton rows
-    let mut row = list_box.first_child();
-    while let Some(current) = row {
-        let next = current.next_sibling();
-        if let Some(list_row) = current.downcast_ref::<gtk::ListBoxRow>() {
-            if list_row.widget_name().starts_with("skeleton-") {
-                list_box.remove(list_row);
-            }
-        }
-        row = next;
+    p.scrolled.vadjustment().set_value(0.0);
+    let first_row = p.list_box.row_at_index(0);
+    if let Some(ref row) = first_row {
+        p.list_box.select_row(Some(row));
     }
+
+    p.window.present();
+    p.window.set_focus_visible(true);
+    if let Some(row) = first_row {
+        row.grab_focus();
+    }
+    eprintln!("⚡ Popup mostrado em {:?}", t.elapsed());
 }

@@ -81,6 +81,16 @@ privacy:
 # Popup
 popup:
   title: "Clippit - History"
+  hint_search: "search"
+  copy_tooltip: "Copy to clipboard"
+  expand_tooltip: "Expand image"
+  hint_preview: "preview"
+  zoom_in: "Zoom in (+ / Ctrl+wheel / pinch)"
+  zoom_out: "Zoom out (-)"
+  zoom_fit: "Fit to screen (0)"
+  hint_navigate: "navigate"
+  hint_copy: "copy"
+  hint_close: "close"
   search_placeholder: "Search history..."
   empty: "Empty"
   image: "Image"
