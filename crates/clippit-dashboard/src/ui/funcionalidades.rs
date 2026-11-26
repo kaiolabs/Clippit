@@ -4,6 +4,8 @@
 use adw::prelude::*;
 use gtk::prelude::*;
 use libadwaita as adw;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 struct Feature {
     titulo: &'static str,
@@ -17,9 +19,9 @@ const GRUPOS: &[(&str, &[Feature])] = &[
         Feature {
             titulo: "Lançador",
             resumo: "Apps, arquivos, sites e comandos num lugar só",
-            teclas: &["Alt+Espaço"],
+            teclas: &["{lancador}"],
             passos: &[
-                "Aperte Alt+Espaço e digite o nome de um app, de um arquivo ou um site.",
+                "Aperte {lancador} e digite o nome de um app, de um arquivo ou um site.",
                 "Enter abre. Esc fecha. Clicar fora volta para a janela de trás sem perder o que você digitou.",
                 "A seta ← (ou Backspace com o campo vazio) volta para o início.",
             ],
@@ -68,9 +70,9 @@ const GRUPOS: &[(&str, &[Feature])] = &[
         Feature {
             titulo: "Histórico",
             resumo: "Tudo o que você copiou (textos, links, código e imagens)",
-            teclas: &["Alt+C"],
+            teclas: &["{historico}"],
             passos: &[
-                "Alt+C abre o histórico em qualquer lugar. Digite para filtrar.",
+                "{historico} abre o histórico em qualquer lugar. Digite para filtrar.",
                 "Enter cola na janela de trás; Ctrl+Enter só copia.",
                 "Ctrl+P fixa no topo (não some com o tempo); Ctrl+Del apaga; Ctrl+Espaço amplia a prévia.",
             ],
@@ -99,9 +101,9 @@ const GRUPOS: &[(&str, &[Feature])] = &[
         Feature {
             titulo: "Chat com a IA",
             resumo: "Roda no seu computador; nada vai para a nuvem",
-            teclas: &["Alt+I"],
+            teclas: &["{ia}"],
             passos: &[
-                "Alt+I abre o chat (ou digite ? no lançador).",
+                "{ia} abre o chat (ou digite ? no lançador).",
                 "@ anexa um app, um arquivo ou um print; Alt+V fala a pergunta.",
                 "Ctrl+N começa outra conversa; Ctrl+H mostra as anteriores.",
                 "Esc para a resposta no meio; o segundo Esc fecha.",
@@ -133,9 +135,9 @@ const GRUPOS: &[(&str, &[Feature])] = &[
         Feature {
             titulo: "Ações no texto selecionado",
             resumo: "Resumir, traduzir, explicar ou reescrever o que você selecionou",
-            teclas: &["Alt+A"],
+            teclas: &["{acoes}"],
             passos: &[
-                "Selecione um texto em qualquer app e aperte Alt+A (sem seleção, usa o que está copiado).",
+                "Selecione um texto em qualquer app e aperte {acoes} (sem seleção, usa o que está copiado).",
                 "Escolha: resumir, traduzir, explicar, mais formal, mais casual, mais curto ou responder.",
             ],
         },
@@ -150,10 +152,10 @@ const GRUPOS: &[(&str, &[Feature])] = &[
         Feature {
             titulo: "Corretor em qualquer campo",
             resumo: "Um selo aparece ao lado do campo quando há algo a corrigir",
-            teclas: &["Alt+O", "Alt+S"],
+            teclas: &["{sugestoes}", "{aplicar}"],
             passos: &[
                 "Escreva normalmente; o selo mostra quantas sugestões há.",
-                "Alt+O abre as sugestões; Alt+S aplica todas (Ctrl+S também, fora de editores).",
+                "{sugestoes} abre as sugestões; {aplicar} aplica todas (Ctrl+S também, fora de editores).",
                 "Ligar, desligar e onde rodar ficam na tela Corretor.",
             ],
         },
@@ -170,10 +172,10 @@ const GRUPOS: &[(&str, &[Feature])] = &[
         Feature {
             titulo: "Assistente de resposta",
             resumo: "Lê a conversa da janela (WhatsApp, Slack…) e sugere a resposta",
-            teclas: &["Alt+K"],
+            teclas: &["{assistente}"],
             passos: &[
-                "Com a conversa aberta, aperte Alt+K: aparecem 3 opções (curta, normal, completa).",
-                "1, 2 ou 3 escolhe; Enter insere no campo; Alt+F pede um ajuste (\"mais curta\").",
+                "Com a conversa aberta, aperte {assistente}: aparecem 3 opções (curta, normal, completa).",
+                "1, 2 ou 3 escolhe; Enter insere no campo; {ajuste} pede um ajuste (\"mais curta\").",
                 "Contextos (tom, produtos, frete) ficam na tela Assistente.",
             ],
         },
@@ -182,10 +184,10 @@ const GRUPOS: &[(&str, &[Feature])] = &[
         Feature {
             titulo: "Modo jogo",
             resumo: "Tira a IA da placa de vídeo para os jogos",
-            teclas: &["Ctrl+Shift+E"],
+            teclas: &["{modo_jogo}"],
             passos: &[
                 "Jogos abertos pela Steam, Proton ou Wine são detectados e a IA sai da placa sozinha.",
-                "Ctrl+Shift+E liga e desliga na mão. Os jogos já abrem na placa NVIDIA.",
+                "{modo_jogo} liga e desliga na mão. Os jogos já abrem na placa NVIDIA.",
             ],
         },
         Feature {
@@ -212,12 +214,43 @@ const GRUPOS: &[(&str, &[Feature])] = &[
     ]),
 ];
 
-fn keycaps(keys: &[&str]) -> gtk::Box {
+/// Troca {ia}, {lancador}… pelo atalho que o usuário configurou (Atalhos).
+fn resolve(t: &str) -> String {
+    let mut out = t.to_string();
+    if out.contains("{historico}") {
+        out = out.replace("{historico}", &history_key());
+    }
+    for (id, ..) in super::atalhos::SHORTCUTS {
+        let tag = format!("{{{id}}}");
+        if out.contains(&tag) {
+            out = out.replace(&tag, &super::atalhos::pretty(&super::atalhos::current(id)));
+        }
+    }
+    out
+}
+
+/// O atalho do histórico vem do GNOME (config.toml), não do corretor.conf.
+fn history_key() -> String {
+    let cfg = clippit_core::Config::load().unwrap_or_default();
+    let m = match cfg.hotkeys.show_history_modifier.to_lowercase().as_str() {
+        "ctrl" | "control" => "Ctrl".to_string(),
+        "super" | "meta" => "Super".into(),
+        "shift" => "Shift".into(),
+        "alt" => "Alt".into(),
+        o => o.to_string(),
+    };
+    format!("{m}+{}", cfg.hotkeys.show_history_key.to_uppercase())
+}
+
+type Live = Rc<RefCell<Vec<(gtk::Label, &'static str)>>>;
+
+fn keycaps(keys: &[&'static str], live: &Live) -> gtk::Box {
     let b = gtk::Box::new(gtk::Orientation::Horizontal, 4);
     b.set_valign(gtk::Align::Center);
     for k in keys {
-        let l = gtk::Label::new(Some(k));
+        let l = gtk::Label::new(Some(&resolve(k)));
         l.add_css_class("clip-key");
+        live.borrow_mut().push((l.clone(), k));
         b.append(&l);
     }
     b
@@ -225,6 +258,8 @@ fn keycaps(keys: &[&str]) -> gtk::Box {
 
 pub fn create_page() -> gtk::Widget {
     let page = adw::PreferencesPage::new();
+    // Textos com atalho: refeitos toda vez que a tela aparece (pega trocas feitas em Atalhos).
+    let live: Live = Rc::new(RefCell::new(Vec::new()));
 
     // Busca
     let search_group = adw::PreferencesGroup::new();
@@ -244,7 +279,7 @@ pub fn create_page() -> gtk::Widget {
             row.set_title(f.titulo);
             row.set_subtitle(f.resumo);
             // add_suffix só existe na libadwaita 1.4+; add_action põe à direita.
-            let right = keycaps(f.teclas);
+            let right = keycaps(f.teclas, &live);
             // Seta nossa: a da libadwaita usa um ícone que nem todo tema tem.
             let arrow = gtk::Image::from_icon_name("pan-down-symbolic");
             arrow.add_css_class("clip-arrow");
@@ -267,7 +302,8 @@ pub fn create_page() -> gtk::Widget {
                 let n = gtk::Label::new(Some(&format!("{}", i + 1)));
                 n.add_css_class("clip-step");
                 n.set_valign(gtk::Align::Start);
-                let t = gtk::Label::new(Some(p));
+                let t = gtk::Label::new(Some(&resolve(p)));
+                live.borrow_mut().push((t.clone(), p));
                 t.set_wrap(true);
                 t.set_xalign(0.0);
                 t.set_hexpand(true);
@@ -308,6 +344,12 @@ pub fn create_page() -> gtk::Widget {
         }
         for (g, show) in groups.iter().zip(any) {
             g.set_visible(show);
+        }
+    });
+
+    page.connect_map(move |_| {
+        for (label, template) in live.borrow().iter() {
+            label.set_text(&resolve(template));
         }
     });
 
