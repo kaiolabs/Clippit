@@ -1,596 +1,176 @@
-# 🤝 Guia de Contribuição
+# Contributing to Clippit
 
-Obrigado por considerar contribuir com o Clippit! ❤️
+Thanks for helping! This document is the contract for working on Clippit: how it is built, how to run
+it while you develop, what each script does, and the rules every change must follow. Read it once
+before your first pull request.
 
-Este documento fornece diretrizes para contribuir com o projeto. Seguir estas diretrizes ajuda a comunicar que você respeita o tempo dos desenvolvedores que gerenciam e desenvolvem este projeto de código aberto.
-
----
-
-## 📋 Índice
-
-- [Código de Conduta](#-código-de-conduta)
-- [Como Posso Contribuir?](#-como-posso-contribuir)
-- [Primeiros Passos](#-primeiros-passos)
-- [Processo de Desenvolvimento](#-processo-de-desenvolvimento)
-- [Guia de Estilo](#-guia-de-estilo)
-- [Estrutura do Projeto](#-estrutura-do-projeto)
-- [Testes](#-testes)
-- [Documentação](#-documentação)
-- [Pull Requests](#-pull-requests)
-- [Comunidade](#-comunidade)
+🇧🇷 Pode escrever issues e PRs em português ou inglês.
 
 ---
 
-## 📜 Código de Conduta
+## 1. How Clippit is put together
 
-Este projeto e todos que participam dele são regidos pelo nosso Código de Conduta. Ao participar, espera-se que você mantenha este código. Por favor, reporte comportamento inaceitável para [clippit@example.com](mailto:clippit@example.com).
+Clippit is a few small programs that talk to each other on the user's machine. Nothing runs as root
+and nothing is installed outside `~/.local`.
 
-### Nossos Valores
+| Part | Language | Where | What it does |
+|---|---|---|---|
+| **clippit-daemon** | Rust | `crates/clippit-daemon` | Systemd user service (`clippit.service`). Watches the clipboard, saves text and images to SQLite, OCRs images, answers IPC from the other programs. Also registers Alt+C through X11 as a fallback outside GNOME. |
+| **GNOME extension** | GJS | `gnome-extension/clippit-corretor@clippit` | Everything on screen: launcher (Alt+Space), history, AI chat, text actions, spell-check badge, reply assistant. Exposes the D-Bus service `com.clippit.Lancador` (open a view, list/move windows, take a screenshot, clipboard hash). |
+| **clippit-correct** | Python | `scripts/clippit-correct` | The AI backend. A local HTTP server on `127.0.0.1:18088` that starts `llama-server` (port 18089) and an embeddings server (18087) on demand and shuts them down when idle. Spell checker, reply assistant, the chat agent and its tools, model catalog and downloads. |
+| **clippit-dashboard** | Rust (GTK 4 + libadwaita) | `crates/clippit-dashboard` | The settings app ("Clippit" in the app menu). |
+| **clippit-popup** | Rust (GTK 4) | `crates/clippit-popup` | The older history window. Used only when the extension is not running. |
+| **clippit-core / clippit-ipc** | Rust | `crates/` | Shared code: config, SQLite storage, i18n, the IPC protocol. |
+| **helper scripts** | Python / sh | `scripts/` | See [section 3](#3-scripts). |
 
-- **Seja respeitoso**: Trate todos com respeito e consideração
-- **Seja colaborativo**: Trabalhe junto com outros contribuidores
-- **Seja construtivo**: Forneça feedback construtivo
-- **Seja inclusivo**: Dê boas-vindas a todos, independentemente de experiência
+### Data and settings (per user)
 
----
+| Path | Contents |
+|---|---|
+| `~/.config/clippit/config.toml` | Daemon and popup settings (history size, images, OCR, language, Alt+C). |
+| `~/.config/clippit/corretor.conf` | Extension and AI settings (`key = value`): models, GPU, shortcuts, names. See [docs/configuration.md](docs/configuration.md). |
+| `~/.local/share/clippit/history.db` | Clipboard history (SQLite) and `images/`. |
+| `~/.local/share/clippit/models/` | AI models (`.gguf`). |
+| `~/.local/share/clippit/llama.cpp/` | The llama.cpp build downloaded by the installer. |
+| `~/.local/share/clippit/aprendizado/` | What the corrector and assistant learned (local only). |
+| `~/.local/share/clippit/doutor/` | The doctor's log, state and backups of data files. |
+| `$XDG_RUNTIME_DIR/clippit-correct/` | Runtime files of the AI server (`server.log`, status, game-mode flag). |
 
-## 🎯 Como Posso Contribuir?
-
-Existem muitas formas de contribuir com o Clippit:
-
-### 🐛 Reportar Bugs
-
-Encontrou um bug? Ajude-nos a corrigi-lo!
-
-**Antes de reportar:**
-- ✅ Verifique se o bug já foi reportado nas [Issues](https://github.com/yourusername/clippit/issues)
-- ✅ Verifique se você está usando a versão mais recente
-- ✅ Colete informações sobre o bug
-
-**Como reportar:**
-1. Abra uma [nova issue](https://github.com/yourusername/clippit/issues/new)
-2. Use um título claro e descritivo
-3. Descreva os passos para reproduzir
-4. Forneça informações do sistema:
-   ```bash
-   # Versão do Ubuntu/Debian
-   lsb_release -a
-   
-   # Versão do GTK4
-   pkg-config --modversion gtk4
-   
-   # Logs do Clippit
-   journalctl --user -u clippit -n 50
-   ```
-5. Se possível, adicione screenshots ou vídeos
-
-**Template de Bug Report:**
-```markdown
-## Descrição do Bug
-[Descrição clara e concisa]
-
-## Passos para Reproduzir
-1. Vá para '...'
-2. Clique em '...'
-3. Role até '...'
-4. Veja o erro
-
-## Comportamento Esperado
-[O que deveria acontecer]
-
-## Comportamento Atual
-[O que está acontecendo]
-
-## Screenshots
-[Se aplicável]
-
-## Informações do Sistema
-- OS: [ex: Ubuntu 22.04]
-- GTK4: [ex: 4.6.9]
-- Clippit: [ex: 1.0.0]
-
-## Logs
-```
-[Cole os logs aqui]
-```
-```
-
-### ✨ Sugerir Features
-
-Tem uma ideia para melhorar o Clippit?
-
-**Antes de sugerir:**
-- ✅ Verifique se já não foi sugerida
-- ✅ Verifique se está alinhada com os objetivos do projeto
-
-**Como sugerir:**
-1. Abra uma [nova issue](https://github.com/yourusername/clippit/issues/new)
-2. Use a label `enhancement`
-3. Descreva a feature em detalhes
-4. Explique por que seria útil
-5. Forneça exemplos de uso
-
-### 📝 Melhorar Documentação
-
-Documentação é crucial! Você pode ajudar:
-- Corrigindo erros de digitação
-- Melhorando explicações
-- Adicionando exemplos
-- Traduzindo para outros idiomas
-
-### 💻 Contribuir com Código
-
-Quer contribuir com código? Ótimo! Veja as seções abaixo.
-
----
-
-## 🚀 Primeiros Passos
-
-### Pré-requisitos
-
-**Ferramentas Necessárias:**
-```bash
-# Rust (stable)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Dependências de desenvolvimento
-sudo apt install \
-    build-essential \
-    pkg-config \
-    libgtk-4-dev \
-    libadwaita-1-dev \
-    libsqlite3-dev
-```
-
-### Configurando o Ambiente
-
-1. **Fork o repositório**
-   ```bash
-   # No GitHub, clique em "Fork"
-   ```
-
-2. **Clone seu fork**
-   ```bash
-   git clone https://github.com/SEU-USERNAME/clippit.git
-   cd clippit
-   ```
-
-3. **Adicione o repositório original como upstream**
-   ```bash
-   git remote add upstream https://github.com/yourusername/clippit.git
-   ```
-
-4. **Instale as dependências**
-   ```bash
-   cargo build
-   ```
-
-5. **Execute os testes**
-   ```bash
-   cargo test
-   ```
-
-### Rodando em Desenvolvimento
+## 2. Running it while you develop
 
 ```bash
-# Terminal 1: Execute o daemon
-RUST_LOG=clippit_daemon=debug cargo run --bin clippit-daemon
-
-# Terminal 2: Execute o popup
-RUST_LOG=clippit_popup=debug cargo run --bin clippit-popup
-
-# Ou execute o dashboard
-cargo run --bin clippit-dashboard
+./scripts/install.sh --deps     # once: builds, installs, links the scripts, enables the extension
 ```
 
----
+The installer **links** the scripts and the extension to your clone, so most edits are live:
 
-## 🔧 Processo de Desenvolvimento
+- **Python scripts** (`scripts/clippit-*`): the next call uses the new code. To restart the AI server:
+  `clippit-correct --stop` (it starts again on the next use).
+- **Extension** (`core.js`): the loader in `extension.js` reloads `core.js` about one second after the
+  file is rewritten. Changes to `extension.js` or `metadata.json` need a log out / log in.
+- **Rust programs**: rebuild and reinstall the one you changed:
+  ```bash
+  cargo build --release -p clippit-dashboard && install -m755 target/release/clippit-dashboard ~/.local/bin/
+  cargo build --release -p clippit-daemon && install -m755 target/release/clippit-daemon ~/.local/bin/ \
+    && systemctl --user restart clippit
+  ```
 
-### 1. Escolha uma Issue
-
-- Procure issues com labels `good first issue` ou `help wanted`
-- Comente na issue dizendo que vai trabalhar nela
-- Aguarde confirmação de um mantenedor
-
-### 2. Crie uma Branch
+### Logs
 
 ```bash
-# Atualize seu fork
-git checkout main
-git pull upstream main
-
-# Crie uma branch para sua feature/fix
-git checkout -b feature/minha-feature
-# ou
-git checkout -b fix/meu-bugfix
+journalctl --user -f | grep clippit-corretor          # extension
+journalctl --user -u clippit -f                       # daemon
+tail -f $XDG_RUNTIME_DIR/clippit-correct/server.log   # llama-server
+tail ~/.local/share/clippit/doutor/doutor.log         # doctor
+clippit-doutor --relatorio                            # health of every part
 ```
 
-**Convenção de Nomes:**
-- `feature/nome-da-feature` - Para novas features
-- `fix/nome-do-bug` - Para correções de bugs
-- `docs/descricao` - Para documentação
-- `refactor/descricao` - Para refatorações
-- `test/descricao` - Para testes
+### Testing without disturbing your session
 
-### 3. Desenvolva
+- **Settings app**: run it in a separate GTK Broadway display and look at it in a browser:
+  ```bash
+  gtk4-broadwayd :7 &
+  GDK_BACKEND=broadway BROADWAY_DISPLAY=:7 XDG_CONFIG_HOME=/tmp/clippit-test ./target/release/clippit-dashboard
+  # open http://127.0.0.1:8087
+  ```
+  A separate `XDG_CONFIG_HOME` keeps your real settings untouched. Put a `gtk-4.0/settings.ini` with
+  `gtk-xft-dpi=98304` there, or the pages render too narrow.
+- **Extension screenshots**: write an output folder to `$XDG_RUNTIME_DIR/clippit-corretor/selftest-foto`
+  and rewrite `core.js`; on load the extension photographs its main views into that folder. This probe
+  does not load the AI. (`selftest-lancador` and `selftest-novidades` do load the AI: don't run them
+  while gaming.)
 
-- Faça commits pequenos e frequentes
-- Siga o [Guia de Estilo](#-guia-de-estilo)
-- Adicione testes para novas features
-- Atualize a documentação se necessário
+## 3. Scripts
 
-### 4. Teste
+| Script | Purpose |
+|---|---|
+| `scripts/install.sh` | Installs everything for the current user. `--deps` installs apt packages, `--ai` / `--no-ai` controls the AI download. |
+| `scripts/uninstall.sh` | Removes what the installer added; asks before deleting data. |
+| `scripts/clippit-correct` | AI backend and CLI: `--status`, `--stop`, `--modelos`, `--baixar <id>`, `--instalar-llama`, `--prova` (corrector benchmark), `--modo-jogo on\|off`. Run with `-h` for all. |
+| `scripts/clippit-busca` | Queries used by the launcher: history, files (GNOME index), emoji, pin/unpin. |
+| `scripts/clippit-historico` | What Alt+C runs: opens the history in the launcher, or the old popup if the extension is off. |
+| `scripts/clippit-doutor` | The doctor: checks and fixes known problems; unknown errors go to the local AI. Run by `clippit-doutor.timer` every 2 minutes. |
+| `scripts/clippit-jogos-nvidia` | On hybrid-GPU laptops, makes game launchers use the NVIDIA GPU. `--desfazer` reverts. |
+| `scripts/gerar-icones.py` | Regenerates the Lucide icons used by the extension. |
+| `scripts/prova-corretor.jsonl` | Test sentences for `clippit-correct --prova`. |
 
-```bash
-# Execute todos os testes
-cargo test
+## 4. Rules for code
 
-# Teste manualmente
-cargo run --bin clippit-daemon
+### Everyone
 
-# Verifique linting
-cargo clippy -- -D warnings
-
-# Verifique formatação
-cargo fmt --check
-```
-
-### 5. Commit
-
-Siga o [Conventional Commits](https://www.conventionalcommits.org/):
-
-```bash
-# Formato
-<tipo>(<escopo>): <descrição>
-
-# Exemplos
-feat(popup): adiciona suporte a GIF
-fix(daemon): corrige memory leak no monitor
-docs(readme): atualiza instruções de instalação
-refactor(core): melhora performance do histórico
-test(ipc): adiciona testes de integração
-```
-
-**Tipos:**
-- `feat`: Nova feature
-- `fix`: Correção de bug
-- `docs`: Documentação
-- `style`: Formatação, ponto e vírgula, etc
-- `refactor`: Refatoração de código
-- `test`: Adicionando testes
-- `chore`: Manutenção, dependências
-
-### 6. Push e Pull Request
-
-```bash
-# Push para seu fork
-git push origin feature/minha-feature
-
-# No GitHub, abra um Pull Request
-```
-
----
-
-## 🎨 Guia de Estilo
+- **Privacy first.** Never send user data anywhere unless the user explicitly asked for it (a web
+  search). No telemetry. No personal data, keys, tokens or machine-specific paths in the repository.
+- **Nothing that changes the system runs without the user's OK.** In the AI backend, any tool that
+  writes, moves, kills or runs commands must go through the confirmation flow (`PENDING` → the user
+  presses *Rodar*). Read-only tools may run directly. Files matching `SECRET_PATH` are never read.
+- **Don't hog the GPU.** The AI only uses the GPU with enough free VRAM (`GPU_FREE_NEEDED`) and leaves
+  it when a game starts. Keep it that way.
+- **User-facing text is Brazilian Portuguese** (for now). Code comments may be in Portuguese or English.
 
 ### Rust
 
-**Formatação:**
-```bash
-# Use rustfmt
-cargo fmt
-```
+- `cargo fmt --all` and `cargo clippy --workspace --all-targets -- -D warnings` must pass (CI checks).
+- No `unwrap()` on anything that can fail at runtime in the daemon; it must keep running.
 
-**Linting:**
-```bash
-# Use clippy
-cargo clippy -- -D warnings
-```
+### Python (`scripts/`)
 
-**Convenções:**
-- Use snake_case para funções e variáveis
-- Use PascalCase para tipos e traits
-- Use SCREAMING_SNAKE_CASE para constantes
-- Documente funções públicas com `///`
-- Use `?` ao invés de `unwrap()` sempre que possível
-- Evite `panic!()` exceto em casos irrecuperáveis
+- Standard library only (plus the system `gi` bindings). No pip dependencies for the core features.
+- Scripts start with `#!/usr/bin/env -S python3 -I`.
 
-**Exemplo:**
-```rust
-/// Adiciona uma entrada ao histórico.
-///
-/// # Arguments
-///
-/// * `content` - O conteúdo a ser adicionado
-/// * `entry_type` - O tipo da entrada (Text ou Image)
-///
-/// # Returns
-///
-/// `Result<i64, Error>` - O ID da entrada ou erro
-///
-/// # Examples
-///
-/// ```
-/// let id = add_entry("Hello", EntryType::Text)?;
-/// ```
-pub fn add_entry(content: &str, entry_type: EntryType) -> Result<i64, Error> {
-    // Implementação
-}
-```
+### GNOME extension (GJS)
 
-### Git Commits
+These rules come from real crashes. Breaking them can log the user out:
 
-- Use mensagens descritivas
-- Primeira linha: máximo 50 caracteres
-- Corpo: máximo 72 caracteres por linha
-- Use português ou inglês (seja consistente)
+- **Never set `min_height` / `min_width` on children of `St.BoxLayout`.** On GNOME 46 the
+  "natural height < minimum" warning aborts the whole shell. For scrollable text use `FullHeightBox`.
+- **Never `GLib.source_remove()` a source that already ended** (returned `SOURCE_REMOVE`); keep a flag.
+- **`core.js` reloads as soon as it is saved**: a syntax error disables the extension until the next
+  save. Check first: `cp core.js /tmp/c.mjs && node --check /tmp/c.mjs`.
+- **One visual standard.** Use the tokens and components at the top of `core.js` (`T`, `TX`, `UI`,
+  `emptyState`, `keycap`, `makeFooter`, `iconTile`). Glass surfaces, 4–8 px corners, no divider lines,
+  blue (`#4c9dff`) only for primary actions.
+- Global shortcuts come from `SHORTCUTS` + `keyOf()` so users can change them; don't hard-code keys.
 
-**Exemplo:**
-```
-feat(popup): adiciona preview de imagem em hover
+## 5. Git workflow
 
-Implementa preview de imagem quando o usuário passa o mouse
-sobre um item de imagem no histórico. O preview é exibido
-ao lado do item com um fade-in suave.
+### Branches
 
-Closes #42
-```
+- `master` is protected: no direct pushes, no force pushes. Everything goes through a pull request.
+- Create a branch from `master` named `<type>/<short-description>`:
+  `feat/window-tools`, `fix/history-stops-after-crash`, `docs/install`, `chore/cleanup`.
 
-### Documentação
-
-- Use Markdown
-- Adicione exemplos sempre que possível
-- Mantenha o README.md atualizado
-- Documente decisões arquiteturais importantes
-
----
-
-## 📁 Estrutura do Projeto
+### Commits — [Conventional Commits](https://www.conventionalcommits.org)
 
 ```
-clippit/
-├── crates/                      # Crates Rust
-│   ├── clippit-core/           # Lógica de negócio
-│   │   ├── src/
-│   │   │   ├── history.rs      # Gerenciamento de histórico
-│   │   │   └── config.rs       # Configurações
-│   │   └── Cargo.toml
-│   │
-│   ├── clippit-daemon/         # Daemon de monitoramento
-│   │   ├── src/
-│   │   │   ├── main.rs         # Entry point
-│   │   │   ├── monitor.rs      # Monitor de clipboard
-│   │   │   └── hotkey.rs       # Gerenciamento de hotkeys
-│   │   └── Cargo.toml
-│   │
-│   ├── clippit-ipc/            # Comunicação IPC
-│   ├── clippit-popup/          # Interface popup
-│   └── clippit-dashboard/      # Dashboard de config
-│
-├── assets/                      # Assets (ícones, etc)
-├── scripts/                     # Scripts de build/instalação
-├── docs/                        # Documentação adicional
-│
-├── README.md                    # Documentação principal
-├── CONTRIBUTING.md              # Este arquivo
-├── CHANGELOG.md                 # Histórico de mudanças
-├── LICENSE                      # Licença MIT
-└── Cargo.toml                   # Workspace Cargo
+<type>(<optional scope>): <what changed, in the imperative>
 
+<why, if it isn't obvious>
 ```
 
-### Onde Adicionar Código
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`.
+Scopes: `daemon`, `painel` (dashboard), `extensao`, `ia`, `corretor`, `doutor`, `popup`.
+English or Portuguese, but keep one language per commit. Example:
+`fix(daemon): reconnect the clipboard when Xwayland restarts`.
 
-| Feature | Crate | Arquivo |
-|---------|-------|---------|
-| Novo tipo de entrada | `clippit-core` | `history.rs` |
-| Nova configuração | `clippit-core` | `config.rs` |
-| Monitoramento de clipboard | `clippit-daemon` | `monitor.rs` |
-| Novo hotkey | `clippit-daemon` | `hotkey.rs` |
-| UI do popup | `clippit-popup` | `src/views/` |
-| UI do dashboard | `clippit-dashboard` | `src/ui/` |
+### Pull requests — what it takes to merge
 
----
+1. **CI is green** (format, clippy, tests, build, script and extension syntax).
+2. **One approving review** from a code owner ([CODEOWNERS](.github/CODEOWNERS)).
+3. **All review conversations resolved.**
+4. The branch is **up to date with `master`**.
+5. Merged with **squash**: one commit per PR on `master`, titled like a Conventional Commit.
+   The branch is deleted after the merge.
 
-## 🧪 Testes
+Keep PRs small and about one thing. Fill in the template: what changed, why, how you tested it, and
+screenshots for anything visual. Add a line to `CHANGELOG.md` under **Unreleased**.
 
-### Rodando Testes
+### Versions
 
-```bash
-# Todos os testes
-cargo test
+[Semantic Versioning](https://semver.org). The version lives in the workspace `Cargo.toml`; releases are
+tagged `vX.Y.Z` from `master`.
 
-# Testes de um crate específico
-cargo test -p clippit-core
+## 6. Bugs and security
 
-# Um teste específico
-cargo test test_add_entry
-
-# Com output detalhado
-cargo test -- --nocapture
-```
-
-### Escrevendo Testes
-
-**Testes Unitários:**
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_add_text_entry() {
-        let mut history = History::new();
-        let result = history.add_entry("test", EntryType::Text);
-        assert!(result.is_ok());
-    }
-}
-```
-
-**Testes de Integração:**
-```rust
-// tests/integration_test.rs
-#[test]
-fn test_daemon_popup_communication() {
-    // Setup
-    let daemon = start_daemon();
-    let popup = start_popup();
-    
-    // Test
-    daemon.copy_text("hello");
-    let entries = popup.get_entries();
-    
-    // Assert
-    assert_eq!(entries.len(), 1);
-    assert_eq!(entries[0].content, "hello");
-}
-```
-
----
-
-## 📚 Documentação
-
-### Documentando Código
-
-Use `///` para documentação pública:
-
-```rust
-/// Estrutura que representa uma entrada no histórico.
-///
-/// # Fields
-///
-/// * `id` - ID único da entrada
-/// * `content` - Conteúdo da entrada
-/// * `entry_type` - Tipo (Text ou Image)
-/// * `timestamp` - Quando foi criada
-#[derive(Debug, Clone)]
-pub struct HistoryEntry {
-    pub id: i64,
-    pub content: String,
-    pub entry_type: EntryType,
-    pub timestamp: DateTime<Utc>,
-}
-```
-
-### Atualizando README
-
-Ao adicionar features, atualize:
-- Lista de features
-- Instruções de uso
-- Screenshots (se aplicável)
-
-### CHANGELOG.md
-
-Adicione suas mudanças em `[Unreleased]`:
-
-```markdown
-### ✨ Adicionado
-- Suporte a formato GIF (#123)
-```
-
----
-
-## 🔀 Pull Requests
-
-### Checklist
-
-Antes de submeter um PR, verifique:
-
-- [ ] ✅ Código segue o guia de estilo
-- [ ] ✅ Testes passando (`cargo test`)
-- [ ] ✅ Sem warnings (`cargo clippy`)
-- [ ] ✅ Código formatado (`cargo fmt`)
-- [ ] ✅ Documentação atualizada
-- [ ] ✅ CHANGELOG.md atualizado
-- [ ] ✅ Commits seguem Conventional Commits
-
-### Template de PR
-
-```markdown
-## Descrição
-[Descrição clara do que foi feito]
-
-## Tipo de Mudança
-- [ ] 🐛 Bug fix (mudança que corrige um issue)
-- [ ] ✨ Nova feature (mudança que adiciona funcionalidade)
-- [ ] 💥 Breaking change (fix ou feature que quebra compatibilidade)
-- [ ] 📝 Documentação
-
-## Como Testar
-1. [Passo 1]
-2. [Passo 2]
-3. [Passo 3]
-
-## Screenshots
-[Se aplicável]
-
-## Issues Relacionadas
-Closes #[número da issue]
-
-## Checklist
-- [ ] Testes passando
-- [ ] Código documentado
-- [ ] CHANGELOG atualizado
-```
-
-### Processo de Review
-
-1. Um mantenedor irá revisar seu PR
-2. Pode haver pedidos de mudanças
-3. Faça as mudanças solicitadas
-4. Após aprovação, seu PR será merged!
-
----
-
-## 👥 Comunidade
-
-### Onde Pedir Ajuda
-
-- 💬 **GitHub Discussions**: Para discussões gerais
-- 🐛 **GitHub Issues**: Para bugs e features
-- 📧 **Email**: clippit@example.com
-
-### Mantenedores
-
-- [@yourusername](https://github.com/yourusername) - Mantenedor Principal
-
-### Contribuidores
-
-Veja a lista completa de [contribuidores](https://github.com/yourusername/clippit/graphs/contributors)!
-
----
-
-## 🎉 Reconhecimento
-
-Toda contribuição, grande ou pequena, é valiosa! Contribuidores serão:
-
-- Listados no README.md
-- Mencionados no CHANGELOG.md
-- Incluídos na lista de Contributors do GitHub
-
----
-
-## 📞 Precisa de Ajuda?
-
-Não hesite em pedir ajuda! Estamos aqui para ajudar:
-
-- Comente na issue que você está trabalhando
-- Abra uma discussão no GitHub Discussions
-- Envie um email para clippit@example.com
-
----
-
-## 🙏 Agradecimentos
-
-Obrigado por contribuir com o Clippit! Sua ajuda faz toda a diferença! ❤️
-
----
-
-<div align="center">
-
-**Happy Coding!** 🚀
-
-[⬆ Voltar ao topo](#-guia-de-contribuição)
-
-</div>
+- Bugs and ideas: open an issue (there are templates). Include `clippit-doutor --relatorio` output.
+- Security problems: **don't open a public issue** — see [SECURITY.md](SECURITY.md).
+- Be kind: [Code of Conduct](CODE_OF_CONDUCT.md).

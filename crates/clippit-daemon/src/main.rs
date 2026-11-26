@@ -1,8 +1,6 @@
-mod autocomplete_manager;
 mod hotkey;
 mod monitor;
 mod ocr_processor;
-mod typing_monitor;
 
 use anyhow::Result;
 use clippit_core::HistoryManager;
@@ -47,19 +45,6 @@ async fn main() -> Result<()> {
             std::process::exit(1); // Force restart by systemd
         }
     });
-
-    // Clone for typing monitor (autocompletar)
-    let history_clone_typing = Arc::clone(&history_manager);
-
-    // Start typing monitor (autocompletar global)
-    let typing_monitor = Arc::new(typing_monitor::TypingMonitor::new(history_clone_typing));
-    let typing_monitor_clone = Arc::clone(&typing_monitor);
-    let _typing_handle = task::spawn(async move {
-        if let Err(e) = typing_monitor_clone.run().await {
-            error!("Typing monitor error: {}", e);
-        }
-    });
-    info!("✅ Typing monitor (autocomplete) started");
 
     // Clone for hotkey handler
     let history_clone = Arc::clone(&history_manager);
@@ -175,7 +160,7 @@ fn handle_ipc_message(
             } else {
                 manager.search(&query)
             };
-            
+
             match result {
                 Ok(entries) => {
                     let ipc_entries: Vec<HistoryEntry> = entries
@@ -219,7 +204,7 @@ fn handle_ipc_message(
             } else {
                 manager.search(&query)
             };
-            
+
             match result {
                 Ok(entries) => {
                     let ipc_entries: Vec<HistoryEntry> = entries

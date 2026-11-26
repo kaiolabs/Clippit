@@ -1,0 +1,8 @@
+[Unit]
+Description=Doutor do Clippit (acha e corrige problemas do Clippit)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/clippit-doutor
+Nice=10
+TimeoutStartSec=300

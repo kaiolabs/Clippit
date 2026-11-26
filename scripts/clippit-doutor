@@ -1,0 +1,543 @@
+#!/usr/bin/env -S python3 -I
+"""clippit-doutor — acha e corrige sozinho os problemas do Clippit.
+
+    clippit-doutor               → checa e corrige (o timer roda a cada 2 min)
+    clippit-doutor --relatorio   → mostra como está cada parte (para você ou a IA)
+    clippit-doutor --analisar    → manda os erros novos e desconhecidos para a IA local
+
+Problemas conhecidos são corrigidos na hora (com notificação). Erros novos
+são analisados pela IA: se a correção for uma das SEGURAS (reiniciar uma parte
+do Clippit, religar a extensão, consertar ou restaurar um arquivo de dados),
+ela aplica; qualquer outra coisa fica como sugestão no chat (Alt+I), esperando
+o seu Rodar. O doutor nunca mexe no código nem fora do Clippit.
+"""
+
+import glob
+import hashlib
+import json
+import os
+import re
+import shutil
+import sqlite3
+import subprocess
+import sys
+import time
+
+HOME = os.path.expanduser("~")
+DATA = os.path.join(HOME, ".local/share/clippit")
+CONF = os.path.join(HOME, ".config/clippit")
+DOC = os.path.join(DATA, "doutor")
+STATE = os.path.join(DOC, "estado.json")
+LOG = os.path.join(DOC, "doutor.log")
+SNAP = os.path.join(DOC, "copias")  # últimas versões boas dos arquivos de dados
+SUGGESTION = os.path.join(DOC, "sugestao.json")
+RUN = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "clippit-correct")
+BIN = os.path.join(HOME, ".local/bin")
+EXT = "clippit-corretor@clippit"
+
+# Arquivos de dados em JSON (o que quebrar aqui derruba uma função inteira).
+DATA_FILES = [os.path.join(DATA, "aprendizado", "trocas.json"), os.path.join(DATA, "aprendizado", "pessoas.json"),
+              os.path.join(DATA, "fixados.json"), os.path.join(DATA, "lembretes.json"), os.path.join(DATA, "notas.json"),
+              os.path.join(DATA, "emoji.json"), os.path.join(CONF, "snippets.json")]
+
+# Correções que podem rodar sem perguntar (só dentro do Clippit, todas reversíveis).
+SAFE = {
+    "reiniciar_daemon": "reinicia o serviço do histórico (clippit-daemon)",
+    "reiniciar_ia": "desliga o servidor da IA (ele sobe sozinho no próximo uso)",
+    "religar_extensao": "desliga e liga a extensão do Clippit no GNOME",
+    "religar_extensoes_gnome": "volta a permitir extensões no GNOME (ele desliga todas depois de uma queda)",
+    "consertar_dados": "conserta os arquivos de dados do Clippit (guarda cópia antes)",
+    "restaurar_atalhos": "recoloca os atalhos Alt+C e Alt+Espaço",
+    "limpar_marcas": "apaga marcas temporárias velhas (pedido de parar, etc.)",
+}
+LIMIT_PER_HOUR = 3  # a mesma correção, no máximo 3 vezes por hora (senão é outro problema)
+
+
+# ---------------------------------------------------------------- utilidades
+
+def run(argv, timeout=10):
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+        return p.returncode, (p.stdout or "").strip(), (p.stderr or "").strip()
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 1, "", str(e)
+
+
+def log(msg):
+    os.makedirs(DOC, exist_ok=True)
+    with open(LOG, "a", encoding="utf-8") as f:
+        f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + msg + "\n")
+    try:  # o log não cresce para sempre
+        if os.path.getsize(LOG) > 400_000:
+            lines = open(LOG, encoding="utf-8").readlines()[-2000:]
+            open(LOG, "w", encoding="utf-8").writelines(lines)
+    except OSError:
+        pass
+
+
+def notify(title, body=""):
+    run(["notify-send", "-a", "Clippit", "-i", "dialog-information", f"Clippit: {title}", body])
+
+
+def load_state():
+    try:
+        return json.load(open(STATE, encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(st):
+    os.makedirs(DOC, exist_ok=True)
+    tmp = f"{STATE}.{os.getpid()}.tmp"
+    json.dump(st, open(tmp, "w", encoding="utf-8"), ensure_ascii=False)
+    os.replace(tmp, STATE)
+
+
+def allowed(st, fix):
+    """Limite por correção: se precisa repetir toda hora, não está resolvendo."""
+    now = time.time()
+    hist = [t for t in st.setdefault("feitas", {}).get(fix, []) if now - t < 3600]
+    st["feitas"][fix] = hist
+    return len(hist) < LIMIT_PER_HOUR
+
+
+def mark(st, fix):
+    st.setdefault("feitas", {}).setdefault(fix, []).append(time.time())
+
+
+def shell_call(method):
+    code, out, _ = run(["gdbus", "call", "--session", "--dest", "com.clippit.Lancador", "--object-path",
+                        "/com/clippit/Lancador", "--method", f"com.clippit.Lancador.{method}"], timeout=5)
+    if code != 0:
+        return None
+    m = re.match(r"^\('(.*)',\)$", out, re.S)
+    return m.group(1) if m else None
+
+
+# ---------------------------------------------------------------- correções seguras
+
+def fix_reiniciar_daemon():
+    return run(["systemctl", "--user", "restart", "clippit"], timeout=30)[0] == 0
+
+
+def fix_reiniciar_ia():
+    run([os.path.join(BIN, "clippit-correct"), "--stop"], timeout=20)
+    return True
+
+
+def fix_religar_extensao():
+    run(["gnome-extensions", "disable", EXT])
+    time.sleep(1)
+    return run(["gnome-extensions", "enable", EXT])[0] == 0
+
+
+def fix_religar_extensoes_gnome():
+    run(["gsettings", "set", "org.gnome.shell", "disable-user-extensions", "false"])
+    return run(["gnome-extensions", "enable", EXT])[0] == 0
+
+
+def _repair_json(path):
+    raw = open(path, encoding="utf-8", errors="replace").read()
+    try:
+        json.loads(raw)
+        return None  # está bom
+    except ValueError:
+        pass
+    os.makedirs(os.path.join(DOC, "estragados"), exist_ok=True)
+    shutil.copy2(path, os.path.join(DOC, "estragados", f"{os.path.basename(path)}.{time.strftime('%Y%m%d-%H%M%S')}"))
+    data = None
+    try:  # 1) aproveita o começo bom (gravação que se misturou)
+        data, end = json.JSONDecoder().raw_decode(raw)
+        rest = raw[end:].strip()
+        if isinstance(data, dict) and rest:
+            try:
+                data.update({k: v for k, v in json.loads("{" + rest).items() if k not in data})
+            except ValueError:
+                pass
+    except ValueError:
+        snap = os.path.join(SNAP, os.path.basename(path))
+        if os.path.exists(snap):  # 2) volta para a última cópia boa
+            data = json.load(open(snap, encoding="utf-8"))
+    if data is None:
+        return False
+    tmp = f"{path}.{os.getpid()}.tmp"
+    json.dump(data, open(tmp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+    return True
+
+
+def fix_consertar_dados():
+    fixed = []
+    for p in DATA_FILES:
+        if os.path.exists(p):
+            try:
+                if _repair_json(p):
+                    fixed.append(os.path.basename(p))
+            except OSError:
+                pass
+    return fixed or True
+
+
+def fix_restaurar_atalhos():
+    base = "org.gnome.settings-daemon.plugins.media-keys"
+    path = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/"
+    _, cur, _ = run(["gsettings", "get", base, "custom-keybindings"])
+    if path not in cur:
+        items = re.findall(r"'([^']+)'", cur) + [path]
+        run(["gsettings", "set", base, "custom-keybindings", str(items)])
+    kb = f"{base}.custom-keybinding:{path}"
+    run(["gsettings", "set", kb, "name", "Clippit"])
+    run(["gsettings", "set", kb, "command", os.path.join(BIN, "clippit-historico")])
+    run(["gsettings", "set", kb, "binding", "<Alt>c"])
+    run(["gsettings", "set", "org.gnome.desktop.wm.keybindings", "activate-window-menu", "[]"])
+    return True
+
+
+def fix_limpar_marcas():
+    p = os.path.join(RUN, "cancelar")
+    if os.path.exists(p) and time.time() - os.path.getmtime(p) > 300:
+        os.unlink(p)
+    return True
+
+
+FIXES = {k: globals()[f"fix_{k}"] for k in SAFE}
+
+
+def apply(st, fix, why):
+    if not allowed(st, fix):
+        log(f"PULEI {fix} ({why}): já tentei {LIMIT_PER_HOUR}x nesta hora")
+        if not st.get("avisado", {}).get(fix):
+            st.setdefault("avisado", {})[fix] = time.time()
+            notify("um problema voltou várias vezes", f"{why}. Já tentei corrigir {LIMIT_PER_HOUR}x; pergunte à IA (Alt+I): "
+                                                      "\"o Clippit tá com problema?\"")
+        return False
+    ok = FIXES[fix]()
+    mark(st, fix)
+    log(f"CORRIGI {fix}: {why} → {'ok' if ok else 'falhou'}")
+    return ok
+
+
+# ---------------------------------------------------------------- checagens conhecidas
+
+def check_all(st, verbose=False):
+    """Devolve [(parte, situação, corrigido?)]."""
+    out = []
+
+    # 0) Atalhos primeiro: a extensão só consegue reservar o Alt+Espaço se ele estiver livre.
+    _, menu, _ = run(["gsettings", "get", "org.gnome.desktop.wm.keybindings", "activate-window-menu"])
+    _, alt_c, _ = run(["gsettings", "get", "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"
+                       "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/", "binding"])
+    if "<Alt>space" in menu or alt_c.strip("'") != "<Alt>c":
+        why = "um atalho do Clippit tinha sido trocado (Alt+C ou Alt+Espaço)"
+        ok = apply(st, "restaurar_atalhos", why)
+        out.append(("Atalhos", why, ok))
+        st["religar_depois"] = ok  # a extensão precisa reservar o atalho de novo
+    else:
+        out.append(("Atalhos", "ok", None))
+
+    # 1) GNOME desligou as extensões (acontece depois de uma queda da sessão).
+    _, dis, _ = run(["gsettings", "get", "org.gnome.shell", "disable-user-extensions"])
+    _, info, _ = run(["gnome-extensions", "info", EXT])
+    state = (re.search(r"State:\s*(\w+)", info) or re.search(r"Estado:\s*(\w+)", info))
+    state = state.group(1) if state else "?"
+    if dis == "true" or state in ("DISABLED", "INITIALIZED"):
+        why = "o GNOME tinha desligado a extensão do Clippit (Alt+Espaço, corretor)"
+        ok = apply(st, "religar_extensoes_gnome", why)
+        out.append(("Extensão", why, ok))
+        if ok:
+            notify("extensão religada", "O GNOME tinha desligado a extensão depois de uma queda. Já voltou.")
+    elif state == "ERROR":
+        out.append(("Extensão", "a extensão está com erro no GNOME (precisa sair e entrar da sessão)", False))
+    else:
+        # 2) Extensão ligada mas sem responder.
+        if shell_call("Janelas") is None:
+            st["ext_mudo"] = st.get("ext_mudo", 0) + 1
+            if st["ext_mudo"] >= 2:  # duas checagens seguidas
+                why = "a extensão parou de responder"
+                ok = apply(st, "religar_extensao", why)
+                out.append(("Extensão", why, ok))
+                st["ext_mudo"] = 0
+        else:
+            st["ext_mudo"] = 0
+            if st.pop("religar_depois", False):
+                apply(st, "religar_extensao", "o atalho Alt+Espaço foi devolvido; a extensão precisa pegá-lo")
+            out.append(("Extensão", "ok", None))
+
+    # 3) Serviço do histórico.
+    _, active, _ = run(["systemctl", "--user", "is-active", "clippit"])
+    if active != "active":
+        why = f"o serviço do histórico estava {active or 'parado'}"
+        ok = apply(st, "reiniciar_daemon", why)
+        out.append(("Histórico", why, ok))
+        if ok:
+            notify("histórico religado", "O serviço que guarda o que você copia tinha parado.")
+    else:
+        # 4) Histórico parado: o que está copiado há mais de 2 checagens não chegou ao banco.
+        h = shell_call("AreaHash")
+        if h:
+            seen = st.get("area", {})
+            if seen.get("hash") != h:
+                st["area"] = {"hash": h, "desde": time.time()}
+                out.append(("Histórico", "ok" if in_history(h) else "ok (conferindo o último item copiado)", None))
+            elif time.time() - seen.get("desde", time.time()) > 150 and not in_history(h):
+                why = "o histórico parou de gravar o que você copia"
+                ok = apply(st, "reiniciar_daemon", why)
+                out.append(("Histórico", why, ok))
+                st["area"]["desde"] = time.time()
+                if ok:
+                    notify("o histórico tinha parado", "Já voltou a guardar o que você copia.")
+            else:
+                out.append(("Histórico", "ok", None))
+        else:
+            out.append(("Histórico", "ok (nada de texto copiado agora)", None))
+
+    # 5) Arquivos de dados estragados (e cópia das versões boas).
+    bad = []
+    for p in DATA_FILES:
+        if not os.path.exists(p):
+            continue
+        try:
+            json.load(open(p, encoding="utf-8"))
+            snap = os.path.join(SNAP, os.path.basename(p))
+            if not os.path.exists(snap) or os.path.getmtime(p) > os.path.getmtime(snap) + 600:
+                os.makedirs(SNAP, exist_ok=True)
+                shutil.copy2(p, snap)
+        except ValueError:
+            bad.append(os.path.basename(p))
+        except OSError:
+            pass
+    if bad:
+        why = "arquivo de dados estragado: " + ", ".join(bad)
+        ok = apply(st, "consertar_dados", why)
+        out.append(("Dados", why, ok))
+        if ok:
+            notify("dados consertados", f"{', '.join(bad)} estava estragado (guardei uma cópia do estragado).")
+    else:
+        out.append(("Dados", "ok", None))
+
+    # 6) Erros do driver NVIDIA desde a última checagem (o que derrubou a sessão hoje).
+    since = st.get("nvrm_desde") or time.time() - 180
+    _, kern, _ = run(["journalctl", "-k", "--since", f"@{int(float(since))}", "--no-pager", "-q", "-g", "NVRM"],
+                     timeout=10)
+    st["nvrm_desde"] = time.time()
+    nvrm = [ln for ln in kern.splitlines() if "NVRM" in ln]
+    if nvrm and run(["pgrep", "-f", "llama-server.*--device Vulkan"])[0] == 0:
+        why = f"o driver da NVIDIA deu {len(nvrm)} erro(s) com a IA na placa"
+        ok = apply(st, "reiniciar_ia", why)
+        out.append(("Placa de vídeo", why, ok))
+        if ok:
+            notify("IA tirada da placa de vídeo", "O driver da NVIDIA começou a dar erro; a IA vai para o processador.")
+    else:
+        out.append(("Placa de vídeo", f"ok{f' ({len(nvrm)} aviso(s) do driver sem a IA na placa)' if nvrm else ''}", None))
+
+    # 7) IA travada: servidor de pé mas sem responder.
+    if os.path.exists(os.path.join(RUN, "server.pid")) and run(["pgrep", "-f", "clippit-correct --serve"])[0] == 0:
+        _, http, _ = run(["curl", "-s", "-m", "3", "-o", "/dev/null", "-w", "%{http_code}", "http://127.0.0.1:18088/health"])
+        code = 0 if http == "200" else 1
+        busy = os.path.exists(os.path.join(RUN, "agente-status")) and \
+            time.time() - os.path.getmtime(os.path.join(RUN, "agente-status")) < 60
+        st["ia_muda"] = 0 if code == 0 or busy else st.get("ia_muda", 0) + 1
+        if st["ia_muda"] >= 2:
+            ok = apply(st, "reiniciar_ia", "a IA parou de responder")
+            out.append(("IA", "a IA parou de responder", ok))
+            st["ia_muda"] = 0
+        else:
+            out.append(("IA", "ok", None))
+    else:
+        out.append(("IA", "desligada (sobe sozinha quando você usa)", None))
+
+    # 9) Marcas velhas.
+    fix_limpar_marcas()
+
+    # 10) Disco quase cheio: só avisa (uma vez por dia).
+    du = shutil.disk_usage(HOME)
+    pct = round((du.total - du.free) / du.total * 100)  # igual ao df (conta o reservado do sistema)
+    if pct >= 95 and time.time() - st.get("disco_aviso", 0) > 86400:
+        st["disco_aviso"] = time.time()
+        notify("disco quase cheio", f"O disco está com {pct}% de uso. Pergunte à IA: \"o que está enchendo meu disco?\"")
+    out.append(("Disco", f"{pct}% usado", None))
+    return out
+
+
+def in_history(h):
+    try:
+        db = sqlite3.connect(f"file:{os.path.join(DATA, 'history.db')}?mode=ro", uri=True, timeout=3)
+        rows = db.execute("SELECT content_text FROM clipboard_history WHERE content_type='text' "
+                          "ORDER BY id DESC LIMIT 60").fetchall()
+        db.close()
+    except sqlite3.Error:
+        return True  # sem conseguir ler, não acusa
+    if any(hashlib.sha256((t or "").encode()).hexdigest() == h for (t,) in rows):
+        return True
+    # Coisas que o histórico ignora de propósito (fixados, texto enorme) não contam como falha.
+    try:
+        pins = json.load(open(os.path.join(DATA, "fixados.json"), encoding="utf-8"))
+        return any(hashlib.sha256((p.get("texto") or "").encode()).hexdigest() == h for p in pins)
+    except (OSError, ValueError):
+        return False
+
+
+# ---------------------------------------------------------------- erros inesperados
+
+KNOWN_NOISE = re.compile(r"autoteste|fotos prontas|core carregado|habilitada|desabilitada|Returned \d+ metadata|"
+                         r"OCR (extracted|text saved)|Saved (text|image)|New image detected|already optimal|"
+                         r"Starting OCR|Clipboard text changed", re.I)
+
+
+def signature(line):
+    s = re.sub(r"^\w{3} \d+ [\d:]+ \S+ \S+: ", "", line)
+    s = re.sub(r"\d{4}-\d\d-\d\dT[\d:.]+Z\s*", "", s)
+    s = re.sub(r"0x[0-9a-f]+|\b[0-9a-f]{12,}\b|\d+", "#", s)
+    s = re.sub(r"/run/user/#/clippit-corretor/core-#\.js", "core.js", s)
+    return s.strip()[:220]
+
+
+# Erros que já sabemos corrigir (não precisam da IA).
+KNOWN_ERRORS = [
+    (re.compile(r"não consegui reservar|could not grab|failed to grab accelerator", re.I), "restaurar_atalhos"),
+    (re.compile(r"HTTP Error 500|JSONDecodeError|Extra data|Expecting value", re.I), "consertar_dados"),
+    (re.compile(r"NV_ERR|NVRM|vk::DeviceLostError|ErrorDeviceLost", re.I), "reiniciar_ia"),
+    (re.compile(r"Connection refused.*1808[89]|corretor falhou: saiu com erro", re.I), "reiniciar_ia"),
+]
+
+
+def handle_known(st, fresh):
+    """Aplica a correção dos erros conhecidos; devolve os que sobraram (desconhecidos)."""
+    rest = {}
+    for sig, e in fresh.items():
+        fix = next((f for rx, f in KNOWN_ERRORS if rx.search(e["exemplo"])), None)
+        if not fix:
+            rest[sig] = e
+            continue
+        if apply(st, fix, f"erro conhecido nos logs: {sig[:120]}"):
+            if fix == "restaurar_atalhos":
+                apply(st, "religar_extensao", "a extensão precisa pegar o atalho de novo")
+            notify("corrigi um problema", SAFE[fix][0].upper() + SAFE[fix][1:] + ".")
+    return rest
+
+
+def new_errors(st):
+    """Erros do Clippit nos logs desde a última vez, agrupados por tipo."""
+    since = st.get("log_desde") or (time.time() - 600)
+    _, out, _ = run(["journalctl", "--user", "--since", f"@{int(since)}", "--no-pager", "-q", "-o", "short"], timeout=20)
+    st["log_desde"] = time.time()
+    errs = {}
+    lines = out.splitlines()
+    for i, ln in enumerate(lines):
+        clip = "clippit" in ln.lower()
+        bad = re.search(r"\b(ERROR|WARN|erro|falhou|failed|Traceback|exception|disposed|TypeError|ReferenceError|"
+                        r"undefined|não consegui|panic)\b", ln, re.I)
+        js = "JS ERROR" in ln or ("gnome-shell" in ln and "clippit-corretor/core" in "\n".join(lines[i:i + 3]))
+        if not ((clip and bad) or js) or KNOWN_NOISE.search(ln):
+            continue
+        sig = signature(ln)
+        ctx = "\n".join(lines[i:i + 4])[:900]
+        e = errs.setdefault(sig, {"vezes": 0, "exemplo": ctx})
+        e["vezes"] += 1
+    seen = st.setdefault("vistos", {})
+    fresh = {k: v for k, v in errs.items() if k not in seen}
+    for k in errs:
+        seen[k] = time.time()
+    # Esquece assinaturas de mais de 7 dias (se voltarem, analisa de novo).
+    st["vistos"] = {k: t for k, t in seen.items() if time.time() - t < 7 * 86400}
+    return fresh
+
+
+def _diagnose(payload):
+    try:
+        p = subprocess.run([os.path.join(BIN, "clippit-correct"), "--diagnosticar"], input=json.dumps(payload),
+                           capture_output=True, text=True, timeout=240)
+        d = json.loads(p.stdout or "{}")
+    except (OSError, subprocess.TimeoutExpired, ValueError) as e:
+        log(f"análise da IA falhou: {e}")
+        return 1, [], str(e)
+    return 0, d, ""
+
+
+def handle_analysis(st, d):
+    if not d or not d.get("resumo"):
+        return
+    fix = d.get("correcao_segura")
+    log(f"IA: {d.get('resumo')} | causa: {d.get('causa')} | segura: {fix} | comando: {d.get('comando')}")
+    if fix in SAFE:
+        ok = apply(st, fix, d["resumo"])
+        notify("corrigi um problema" if ok else "achei um problema",
+               f"{d['resumo']}. {'Apliquei: ' + SAFE[fix] if ok else 'Não consegui corrigir sozinho.'}")
+        if ok:
+            return
+    if d.get("comando") or fix not in SAFE:
+        os.makedirs(DOC, exist_ok=True)
+        text = (f"**{d['resumo']}**\n\nCausa provável: {d.get('causa') or 'não sei ao certo'}.\n\n"
+                + (f"Proposta: {d.get('explicacao') or 'rodar o comando abaixo'}. Confere e aperte **Rodar**."
+                   if d.get("comando") else "Não achei uma correção segura; vale olhar com calma."))
+        json.dump({"texto": text, "comando": d.get("comando") or None, "quando": time.time()},
+                  open(SUGGESTION, "w", encoding="utf-8"), ensure_ascii=False)
+        notify("achei um problema", f"{d['resumo']}. Abra a IA (Alt+I) para ver a correção.")
+
+
+# ---------------------------------------------------------------- relatório
+
+def report_text(items):
+    return "\n".join(f"- {part}: {sit}" + ("" if fixed is None else " → corrigido" if fixed else " → NÃO corrigido")
+                     for part, sit, fixed in items)
+
+
+def main():
+    os.makedirs(DOC, exist_ok=True)
+    st = load_state()
+    arg = sys.argv[1] if len(sys.argv) > 1 else ""
+    if arg in ("-h", "--help"):
+        print(__doc__)
+        return
+    if arg == "--relatorio":
+        items = check_all(st)
+        fresh = new_errors(st) if "--com-erros" in sys.argv else {}
+        save_state(st)
+        print("Situação do Clippit:\n" + report_text(items))
+        try:
+            tail = open(LOG, encoding="utf-8").read().splitlines()[-8:]
+        except OSError:
+            tail = []
+        if tail:
+            print("\nÚltimas correções do doutor:\n" + "\n".join(tail))
+        if fresh:
+            print("\nErros recentes nos logs:\n" + "\n".join(f"- ({v['vezes']}x) {v['exemplo'][:400]}"
+                                                         for v in list(fresh.values())[:5]))
+        return
+    before = sum(len(v) for v in st.get("feitas", {}).values())
+    items = check_all(st)
+    fixed_now = sum(len(v) for v in st.get("feitas", {}).values()) > before
+    fresh = new_errors(st)
+    save_state(st)
+    if fresh and (fixed_now or time.time() - st.get("ultima_correcao", 0) < 60):
+        # Erros que surgem junto com uma correção do doutor são efeito dela: não analisa.
+        log("erros durante uma correção (ignorados): " + " | ".join(list(fresh)[:3]))
+        fresh = {}
+    if fixed_now:
+        st["ultima_correcao"] = time.time()
+    fresh = handle_known(st, fresh) if fresh else {}
+    if fresh:
+        log("erros novos: " + " | ".join(list(fresh)[:5]))
+        if arg == "--analisar" or not game_running():
+            _, d, _ = _analyze_now(st, fresh)
+            handle_analysis(st, d)
+    save_state(st)
+    if arg == "--analisar":
+        print(report_text(items))
+
+
+def _analyze_now(st, fresh):
+    if time.time() - st.get("analise", 0) < 1800:
+        return 1, {}, "cedo"
+    st["analise"] = time.time()
+    payload = {"erros": [{"vezes": v["vezes"], "trecho": v["exemplo"]} for v in list(fresh.values())[:4]],
+               "correcoes_seguras": SAFE}
+    return _diagnose(payload)
+
+
+def game_running():
+    return run(["pgrep", "-f", r"steamapps/common|SteamLaunch|proton|gamescope"])[0] == 0
+
+
+if __name__ == "__main__":
+    main()

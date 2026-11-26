@@ -3,12 +3,8 @@ members = [
     "crates/clippit-core",
     "crates/clippit-daemon",
     "crates/clippit-ipc",
-    "crates/clippit-ui",
-    "crates/clippit-qt-bridge",
     "crates/clippit-dashboard",
     "crates/clippit-popup",
-    "crates/clippit-ibus",
-    "crates/clippit-tooltip",
 ]
 resolver = "2"
 
@@ -46,17 +42,8 @@ arboard = { version = "3.6", features = ["wayland-data-control"] }
 # Global hotkey
 global-hotkey = "0.7"
 
-# Keyboard events (para autocompletar)
-rdev = "0.5"
-
 # IPC
 interprocess = "2.0"
-
-# Qt bindings
-cxx = "1.0"
-cxx-qt = "0.6"
-cxx-qt-lib = "0.6"
-cxx-qt-build = "0.6"
 
 # Hashing
 sha2 = "0.10"

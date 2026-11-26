@@ -10,7 +10,7 @@ use std::rc::Rc;
 /// Converte formato Clippit (ctrl+kp_1) para formato GNOME (<Primary>KP_1)
 fn convert_to_gnome_format(modifier: &str, key: &str) -> String {
     let mut parts = Vec::new();
-    
+
     // Converter modificadores
     for mod_part in modifier.split('+') {
         let mod_trimmed = mod_part.trim().to_lowercase();
@@ -23,12 +23,12 @@ fn convert_to_gnome_format(modifier: &str, key: &str) -> String {
             _ => {}
         }
     }
-    
+
     // Converter tecla
     let key_upper = key.to_uppercase();
-    let gnome_key = if key.starts_with("kp_") {
+    let gnome_key = if let Some(num) = key.strip_prefix("kp_") {
         // Numpad keys: kp_1 -> KP_1
-        format!("KP_{}", &key[3..])
+        format!("KP_{num}")
     } else if key.len() == 1 {
         // Single letter: v -> v
         key_upper.clone()
@@ -36,7 +36,7 @@ fn convert_to_gnome_format(modifier: &str, key: &str) -> String {
         // Function keys, etc: f1 -> F1
         key_upper.clone()
     };
-    
+
     // Montar formato GNOME: <Primary><Super>KP_1
     if parts.is_empty() {
         gnome_key
@@ -47,69 +47,63 @@ fn convert_to_gnome_format(modifier: &str, key: &str) -> String {
 
 pub fn create_page() -> gtk::Widget {
     let config = Config::load().unwrap_or_default();
-
-    // Create scrolled window
-    let scrolled = gtk::ScrolledWindow::new();
-    scrolled.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
-    scrolled.set_vexpand(true);
-
-    // Create preference page
     let page = adw::PreferencesPage::new();
 
-    // Create preference group
+    // Único atalho que dá para trocar aqui (vale no sistema todo).
     let group = adw::PreferencesGroup::new();
-    group.set_title(&t!("hotkeys.title"));
-    group.set_description(Some(&t!("hotkeys.description")));
-
-    // Hotkey row with edit button
+    group.set_title("Histórico");
     let hotkey_row = adw::ActionRow::new();
-    hotkey_row.set_title(&t!("hotkeys.show_history"));
-    hotkey_row.set_subtitle(&t!("hotkeys.show_history_desc"));
-
-    let icon = gtk::Image::from_icon_name("input-keyboard-symbolic");
-    hotkey_row.add_prefix(&icon);
-
-    // Current hotkey label
+    hotkey_row.set_title("Abrir o histórico do que você copiou");
+    hotkey_row.set_subtitle("Funciona em qualquer lugar do sistema");
     let hotkey_label = gtk::Label::new(Some(&format!(
-        "{} + {}",
-        config.hotkeys.show_history_modifier, config.hotkeys.show_history_key
+        "{}+{}",
+        pretty(&config.hotkeys.show_history_modifier),
+        config.hotkeys.show_history_key.to_uppercase()
     )));
-    hotkey_label.add_css_class("dim-label");
-    hotkey_label.add_css_class("caption");
-    hotkey_label.add_css_class("monospace");
-
-    // Edit button
-    let edit_button = gtk::Button::new();
-    edit_button.set_icon_name("document-edit-symbolic");
+    hotkey_label.add_css_class("clip-key");
+    hotkey_label.set_valign(gtk::Align::Center);
+    let edit_button = gtk::Button::with_label("Trocar");
+    edit_button.add_css_class("clip-btn");
     edit_button.set_valign(gtk::Align::Center);
-    edit_button.add_css_class("flat");
-    edit_button.set_tooltip_text(Some("Editar atalho"));
-
-    let button_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    let button_box = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     button_box.append(&hotkey_label);
     button_box.append(&edit_button);
-
     hotkey_row.add_suffix(&button_box);
-
     group.add(&hotkey_row);
     page.add(&group);
 
-    // Info group
-    let info_group = adw::PreferencesGroup::new();
-    info_group.set_title(&t!("hotkeys.how_to_use"));
-    info_group.set_margin_top(12);
+    // Atalhos da extensão: cada um dá para trocar (vale na hora, sem reiniciar).
+    let ext = adw::PreferencesGroup::new();
+    ext.set_title("Lançador, IA e corretor");
+    for (id, _def, title, sub) in super::atalhos::SHORTCUTS {
+        ext.add(&super::atalhos::editable_row(id, title, sub));
+    }
+    page.add(&ext);
 
-    let info_row = adw::ActionRow::new();
-    info_row.set_title(&t!("hotkeys.customize"));
-    info_row.set_subtitle(&t!("hotkeys.customize_desc"));
+    let fixed = adw::PreferencesGroup::new();
+    fixed.set_title("Dentro do lançador");
+    for (keys, title, sub) in [
+        (
+            &["Esc"][..],
+            "Parar a IA / fechar",
+            "O primeiro Esc para a resposta; o segundo fecha",
+        ),
+        (&["Alt+V"][..], "Falar (ditado)", "No chat da IA"),
+        (
+            &["Ctrl+N", "Ctrl+H"][..],
+            "Nova conversa / conversas anteriores",
+            "No chat da IA",
+        ),
+        (
+            &["Tab", "Ctrl+P"][..],
+            "Transformar / fixar",
+            "No histórico",
+        ),
+    ] {
+        fixed.add(&super::corretor::key_row(keys, title, sub));
+    }
+    page.add(&fixed);
 
-    let info_icon = gtk::Image::from_icon_name("dialog-information-symbolic");
-    info_row.add_prefix(&info_icon);
-
-    info_group.add(&info_row);
-    page.add(&info_group);
-
-    // Setup edit dialog
     let hotkey_label_clone = hotkey_label.clone();
     edit_button.connect_clicked(move |btn| {
         if let Some(window) = btn.root().and_downcast::<gtk::Window>() {
@@ -117,16 +111,17 @@ pub fn create_page() -> gtk::Widget {
         }
     });
 
-    let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    container.append(&page);
-    container.set_margin_start(12);
-    container.set_margin_end(12);
-    container.set_margin_top(12);
-    container.set_margin_bottom(12);
+    page.upcast()
+}
 
-    scrolled.set_child(Some(&container));
-
-    scrolled.upcast()
+fn pretty(modifier: &str) -> String {
+    match modifier.to_lowercase().as_str() {
+        "alt" => "Alt".into(),
+        "ctrl" | "control" => "Ctrl".into(),
+        "super" | "meta" => "Super".into(),
+        "shift" => "Shift".into(),
+        other => other.to_string(),
+    }
 }
 
 fn show_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
@@ -145,8 +140,8 @@ fn show_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
     // Aplicar CSS para cantos arredondados e animação CSS nativa (API moderna GTK4 4.10+)
     let css_provider = gtk::CssProvider::new();
     css_provider.load_from_data(
-        "window { 
-            border-radius: 16px; 
+        "window {
+            border-radius: 16px;
             background-color: @window_bg_color;
             box-shadow: 0 8px 24px rgba(0,0,0,0.3);
             animation: fadeIn 150ms ease-out;
@@ -229,19 +224,19 @@ fn show_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
         }
         if modifier.contains(gdk::ModifierType::ALT_MASK) {
             if !modifier_str.is_empty() {
-                modifier_str.push_str("+");
+                modifier_str.push('+');
             }
             modifier_str.push_str("alt");
         }
         if modifier.contains(gdk::ModifierType::SHIFT_MASK) {
             if !modifier_str.is_empty() {
-                modifier_str.push_str("+");
+                modifier_str.push('+');
             }
             modifier_str.push_str("shift");
         }
         if modifier.contains(gdk::ModifierType::SUPER_MASK) {
             if !modifier_str.is_empty() {
-                modifier_str.push_str("+");
+                modifier_str.push('+');
             }
             modifier_str.push_str("super");
         }
@@ -272,7 +267,7 @@ fn show_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
             // Update display
             let display_text = if !modifier_str.is_empty() {
                 format!(
-                    "{} + {}",
+                    "{}+{}",
                     modifier_str.to_uppercase(),
                     clean_key.to_uppercase()
                 )
@@ -306,8 +301,8 @@ fn show_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
                     if config.save().is_ok() {
                         // Update label
                         label.set_text(&format!(
-                            "{} + {}",
-                            modifier_final.to_uppercase(),
+                            "{}+{}",
+                            pretty(&modifier_final),
                             key_final.to_uppercase()
                         ));
 
@@ -322,14 +317,14 @@ fn show_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
                         eprintln!("🔄 Sincronizando com GNOME gsettings...");
                         let gnome_binding = convert_to_gnome_format(&modifier_final, &key_final);
                         let sync_result = std::process::Command::new("gsettings")
-                            .args(&[
+                            .args([
                                 "set",
                                 "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/",
                                 "binding",
                                 &gnome_binding,
                             ])
                             .output();
-                        
+
                         if sync_result.is_ok() {
                             eprintln!("✅ Atalho sincronizado com GNOME: {}", gnome_binding);
                         } else {
@@ -353,8 +348,8 @@ fn show_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
                         success_box.append(&success_text);
 
                         let hotkey_text = gtk::Label::new(Some(&format!(
-                            "{} + {}",
-                            modifier_final.to_uppercase(),
+                            "{}+{}",
+                            pretty(&modifier_final),
                             key_final.to_uppercase()
                         )));
                         hotkey_text.add_css_class("title-3");
@@ -384,7 +379,7 @@ fn show_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
                             std::time::Duration::from_millis(100),
                             move || {
                                 let restart_result = std::process::Command::new("systemctl")
-                                    .args(&["--user", "restart", "clippit"])
+                                    .args(["--user", "restart", "clippit"])
                                     .output();
 
                                 if restart_result.is_ok() {

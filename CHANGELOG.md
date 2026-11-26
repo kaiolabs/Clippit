@@ -7,6 +7,25 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- Settings: **Funcionalidades** page explaining every feature; configurable shortcuts (Atalhos → Trocar);
+  model choice, model downloads and AI engine install (Corretor → Modelos).
+- Local AI chat with tools: windows, system controls, clipboard search, paste into the field, screenshots,
+  file organizing and conversion, git, background tasks, power profiles, notes, Stop button (Esc).
+- Doctor (`clippit-doutor`): checks every part every 2 minutes and fixes what breaks.
+- `scripts/install.sh` / `uninstall.sh` for a full per-user install; CI for Rust, scripts and the extension.
+
+### Changed
+- GPUs are detected by name; threads, CPU mask, llama.cpp folder and the vision model are configurable.
+
+### Fixed
+- Clipboard history stopped recording after the GNOME session crashed (daemon now reconnects).
+
+### Removed
+- Old autocomplete (IBus, tooltip, Qt bridge), outdated docs and duplicate build scripts.
+
 ## [1.11.10] - 2026-01-29
 
 ### 🐛 Bug Fixes CRÍTICOS
@@ -764,87 +783,3 @@ Primeira versão estável do Clippit - Gerenciador de Área de Transferência pa
 - Corrigido: Modal fechando ao passar mouse sobre preview
 - Corrigido: Search field sem padding inferior
 - Corrigido: Compatibilidade com GTK4 4.6 e libadwaita 1.2
-
----
-
-## [Unreleased] - Em Desenvolvimento
-
-### 🚧 Planejado para Próximas Versões
-
-#### **Features**
-- [ ] **Fixar itens favoritos**: Pin itens importantes no topo
-- [ ] **Categorias/tags personalizadas**: Organizar histórico
-- [ ] **Compressão inteligente de imagens**: Reduzir espaço usado
-- [ ] **Shortcuts customizáveis**: Configurar todos os atalhos
-- [ ] **Notificações de sistema**: Avisos de captura
-- [ ] **Importar/exportar histórico**: Backup e restore
-- [ ] **Sincronização entre dispositivos**: Cloud sync (experimental)
-
-#### **Melhorias**
-- [ ] **Suporte a GIF animado**: Preview e captura
-- [ ] **Suporte a SVG**: Imagens vetoriais
-- [ ] **Autocomplete com IA**: Sugestões contextuais (GPT/LLM)
-- [ ] **Temas customizados**: Cores e estilos personalizados
-- [ ] **Estatísticas avançadas**: Gráficos de uso
-
-#### **Bugs a Corrigir**
-- [ ] Nenhum bug crítico conhecido
-
----
-
-## [2.0.0] - Visão de Longo Prazo
-
-### 🔮 Grandes Features Futuras
-
-- [ ] **OCR** (Reconhecimento de texto em imagens)
-- [ ] **Criptografia end-to-end** para dados sensíveis
-- [ ] **Sincronização cloud** (Google Drive, Dropbox)
-- [ ] **Plugins/extensões** de terceiros
-- [ ] **Aplicativo mobile** companion (Android/iOS)
-- [ ] **Suporte a áudio e vídeo**: Clipboard multimídia
-
----
-
-## Tipos de Mudanças
-
-- **✨ Adicionado**: Novas features
-- **🔧 Modificado**: Mudanças em features existentes
-- **❌ Depreciado**: Features que serão removidas
-- **🗑️ Removido**: Features removidas
-- **🐛 Corrigido**: Correção de bugs
-- **🔒 Segurança**: Correções de vulnerabilidades
-- **⚡ Performance**: Melhorias de performance
-
----
-
-## Como Contribuir com o Changelog
-
-Ao contribuir com o projeto, por favor:
-
-1. Adicione suas mudanças na seção `[Unreleased]`
-2. Use os tipos de mudanças apropriados
-3. Seja claro e conciso na descrição
-4. Adicione referências a issues/PRs quando relevante
-5. **Sempre incremente a versão** ao fazer correções ou features
-
-Exemplo:
-```markdown
-### ✨ Adicionado
-- Suporte a formato WebP para imagens (#42)
-```
-
----
-
-## Links
-
-- [Repositório GitHub](https://github.com/yourusername/clippit)
-- [Releases](https://github.com/yourusername/clippit/releases)
-- [Issues](https://github.com/yourusername/clippit/issues)
-- [Documentação](./docs/)
-
----
-
-**Legenda de Versões:**
-- **1.9.x**: Performance, reliability, autocomplete
-- **1.0.0**: Lançamento inicial
-- **2.0.0**: Futuro (features experimentais)

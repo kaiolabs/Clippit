@@ -9,6 +9,6 @@ Terminal=false
 Categories=Utility;System;GTK;
 Keywords=clipboard;manager;history;copy;paste;wayland;
 StartupNotify=true
-StartupWMClass=Clippit
+StartupWMClass=com.clippit.Dashboard
 X-GNOME-UsesNotifications=true
 X-GNOME-Autostart-enabled=false

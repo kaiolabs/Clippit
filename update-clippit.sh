@@ -243,19 +243,26 @@ else
 fi
 
 # Instalar arquivo .desktop (importante para Wayland)
+# O GNOME é iniciado com um PATH sem ~/.local/bin: com "Exec=clippit-dashboard"
+# ele não acha o programa e esconde o app da busca. Por isso o caminho completo.
 echo "🖥️  Instalando arquivo .desktop..."
+DESKTOP_TMP=$(mktemp)
+sed -e "s|^Exec=clippit-dashboard|Exec=$HOME/.local/bin/clippit-dashboard|" \
+    -e "/^Exec=/a TryExec=$HOME/.local/bin/clippit-dashboard" \
+    assets/clippit.desktop > "$DESKTOP_TMP"
 if sudo -n true 2>/dev/null; then
     sudo mkdir -p /usr/share/applications
-    sudo cp assets/clippit.desktop /usr/share/applications/clippit.desktop
+    sudo cp "$DESKTOP_TMP" /usr/share/applications/clippit.desktop
     sudo chmod 644 /usr/share/applications/clippit.desktop
     sudo update-desktop-database /usr/share/applications/ 2>/dev/null || true
     echo "✅ Arquivo .desktop instalado"
 else
     mkdir -p ~/.local/share/applications
-    cp -f assets/clippit.desktop ~/.local/share/applications/clippit.desktop
+    cp -f "$DESKTOP_TMP" ~/.local/share/applications/clippit.desktop
     update-desktop-database ~/.local/share/applications/ 2>/dev/null || true
     echo "✅ Arquivo .desktop instalado em ~/.local/share/applications"
 fi
+rm -f "$DESKTOP_TMP"
 
 # Verificar se foram copiados
 echo "✅ Verificando instalação..."

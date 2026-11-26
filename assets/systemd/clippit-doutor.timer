@@ -1,0 +1,10 @@
+[Unit]
+Description=Roda o doutor do Clippit a cada 2 minutos
+
+[Timer]
+OnStartupSec=90s
+OnUnitActiveSec=2min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

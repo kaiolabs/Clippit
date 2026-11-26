@@ -1,276 +1,149 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Clippit installer — builds and installs everything for the current user.
+#
+#   ./scripts/install.sh            build + install (asks before downloading the AI)
+#   ./scripts/install.sh --deps     also installs the system packages with apt (asks for sudo)
+#   ./scripts/install.sh --no-ai    skip the AI engine and models (history and launcher still work)
+#   ./scripts/install.sh --ai       download the AI engine and default models without asking
+#
+# Nothing is installed system-wide: binaries go to ~/.local/bin, data to
+# ~/.local/share/clippit, settings to ~/.config/clippit.
 
-set -e
+set -euo pipefail
 
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║          Clippit Clipboard Manager - Installer               ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
-echo ""
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BIN="$HOME/.local/bin"
+EXT_UUID="clippit-corretor@clippit"
+EXT_DIR="$HOME/.local/share/gnome-shell/extensions"
+UNITS="$HOME/.config/systemd/user"
+APPS="$HOME/.local/share/applications"
 
-# Check if running on Linux
-if [[ "$OSTYPE" != "linux-gnu"* ]]; then
-    echo "❌ Error: This script is only for Linux systems"
-    exit 1
+WANT_DEPS=0
+AI="ask"
+for a in "$@"; do
+    case "$a" in
+        --deps) WANT_DEPS=1 ;;
+        --no-ai) AI="no" ;;
+        --ai) AI="yes" ;;
+        -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+        *) echo "Unknown option: $a"; exit 1 ;;
+    esac
+done
+
+say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
+ok() { printf '    ✓ %s\n' "$*"; }
+warn() { printf '    ! %s\n' "$*"; }
+
+# ---------------------------------------------------------------- 1. dependencies
+say "Checking system packages"
+PKGS=(build-essential pkg-config libgtk-4-dev libadwaita-1-dev libtesseract-dev libleptonica-dev
+      tesseract-ocr tesseract-ocr-por tesseract-ocr-eng hunspell-pt-br hunspell-en-us python3 python3-gi
+      gir1.2-glib-2.0 wl-clipboard imagemagick poppler-utils ghostscript playerctl libnotify-bin curl sqlite3)
+MISSING=()
+if command -v dpkg >/dev/null; then
+    for p in "${PKGS[@]}"; do
+        dpkg -s "$p" >/dev/null 2>&1 || MISSING+=("$p")
+    done
 fi
-
-# Check if daemon is running and stop it
-if systemctl --user is-active clippit.service &>/dev/null; then
-    echo "🔄 Daemon already running, stopping for safe reinstallation..."
-    systemctl --user stop clippit.service
-    sleep 1
-    echo "✓ Daemon stopped"
-    echo ""
-    DAEMON_WAS_RUNNING=true
-elif pgrep -x "clippit-daemon" > /dev/null; then
-    echo "🔄 Daemon running manually, stopping for safe reinstallation..."
-    pkill clippit-daemon
-    sleep 1
-    echo "✓ Daemon stopped"
-    echo ""
-    DAEMON_WAS_RUNNING=true
-else
-    DAEMON_WAS_RUNNING=false
-fi
-
-# Check if Wayland
-if [ "$XDG_SESSION_TYPE" == "wayland" ]; then
-    echo "✅ Wayland session detected - Clippit will work properly!"
-elif [ "$XDG_SESSION_TYPE" == "x11" ]; then
-    echo "⚠️  X11 session detected!"
-    echo "   Clippit requires Wayland. X11 support has been removed."
-    echo "   Please switch to a Wayland session to use Clippit."
-fi
-
-# Check and install system dependencies
-echo ""
-echo "🔍 Verificando dependências do sistema..."
-DEPS_TO_INSTALL=()
-
-# 1. Tesseract OCR (necessário para feature OCR)
-if ! command -v tesseract &> /dev/null; then
-    echo "⚠️  Tesseract OCR não encontrado"
-    DEPS_TO_INSTALL+=(tesseract-ocr libtesseract-dev tesseract-ocr-por tesseract-ocr-eng)
-else
-    echo "✅ Tesseract OCR já instalado"
-    
-    # Verificar idiomas
-    if ! tesseract --list-langs 2>/dev/null | grep -q "por"; then
-        echo "⚠️  Dados de idioma português não encontrados"
-        DEPS_TO_INSTALL+=(tesseract-ocr-por)
-    fi
-    if ! tesseract --list-langs 2>/dev/null | grep -q "eng"; then
-        echo "⚠️  Dados de idioma inglês não encontrados"
-        DEPS_TO_INSTALL+=(tesseract-ocr-eng)
-    fi
-fi
-
-# 2. wmctrl (necessário para gerenciamento de foco do popup)
-if ! command -v wmctrl &> /dev/null; then
-    echo "⚠️  wmctrl não encontrado (necessário para gerenciar foco do popup)"
-    DEPS_TO_INSTALL+=(wmctrl)
-else
-    echo "✅ wmctrl já instalado"
-fi
-
-# Instalar todas as dependências faltantes de uma vez
-if [ ${#DEPS_TO_INSTALL[@]} -gt 0 ]; then
-    echo ""
-    echo "📦 Instalando dependências faltantes: ${DEPS_TO_INSTALL[*]}"
-    sudo apt-get update -qq
-    sudo apt-get install -y "${DEPS_TO_INSTALL[@]}"
-    echo "✅ Todas as dependências instaladas com sucesso!"
-else
-    echo "✅ Todas as dependências já instaladas!"
-fi
-echo ""
-
-# Build release
-echo "📦 Building Clippit in release mode..."
-cargo build --release
-
-if [ $? -ne 0 ]; then
-    echo "❌ Build failed!"
-    exit 1
-fi
-
-echo "✓ Build successful"
-
-# Create directories
-echo "📁 Creating directories..."
-mkdir -p ~/.local/bin
-mkdir -p ~/.local/share/clippit
-mkdir -p ~/.config/systemd/user
-mkdir -p ~/.config/clippit
-mkdir -p ~/.config/clippit
-
-# Copy binaries
-echo "📋 Installing binaries..."
-cp -f target/release/clippit-daemon ~/.local/bin/
-cp -f target/release/clippit-ui ~/.local/bin/
-cp -f target/release/clippit-dashboard ~/.local/bin/ 2>/dev/null || echo "  ⚠ clippit-dashboard not built (requires Qt6)"
-cp -f target/release/clippit-popup ~/.local/bin/ 2>/dev/null || echo "  ⚠ clippit-popup not built (requires Qt6)"
-
-chmod +x ~/.local/bin/clippit-daemon
-chmod +x ~/.local/bin/clippit-ui
-chmod +x ~/.local/bin/clippit-dashboard 2>/dev/null || true
-chmod +x ~/.local/bin/clippit-popup 2>/dev/null || true
-
-echo "✓ Binaries installed to ~/.local/bin/"
-
-# Check if ~/.local/bin is in PATH
-if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-    echo ""
-    echo "⚠️  Warning: ~/.local/bin is not in your PATH"
-    echo "   Add this line to your ~/.bashrc or ~/.zshrc:"
-    echo ""
-    echo '   export PATH="$HOME/.local/bin:$PATH"'
-    echo ""
-fi
-
-# Create systemd service
-echo "🔧 Creating systemd service..."
-cat > ~/.config/systemd/user/clippit.service << EOF
-[Unit]
-Description=Clippit Clipboard Manager
-After=graphical-session.target
-Wants=graphical-session.target
-
-[Service]
-Type=simple
-ExecStart=%h/.local/bin/clippit-daemon
-Restart=always
-RestartSec=3
-Environment=RUST_LOG=info
-
-[Install]
-WantedBy=default.target
-EOF
-
-echo "✓ Systemd service created"
-
-# Reload systemd
-systemctl --user daemon-reload
-
-# Create default config if doesn't exist
-if [ ! -f ~/.config/clippit/config.toml ]; then
-    if [ -f clippit.example.toml ]; then
-        echo "📝 Creating default configuration..."
-        cp clippit.example.toml ~/.config/clippit/config.toml
-        echo "✓ Configuration created at ~/.config/clippit/config.toml"
-    fi
-fi
-
-# Ask user if they want to enable autostart
-echo ""
-if [ "$DAEMON_WAS_RUNNING" = true ]; then
-    # If daemon was running, just restart it
-    echo "🔄 Restarting Clippit daemon..."
-    systemctl --user daemon-reload
-    systemctl --user start clippit.service
-    
-    if [ $? -eq 0 ]; then
-        echo "✓ Clippit daemon restarted successfully"
+if ((${#MISSING[@]})); then
+    if ((WANT_DEPS)); then
+        sudo apt-get update && sudo apt-get install -y "${MISSING[@]}"
     else
-        echo "❌ Failed to restart daemon"
+        warn "Missing: ${MISSING[*]}"
+        warn "Install with:  sudo apt install ${MISSING[*]}   (or rerun with --deps)"
         exit 1
     fi
+fi
+ok "system packages"
+if ! command -v cargo >/dev/null; then
+    warn "Rust is not installed. Get it from https://rustup.rs and run this again."
+    exit 1
+fi
+ok "rust $(rustc --version | cut -d' ' -f2)"
+
+# ---------------------------------------------------------------- 2. build
+say "Building (release)"
+cargo build --release --manifest-path "$ROOT/Cargo.toml" -p clippit-daemon -p clippit-popup -p clippit-dashboard
+ok "built"
+
+# ---------------------------------------------------------------- 3. binaries and scripts
+say "Installing to $BIN"
+mkdir -p "$BIN"
+systemctl --user stop clippit.service 2>/dev/null || true
+for b in clippit-daemon clippit-popup clippit-dashboard; do
+    install -m755 "$ROOT/target/release/$b" "$BIN/$b"
+done
+# Scripts are linked, so a `git pull` updates them.
+for s in clippit-correct clippit-busca clippit-historico clippit-doutor clippit-jogos-nvidia; do
+    chmod +x "$ROOT/scripts/$s"
+    ln -sfn "$ROOT/scripts/$s" "$BIN/$s"
+done
+ok "binaries and scripts"
+case ":$PATH:" in *":$BIN:"*) ;; *) warn "$BIN is not in your PATH (add it to ~/.profile)";; esac
+
+# ---------------------------------------------------------------- 4. GNOME extension
+say "Installing the GNOME Shell extension"
+mkdir -p "$EXT_DIR"
+ln -sfn "$ROOT/gnome-extension/$EXT_UUID" "$EXT_DIR/$EXT_UUID"
+gsettings set org.gnome.shell disable-user-extensions false 2>/dev/null || true
+if gnome-extensions enable "$EXT_UUID" 2>/dev/null; then
+    ok "extension enabled"
 else
-    # New installation - ask user
-    read -p "Enable Clippit to start automatically on login? (Y/n): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Nn]$ ]]; then
-        echo "⏭️  Skipping autostart setup"
-    else
-        echo "🚀 Enabling and starting Clippit daemon..."
-        systemctl --user enable clippit.service
-        systemctl --user start clippit.service
-        
-        if [ $? -eq 0 ]; then
-            echo "✓ Clippit daemon is now running"
-        else
-            echo "❌ Failed to start daemon"
-            exit 1
-        fi
+    warn "GNOME only sees new extensions after you log out and back in. Then run:"
+    warn "  gnome-extensions enable $EXT_UUID"
+fi
+
+# ---------------------------------------------------------------- 5. services
+say "Starting the services"
+mkdir -p "$UNITS"
+cp "$ROOT/assets/systemd/clippit.service" "$ROOT/assets/systemd/clippit-doutor.service" \
+   "$ROOT/assets/systemd/clippit-doutor.timer" "$UNITS/"
+systemctl --user daemon-reload
+systemctl --user enable --now clippit.service clippit-doutor.timer
+ok "clipboard history (clippit.service) and doctor (clippit-doutor.timer)"
+
+# ---------------------------------------------------------------- 6. shortcuts and menu entry
+say "Shortcuts and menu entry"
+KB=org.gnome.settings-daemon.plugins.media-keys
+KP=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/
+cur=$(gsettings get $KB custom-keybindings)
+if [[ "$cur" != *"$KP"* ]]; then
+    if [[ "$cur" == "@as []" || "$cur" == "[]" ]]; then new="['$KP']"; else new="${cur%]*}, '$KP']"; fi
+    gsettings set $KB custom-keybindings "$new"
+fi
+gsettings set "$KB.custom-keybinding:$KP" name "Clippit"
+gsettings set "$KB.custom-keybinding:$KP" command "$BIN/clippit-historico"
+gsettings set "$KB.custom-keybinding:$KP" binding "<Alt>c"
+ok "Alt+C opens the history"
+# Alt+Space opens the launcher; GNOME uses it for the window menu by default.
+if gsettings get org.gnome.desktop.wm.keybindings activate-window-menu | grep -q "<Alt>space"; then
+    gsettings set org.gnome.desktop.wm.keybindings activate-window-menu "[]"
+    ok "freed Alt+Space (it was GNOME's window menu)"
+fi
+mkdir -p "$APPS" "$HOME/.local/share/icons/hicolor/256x256/apps"
+install -m644 "$ROOT/assets/logo_clippit.png" "$HOME/.local/share/icons/hicolor/256x256/apps/clippit.png"
+install -m644 "$ROOT/assets/clippit.desktop" "$APPS/clippit.desktop"
+update-desktop-database "$APPS" 2>/dev/null || true
+ok "\"Clippit\" in the app menu opens the settings"
+
+# ---------------------------------------------------------------- 7. AI engine and models
+if [[ "$AI" == "ask" ]]; then
+    printf '\nDownload the local AI now? llama.cpp + 2 models, about 3.5 GB. [Y/n] '
+    read -r r
+    [[ "$r" =~ ^[Nn] ]] && AI="no" || AI="yes"
+fi
+if [[ "$AI" == "yes" ]]; then
+    say "Downloading the local AI (you can change models later in Settings → Corretor)"
+    "$BIN/clippit-correct" --modelos | grep -q '"llama": null' && "$BIN/clippit-correct" --instalar-llama | tail -1
+    "$BIN/clippit-correct" --baixar qwen3.5-0.8b | tail -1
+    if command -v nvidia-smi >/dev/null || [ -e /dev/dri/renderD129 ]; then
+        "$BIN/clippit-correct" --baixar qwen3.5-4b | tail -1
     fi
-fi
-
-# Install icon and desktop entry
-echo ""
-echo "🎨 Installing icon and desktop entry..."
-mkdir -p ~/.local/share/applications
-mkdir -p ~/.local/share/icons/hicolor/256x256/apps
-mkdir -p ~/.local/share/icons/hicolor
-
-# Install icon
-if [ -f "assets/logo_clippit.png" ]; then
-    cp -f assets/logo_clippit.png ~/.local/share/icons/hicolor/256x256/apps/clippit.png
-    echo "✓ Icon installed"
+    ok "AI ready"
 else
-    echo "⚠️  Warning: assets/logo_clippit.png not found"
+    warn "AI skipped. Later: Settings → Corretor → Modelos, or ./scripts/install.sh --ai"
 fi
 
-# Create icon theme index if it doesn't exist
-if [ ! -f ~/.local/share/icons/hicolor/index.theme ]; then
-    cat > ~/.local/share/icons/hicolor/index.theme << 'EOF'
-[Icon Theme]
-Name=Hicolor
-Comment=Fallback icon theme
-Hidden=true
-Directories=256x256/apps
-
-[256x256/apps]
-Size=256
-Type=Threshold
-EOF
-    echo "✓ Icon theme index created"
-fi
-
-# Install desktop entry
-if [ -f "assets/clippit.desktop" ]; then
-    cp -f assets/clippit.desktop ~/.local/share/applications/clippit.desktop
-    echo "✓ Desktop entry installed"
-else
-    echo "⚠️  Warning: assets/clippit.desktop not found"
-fi
-
-# Update desktop database and icon cache
-if command -v update-desktop-database &> /dev/null; then
-    update-desktop-database ~/.local/share/applications/ &> /dev/null || true
-    echo "✓ Desktop database updated"
-fi
-
-if command -v gtk-update-icon-cache &> /dev/null; then
-    gtk-update-icon-cache -f ~/.local/share/icons/hicolor/ &> /dev/null || true
-    echo "✓ Icon cache updated"
-fi
-
-echo ""
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║                  Installation Complete! ✓                     ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
-echo ""
-if [ "$DAEMON_WAS_RUNNING" = true ]; then
-    echo "♻️  Note: Daemon was automatically restarted with new version"
-    echo ""
-fi
-echo "📋 Usage:"
-echo "   • Daemon: systemctl --user status clippit"
-echo "   • Hotkey: Press Super+V to show history"
-echo "   • Manual: Run 'clippit-ui' from terminal"
-echo ""
-echo "⚙️  Configuration:"
-echo "   Edit: ~/.config/clippit/config.toml"
-echo "   Docs: See CONFIGURATION.md"
-echo ""
-echo "📖 View logs:"
-echo "   journalctl --user -u clippit -f"
-echo ""
-echo "🔧 Manage service:"
-echo "   systemctl --user start|stop|restart clippit"
-echo ""
-echo "🔄 Reinstall/Update:"
-echo "   ./scripts/reinstall.sh"
-echo ""
-echo "🗑️  Uninstall:"
-echo "   ./scripts/uninstall.sh"
-echo ""
+say "Done"
+echo "    Alt+Space  launcher      Alt+C  history      Alt+I  AI chat"
+echo "    Settings: open \"Clippit\" from the app menu (Funcionalidades lists everything)."

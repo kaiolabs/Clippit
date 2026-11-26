@@ -9,7 +9,9 @@ use libadwaita as adw;
 rust_i18n::i18n!("../clippit-core/locales", fallback = "en");
 use rust_i18n::t;
 
-const APP_ID: &str = "com.clippit.Clippit";
+// ID próprio: o popup (que fica sempre aberto) usa com.clippit.Clippit. Com o
+// mesmo ID, abrir o painel só reativava o popup e o painel fechava na hora.
+const APP_ID: &str = "com.clippit.Dashboard";
 
 fn main() -> anyhow::Result<()> {
     // Initialize GTK
@@ -24,30 +26,13 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn apply_theme(config: &Config) {
-    let style_manager = adw::StyleManager::default();
-
-    match config.ui.theme.as_str() {
-        "dark" => {
-            style_manager.set_color_scheme(adw::ColorScheme::ForceDark);
-            eprintln!("✅ Tema forçado: Dark");
-        }
-        "light" => {
-            style_manager.set_color_scheme(adw::ColorScheme::ForceLight);
-            eprintln!("✅ Tema forçado: Light");
-        }
-        "system" | _ => {
-            style_manager.set_color_scheme(adw::ColorScheme::Default);
-            eprintln!("✅ Tema: Sistema (seguindo SO)");
-        }
-    }
-}
-
 fn build_ui(app: &Application) {
     // Carregar configuração e aplicar idioma e tema ANTES de criar UI
     let config = Config::load().unwrap_or_default();
     set_language(&config.ui.language);
-    apply_theme(&config);
+    // Sempre o visual escuro do Clippit (o mesmo do lançador).
+    adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
+    ui::style::install();
 
     // Create main content with sidebar
     let content = ui::create_content();
@@ -55,14 +40,15 @@ fn build_ui(app: &Application) {
     // Create main window with libadwaita
     let window = adw::ApplicationWindow::builder()
         .application(app)
-        .title(&t!("dashboard.title").to_string())
-        .default_width(750)
-        .default_height(580)
+        .title(t!("dashboard.title").to_string())
+        .default_width(1120)
+        .default_height(800)
         .content(&content)
         .build();
 
     // Ensure window can be closed properly
     window.set_deletable(true);
+    window.add_css_class("clippit-dashboard");
 
     // 🔑 FECHAR COMPLETAMENTE ao invés de minimizar
     let app_clone = app.clone();

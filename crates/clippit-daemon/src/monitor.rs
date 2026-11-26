@@ -1,7 +1,6 @@
 use anyhow::Result;
 use arboard::{Clipboard, ImageData};
 use clippit_core::{ClipboardEntry, Config, HistoryManager};
-use dirs;
 use image::{self, DynamicImage, ImageFormat};
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};
@@ -49,13 +48,41 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
 
     let mut last_text: Option<String> = None;
     let mut last_image_hash: Option<String> = None;
+    // No GNOME o arboard lê pelo Xwayland. Se a sessão cai, o Xwayland
+    // reinicia e a conexão antiga morre calada: todo get_text vira erro e
+    // nada mais é gravado. Erros seguidos (fora "vazio") ou a cada 5 min:
+    // abre uma conexão nova.
+    let mut bad_reads: u32 = 0;
+    let mut opened_at = std::time::Instant::now();
 
     loop {
         // Load config for each iteration (to respect runtime changes)
         let config = Config::load().unwrap_or_default();
 
+        if bad_reads >= 12 || opened_at.elapsed() >= Duration::from_secs(300) {
+            if bad_reads >= 12 {
+                warn!(
+                    "Clipboard parou de responder ({} erros seguidos): reconectando",
+                    bad_reads
+                );
+            }
+            match Clipboard::new() {
+                Ok(clip) => clipboard = clip,
+                Err(e) => warn!("Não consegui reconectar a área de transferência: {}", e),
+            }
+            bad_reads = 0;
+            opened_at = std::time::Instant::now();
+        }
+
         // Try to get text first
-        match clipboard.get_text() {
+        let text_read = clipboard.get_text();
+        match &text_read {
+            Ok(_)
+            | Err(arboard::Error::ContentNotAvailable)
+            | Err(arboard::Error::ConversionFailure) => bad_reads = 0,
+            Err(_) => bad_reads += 1,
+        }
+        match text_read {
             Ok(text) => {
                 // Check if content changed
                 if last_text.as_ref() != Some(&text) {
@@ -144,13 +171,16 @@ pub async fn start_monitor(history_manager: Arc<Mutex<HistoryManager>>) -> Resul
                                                                 let path_clone = image_path_for_ocr;
                                                                 let languages =
                                                                     config.ocr.languages.clone();
-                                                                let db_path = dirs::data_local_dir()
-                                                                    .expect("Failed to get data directory")
-                                                                    .join("clippit")
-                                                                    .join("history.db")
-                                                                    .to_str()
-                                                                    .expect("Path to string failed")
-                                                                    .to_string();
+                                                                let db_path = dirs::data_local_dir(
+                                                                )
+                                                                .expect(
+                                                                    "Failed to get data directory",
+                                                                )
+                                                                .join("clippit")
+                                                                .join("history.db")
+                                                                .to_str()
+                                                                .expect("Path to string failed")
+                                                                .to_string();
 
                                                                 info!("🔍 Starting OCR processing in background for entry {}", id);
 

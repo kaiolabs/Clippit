@@ -1,85 +1,43 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Clippit uninstaller — removes what scripts/install.sh installed.
+# Your history, models and settings are only removed if you say so.
 
-set -e
+set -uo pipefail
 
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║        Clippit Clipboard Manager - Uninstaller               ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
-echo ""
+BIN="$HOME/.local/bin"
+EXT_UUID="clippit-corretor@clippit"
+UNITS="$HOME/.config/systemd/user"
 
-# Stop and disable service
-if systemctl --user is-active clippit.service &>/dev/null; then
-    echo "🛑 Stopping Clippit daemon..."
-    systemctl --user stop clippit.service
-fi
+echo "==> Stopping services"
+systemctl --user disable --now clippit.service clippit-doutor.timer 2>/dev/null
+"$BIN/clippit-correct" --stop 2>/dev/null
+rm -f "$UNITS/clippit.service" "$UNITS/clippit-doutor.service" "$UNITS/clippit-doutor.timer"
+systemctl --user daemon-reload
 
-if systemctl --user is-enabled clippit.service &>/dev/null; then
-    echo "❌ Disabling autostart..."
-    systemctl --user disable clippit.service
-fi
+echo "==> Removing the GNOME extension"
+gnome-extensions disable "$EXT_UUID" 2>/dev/null
+rm -f "$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
 
-# Remove systemd service
-if [ -f ~/.config/systemd/user/clippit.service ]; then
-    echo "🗑️  Removing systemd service..."
-    rm ~/.config/systemd/user/clippit.service
-    systemctl --user daemon-reload
-fi
+echo "==> Removing programs"
+for f in clippit-daemon clippit-popup clippit-dashboard clippit-correct clippit-busca clippit-historico \
+         clippit-doutor clippit-jogos-nvidia; do
+    rm -f "${BIN:?}/$f"
+done
+rm -f "$HOME/.local/share/applications/clippit.desktop" "$HOME/.local/share/icons/hicolor/256x256/apps/clippit.png"
 
-# Remove binaries
-echo "🗑️  Removing binaries..."
-rm -f ~/.local/bin/clippit-daemon
-rm -f ~/.local/bin/clippit-ui
-rm -f ~/.local/bin/clippit-dashboard
-rm -f ~/.local/bin/clippit-popup
+echo "==> Removing the Alt+C shortcut"
+KB=org.gnome.settings-daemon.plugins.media-keys
+KP=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/clippit/
+cur=$(gsettings get $KB custom-keybindings 2>/dev/null)
+new=$(printf '%s' "$cur" | sed "s#, '$KP'##; s#'$KP', ##; s#'$KP'##")
+[ "$new" = "[]" ] && new="@as []"
+gsettings set $KB custom-keybindings "$new" 2>/dev/null
+gsettings reset-recursively "$KB.custom-keybinding:$KP" 2>/dev/null
+gsettings reset org.gnome.desktop.wm.keybindings activate-window-menu 2>/dev/null
 
-# Remove desktop entries
-echo "🗑️  Removing desktop entries..."
-rm -f ~/.local/share/applications/clippit.desktop
-rm -f ~/.local/share/applications/clippit-dashboard.desktop
-rm -f ~/.local/share/applications/clippit-popup.desktop
+read -r -p "Delete your clipboard history, learned data and AI models (~/.local/share/clippit)? [y/N] " r
+if [[ "$r" =~ ^[Yy] ]]; then rm -rf "${HOME:?}/.local/share/clippit"; echo "    deleted"; fi
+read -r -p "Delete your settings (~/.config/clippit)? [y/N] " r
+if [[ "$r" =~ ^[Yy] ]]; then rm -rf "${HOME:?}/.config/clippit"; echo "    deleted"; fi
 
-# Update desktop database
-if command -v update-desktop-database &> /dev/null; then
-    update-desktop-database ~/.local/share/applications/ 2>/dev/null || true
-fi
-
-# Ask about data
-echo ""
-read -p "Remove clipboard history data? (y/N): " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    if [ -d ~/.local/share/clippit ]; then
-        echo "🗑️  Removing data directory..."
-        rm -rf ~/.local/share/clippit
-    fi
-else
-    echo "⏭️  Keeping data directory: ~/.local/share/clippit"
-fi
-
-# Ask about config
-echo ""
-read -p "Remove configuration file? (y/N): " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    if [ -f ~/.config/clippit/config.toml ]; then
-        echo "🗑️  Removing configuration..."
-        rm -f ~/.config/clippit/config.toml
-        rmdir ~/.config/clippit 2>/dev/null || true
-    fi
-else
-    echo "⏭️  Keeping configuration: ~/.config/clippit/config.toml"
-fi
-
-# Remove socket if exists
-if [ -S /tmp/clippit.sock ]; then
-    echo "🗑️  Removing IPC socket..."
-    rm /tmp/clippit.sock
-fi
-
-echo ""
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║              Uninstallation Complete! ✓                       ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
-echo ""
-echo "Clippit has been removed from your system."
-echo ""
+echo "Clippit was removed."

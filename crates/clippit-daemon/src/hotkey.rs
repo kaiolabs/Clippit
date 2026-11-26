@@ -47,7 +47,7 @@ pub async fn start_hotkey_handler(_history_manager: Arc<Mutex<HistoryManager>>) 
     }
 
     // Log configured hotkey prominently
-    eprintln!("");
+    eprintln!();
     eprintln!("═══════════════════════════════════════════════════════");
     eprintln!(
         "  🔑 ATALHO REGISTRADO: {} + {}",
@@ -55,7 +55,7 @@ pub async fn start_hotkey_handler(_history_manager: Arc<Mutex<HistoryManager>>) 
         config.hotkeys.show_history_key.to_uppercase()
     );
     eprintln!("═══════════════════════════════════════════════════════");
-    eprintln!("");
+    eprintln!();
 
     info!(
         "Hotkey handler ready with: {} + {}",
@@ -94,7 +94,7 @@ fn notify_ui_show_popup() -> Result<()> {
                 info!("🔍 Checking PID {} status...", pid);
                 // Check if process is actually alive (not zombie)
                 let check = Command::new("ps")
-                    .args(&["-p", &pid.to_string(), "-o", "stat="])
+                    .args(["-p", &pid.to_string(), "-o", "stat="])
                     .output();
 
                 if let Ok(output) = check {
@@ -103,23 +103,21 @@ fn notify_ui_show_popup() -> Result<()> {
                     // If process is zombie (Z) or doesn't exist, clean up
                     if stat.trim().starts_with('Z') || stat.trim().is_empty() {
                         info!("💀 Cleaning up stale/zombie popup (PID: {})", pid);
-                        let _ = Command::new("kill")
-                            .args(&["-9", &pid.to_string()])
-                            .output();
+                        let _ = Command::new("kill").args(["-9", &pid.to_string()]).output();
                         std::fs::remove_file(lock_file).ok();
                     } else {
                         // Process is alive, toggle (close it)
                         info!("🔄 Popup already open (PID: {}) - closing (toggle)", pid);
                         info!("📤 Sending SIGTERM...");
                         let _ = Command::new("kill")
-                            .args(&["-TERM", &pid.to_string()])
+                            .args(["-TERM", &pid.to_string()])
                             .output();
 
                         // Aguarda o popup fechar completamente (até 500ms)
                         for i in 0..10 {
                             std::thread::sleep(std::time::Duration::from_millis(50));
                             // Verifica se o processo ainda existe
-                            let check = Command::new("ps").args(&["-p", &pid.to_string()]).output();
+                            let check = Command::new("ps").args(["-p", &pid.to_string()]).output();
 
                             if let Ok(output) = check {
                                 if !output.status.success() {
@@ -144,7 +142,7 @@ fn notify_ui_show_popup() -> Result<()> {
     // Launch clippit-popup (Wayland-native, no window ID needed)
     info!("🚀 Opening popup...");
     eprintln!("🚀🚀🚀 EXECUTING: clippit-popup");
-    
+
     // Use 'clippit-popup' from PATH (supports both ~/.local/bin and /usr/local/bin)
     let result = std::process::Command::new("clippit-popup")
         .stdin(std::process::Stdio::null())

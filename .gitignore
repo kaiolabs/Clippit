@@ -2,24 +2,20 @@
 /target/
 **/*.rs.bk
 *.pdb
-Cargo.lock
 
-# Qt
-*.user
-*.autosave
-moc_*.cpp
-qrc_*.cpp
-ui_*.h
-*.qmlc
-*.jsc
+# Python
+__pycache__/
+*.pyc
 
 # Build artifacts
 /build/
 /dist/
+*.deb
 
-# IDE
+# IDE / editores
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
@@ -28,10 +24,10 @@ ui_*.h
 .DS_Store
 Thumbs.db
 
-# Local data
+# Dados locais (nunca versionar)
 *.db
 *.db-shm
 *.db-wal
-
-# Logs
+*.gguf
 *.log
+.env
