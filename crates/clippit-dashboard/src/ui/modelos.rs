@@ -108,7 +108,7 @@ struct ModelChoice {
 }
 
 impl ModelChoice {
-    fn fill(&self, locals: &[Value], fallback: &str) {
+    fn fill(&self, locals: &[Value], catalog: &[Value], fallback: &str) {
         let mut opts: Vec<(String, String)> = Vec::new();
         if let Some(d) = self.default_label {
             opts.push((d.to_string(), String::new()));
@@ -118,14 +118,7 @@ impl ModelChoice {
             .filter(|m| m["tipo"].as_str() == Some(self.kind))
         {
             opts.push((
-                format!(
-                    "{} · {} MB",
-                    m["arquivo"]
-                        .as_str()
-                        .unwrap_or("")
-                        .trim_end_matches(".gguf"),
-                    m["mb"]
-                ),
+                model_label(m, catalog),
                 m["caminho"].as_str().unwrap_or("").to_string(),
             ));
         }
@@ -160,6 +153,64 @@ impl ModelChoice {
     }
 }
 
+/// "Qwen 3.5 4B · 2,6 GB" (nome do catálogo) ou "arquivo-sem-gguf · 732 MB".
+fn model_label(m: &Value, catalog: &[Value]) -> String {
+    let file = m["arquivo"].as_str().unwrap_or("");
+    let name = catalog
+        .iter()
+        .find(|c| c["arquivo"].as_str() == Some(file))
+        .and_then(|c| c["nome"].as_str())
+        .map(String::from)
+        .unwrap_or_else(|| file.trim_end_matches(".gguf").to_string());
+    let mb = m["mb"].as_u64().unwrap_or(0);
+    let size = if mb >= 1024 {
+        format!("{:.1} GB", mb as f64 / 1024.0).replace('.', ",")
+    } else {
+        format!("{mb} MB")
+    };
+    format!("{name} · {size}")
+}
+
+/// Rótulo das opções. compact = a linha fechada (corta no meio, se precisar);
+/// senão = a lista aberta (nome inteiro, com ✓ no escolhido).
+fn label_factory(compact: bool) -> gtk::SignalListItemFactory {
+    let f = gtk::SignalListItemFactory::new();
+    f.connect_setup(move |_, item| {
+        let item = item.downcast_ref::<gtk::ListItem>().unwrap();
+        let bx = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let label = gtk::Label::new(None);
+        label.set_xalign(if compact { 1.0 } else { 0.0 });
+        if compact {
+            label.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
+            label.set_max_width_chars(30);
+        } else {
+            label.set_hexpand(true);
+        }
+        bx.append(&label);
+        if !compact {
+            let check = gtk::Image::from_icon_name("object-select-symbolic");
+            bx.append(&check);
+        }
+        item.set_child(Some(&bx));
+    });
+    f.connect_bind(move |_, item| {
+        let item = item.downcast_ref::<gtk::ListItem>().unwrap();
+        let text = item
+            .item()
+            .and_downcast::<gtk::StringObject>()
+            .map(|o| o.string().to_string())
+            .unwrap_or_default();
+        let bx = item.child().and_downcast::<gtk::Box>().unwrap();
+        let label = bx.first_child().and_downcast::<gtk::Label>().unwrap();
+        label.set_text(&text);
+        label.set_tooltip_text(Some(&text));
+        if let Some(check) = bx.last_child().and_downcast::<gtk::Image>() {
+            check.set_opacity(if item.is_selected() { 1.0 } else { 0.0 });
+        }
+    });
+    f
+}
+
 type Choices = Rc<RefCell<Vec<(Rc<ModelChoice>, String)>>>;
 
 pub fn create_page() -> gtk::Widget {
@@ -176,8 +227,12 @@ pub fn create_page() -> gtk::Widget {
                 .as_array()
                 .cloned()
                 .unwrap_or_default();
+            let catalog = data.borrow()["catalogo"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
             for (c, fallback) in choices.borrow().iter() {
-                c.fill(&locals, fallback);
+                c.fill(&locals, &catalog, fallback);
             }
         })
     };
@@ -192,6 +247,9 @@ pub fn create_page() -> gtk::Widget {
         let row = adw::ComboRow::new();
         row.set_title(title);
         row.set_subtitle(subtitle);
+        // Fechado: corta no meio (começo e fim do nome à vista). Aberto: nome inteiro.
+        row.set_factory(Some(&label_factory(true)));
+        row.set_list_factory(Some(&label_factory(false)));
         let c = Rc::new(ModelChoice {
             row: row.clone(),
             key,
@@ -202,6 +260,10 @@ pub fn create_page() -> gtk::Widget {
         });
         c.fill(
             &data.borrow()["locais"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default(),
+            &data.borrow()["catalogo"]
                 .as_array()
                 .cloned()
                 .unwrap_or_default(),
