@@ -70,6 +70,8 @@ Singleton {
                     ime.cursor = ev.cursor;
                     ime.purpose = ev.purpose;
                     ime.hints = ev.hints;
+                    if (Quickshell.env("CLIPPIT_DEBUG"))
+                        console.log("clippit: " + (Date.now() % 100000) + " campo ativo=" + ev.active + " " + Array.from(ev.text).length + " letras, cursor " + ev.cursor + ", tipo " + ev.purpose);
                     ime.changed();
                 } else if (ev.ev === "badge") {
                     ime.badgeClicked(ev.part);

@@ -33,6 +33,8 @@ Singleton {
     }
 
     function fire(accel) {
+        if (Quickshell.env("CLIPPIT_DEBUG"))
+            console.log("clippit: atalho " + accel + " → " + (handlers[accel] || []).length + " função(ões)");
         const list = handlers[accel] || [];
         const h = list[list.length - 1];
         if (h)

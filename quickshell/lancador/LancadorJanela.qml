@@ -608,6 +608,8 @@ Scope {
     // ---- Keys (the same as the GNOME extension) -----------------------------
     function onKey(event) {
         const k = event.key;
+        if (Quickshell.env("CLIPPIT_DEBUG"))
+            console.log("clippit: tecla " + k + " mods " + event.modifiers);
         const ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
         const alt = (event.modifiers & Qt.AltModifier) !== 0;
         const shift = (event.modifiers & Qt.ShiftModifier) !== 0;

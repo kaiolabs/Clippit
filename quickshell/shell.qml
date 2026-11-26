@@ -56,7 +56,9 @@ ShellRoot {
             assistente.toggleGameMode();
         }
         function estado(): string {
-            return JSON.stringify({compositor: Compositor.kind, ime: Ime.available, atalhos: Object.keys(Atalhos.handlers)});
+            return JSON.stringify({compositor: Compositor.kind, ime: Ime.available, aberto: lancador.open, tela: lancador.view,
+                corretor: corretor.state_, selo: corretor.badgeShown, trabalhando: corretor.working, fila: corretor.queue.length,
+                atalhos: Object.keys(Atalhos.handlers)});
         }
     }
 

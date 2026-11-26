@@ -32,6 +32,7 @@
   wtype,
   grim,
   pipewire,
+  fd,
   cairo,
   pango,
   llama-cpp,
@@ -80,6 +81,7 @@ let
     quickshell # clippit-shell (the interface outside GNOME)
     wtype
     grim
+    fd # file search where there is no tracker3 index
     pipewire # pw-record, for dictation
   ]
   ++ lib.optional withAI llama-cpp;
@@ -202,6 +204,7 @@ rustPlatform.buildRustPackage {
         } \
         --set-default CLIPPIT_HUNSPELL_DIR ${dictionaries}/share/hunspell \
         --set-default TESSDATA_PREFIX ${ocr}/share/tessdata \
+        --set-default CLIPPIT_IBUS_DICTS ${ibus}/share/ibus/dicts \
         --set-default CLIPPIT_QUICKSHELL $out/share/clippit/quickshell
     done
   '';

@@ -157,9 +157,12 @@ def emoji():
     """Emoji do IBus (nomes em português e inglês), na ordem do Unicode e com a
     categoria. Sem variações de cor de pele e sem cópias. Fica em cache."""
     cache = os.path.join(os.path.expanduser("~"), ".cache", "clippit", "emoji-v2.json")
-    src = [f"/usr/share/ibus/dicts/emoji-{lang}.dict" for lang in ("pt", "en")]
+    # CLIPPIT_IBUS_DICTS: onde ficam os dicionários do IBus quando não é /usr/share (o pacote do Nix aponta).
+    dicts = os.environ.get("CLIPPIT_IBUS_DICTS", "/usr/share/ibus/dicts")
+    src = [os.path.join(dicts, f"emoji-{lang}.dict") for lang in ("pt", "en")]
     stamp = max((os.path.getmtime(p) for p in src if os.path.exists(p)), default=0)
-    if os.path.exists(cache) and os.path.getmtime(cache) >= stamp:
+    # Cache vazio (dicionários não achados antes) é feito de novo.
+    if os.path.exists(cache) and os.path.getmtime(cache) >= stamp and os.path.getsize(cache) > 2:
         with open(cache, encoding="utf-8") as f:
             return f.read()
     import gi
@@ -198,7 +201,9 @@ def arquivos(query, limit=8):
         res = subprocess.run(["tracker3", "sparql", "--dbus-service", "org.freedesktop.Tracker3.Miner.Files",
                               "-q", sparql], capture_output=True, text=True, timeout=5).stdout
     except (OSError, subprocess.TimeoutExpired):
-        return []
+        res = ""
+    if not res.strip():
+        return arquivos_sem_indice(query, limit)  # fora do GNOME não há o índice (tracker3)
     out = []
     for line in res.splitlines():
         line = line.strip()
@@ -209,6 +214,28 @@ def arquivos(query, limit=8):
             continue
         out.append({"uri": line, "nome": os.path.basename(path),
                     "pasta": os.path.dirname(path).replace(os.path.expanduser("~"), "~", 1)})
+    return out
+
+
+def arquivos_sem_indice(query, limit):
+    """Busca pelo nome sem índice: fd (rápido) ou find, na pasta pessoal, pulando as escondidas."""
+    home = os.path.expanduser("~")
+    if shutil.which("fd"):
+        argv = ["fd", "--ignore-case", "--fixed-strings", "--max-results", str(limit), "--max-depth", "6", query, home]
+    else:
+        argv = ["find", home, "-maxdepth", "6", "-not", "-path", "*/.*", "-iname", f"*{query}*"]
+    try:
+        res = subprocess.run(argv, capture_output=True, text=True, timeout=4).stdout
+    except subprocess.TimeoutExpired as e:
+        res = (e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
+    except OSError:
+        return []
+    out = []
+    for path in res.splitlines()[:limit]:
+        path = path.rstrip("/")
+        if path:
+            out.append({"uri": "file://" + urllib.parse.quote(path), "nome": os.path.basename(path),
+                        "pasta": os.path.dirname(path).replace(home, "~", 1)})
     return out
 
 

@@ -42,6 +42,11 @@ pub struct Layout {
 }
 
 impl Layout {
+    /// 1×1, for the hidden badge.
+    pub fn empty() -> Self {
+        Layout { width: 1, height: 1, label_x: 0, label_w: 0, fix_x: 0 }
+    }
+
     pub fn part_at(&self, x: f64, y: f64, look: &Look) -> Option<Part> {
         let (x, y) = (x as i32, y as i32);
         if !(MARGIN..=MARGIN + H).contains(&y) {

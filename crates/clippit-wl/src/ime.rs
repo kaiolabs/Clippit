@@ -86,6 +86,7 @@ pub struct State {
     angle: f64,
     spin: Option<RegistrationToken>,
     layout: Option<badge::Layout>,
+    mapped: bool,
 }
 
 impl State {
@@ -122,6 +123,7 @@ impl State {
             angle: 0.0,
             spin: None,
             layout: None,
+            mapped: false,
         };
         state.bind_input_method();
         Ok(state)
@@ -236,14 +238,20 @@ impl State {
         let Some(surface) = self.surface.clone() else {
             return;
         };
-        if !self.look.visible || !self.field.active {
-            surface.attach(None, 0, 0);
-            surface.commit();
-            self.layout = None;
-            return;
+        // Hidden = a transparent 1×1 buffer, never an unmap: unmapping the
+        // input popup crashes Sway 1.12 (input_popup_set_focus).
+        let hidden = !self.look.visible || !self.field.active;
+        if hidden && self.layout.is_none() && !self.mapped {
+            return; // never shown: stays unmapped
         }
-        let (lay, data, stride) = badge::render(&self.look, self.hover, self.angle, self.scale);
-        let (w, h) = (lay.width * self.scale, lay.height * self.scale);
+        self.mapped = true;
+        let (lay, data, stride) = if hidden {
+            (badge::Layout::empty(), vec![0u8; 4], 4)
+        } else {
+            badge::render(&self.look, self.hover, self.angle, self.scale)
+        };
+        let scale = if hidden { 1 } else { self.scale };
+        let (w, h) = (lay.width * scale, lay.height * scale);
         let pool = match self.pool.as_mut() {
             Some(pool) => pool,
             None => match SlotPool::new((w * h * 4) as usize, &self.shm) {
@@ -257,13 +265,13 @@ impl State {
         };
         let n = canvas.len().min(data.len());
         canvas[..n].copy_from_slice(&data[..n]);
-        surface.set_buffer_scale(self.scale);
+        surface.set_buffer_scale(scale);
         if buffer.attach_to(&surface).is_err() {
             return;
         }
         surface.damage_buffer(0, 0, w, h);
         surface.commit();
-        self.layout = Some(lay);
+        self.layout = if hidden { None } else { Some(lay) };
     }
 }
 

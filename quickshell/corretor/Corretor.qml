@@ -158,8 +158,12 @@ Scope {
         }
         refreshFromChunks(f);
         showBadge(true);
+        if (Quickshell.env("CLIPPIT_DEBUG"))
+            console.log("clippit: verificar_sozinho=" + Conf.on("verificar_sozinho"));
         if (!Conf.on("verificar_sozinho"))
             return;
+        if (Quickshell.env("CLIPPIT_DEBUG"))
+            console.log("clippit: dividindo");
         const sp = split(f);
         for (const line of sp.lines) {
             for (const ch of line.chunks) {
@@ -169,6 +173,8 @@ Scope {
         }
         pendingCurrent = sp.current;
         checkTimer.restart();
+        if (Quickshell.env("CLIPPIT_DEBUG"))
+            console.log("clippit: timer " + checkTimer.running + " " + checkTimer.interval + " atual " + !!sp.current + " linhas " + sp.lines.length);
     }
 
     property var pendingCurrent: null
@@ -176,6 +182,8 @@ Scope {
         id: checkTimer
         interval: c.checkDelayMs
         onTriggered: {
+            if (Quickshell.env("CLIPPIT_DEBUG"))
+                console.log("clippit: pausa, trecho atual " + !!c.pendingCurrent);
             if (c.pendingCurrent)
                 c.enqueue(c.pendingCurrent);
         }
@@ -202,6 +210,8 @@ Scope {
     }
 
     function enqueue(ch) {
+        if (Quickshell.env("CLIPPIT_DEBUG"))
+            console.log("clippit: fila +" + (ch ? ch.text.length : "nada") + " working=" + working);
         if (chunkCache.has(ch.key) || queue.some(q => q.key === ch.key) || inFlight === ch.key)
             return;
         queue = queue.concat([{key: ch.key, ctx: ch.ctx, text: ch.text}]);
@@ -303,7 +313,11 @@ Scope {
     }
 
     function paintBadge() {
-        Ime.badge({visible: badgeShown, label: label(), state: state_, busy: working, fix: state_ === "issues" && !writing});
+        if (Quickshell.env("CLIPPIT_DEBUG"))
+            console.log("clippit: " + (Date.now() % 100000) + " selo " + badgeShown + " " + state_ + " " + label() + (working ? " (verificando)" : ""));
+        // Sway 1.12 crashes when a mapped input popup loses the field: no badge there
+        // (Alt+O still opens the suggestions).
+        Ime.badge({visible: badgeShown && Compositor.kind !== "sway", label: label(), state: state_, busy: working, fix: state_ === "issues" && !writing});
         updateKeys();
     }
 
@@ -354,6 +368,8 @@ Scope {
             }
             c.panelPos = p;
             c.panelOpen = true;
+            if (Quickshell.env("CLIPPIT_DEBUG"))
+                console.log("clippit: painel em " + JSON.stringify(p) + " com " + c.pending().length);
             c.badgeShown = false;
             c.paintBadge();
         });

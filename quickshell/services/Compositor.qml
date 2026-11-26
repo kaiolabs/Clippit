@@ -75,8 +75,9 @@ Singleton {
                     : ["hyprctl", "keyword", "unbind", mods + "," + key], null, 3).catch(() => {});
             }
         } else if (kind === "sway") {
-            Sys.run(on ? ["swaymsg", "bindsym", "--no-repeat", swayAccel(accel), "exec", cmd]
-                : ["swaymsg", "unbindsym", swayAccel(accel)], null, 3).catch(() => {});
+            // One argument after "--": swaymsg would read --no-repeat as its own option.
+            Sys.run(["swaymsg", "--", on ? "bindsym --no-repeat " + swayAccel(accel) + " exec \"" + cmd + "\""
+                : "unbindsym " + swayAccel(accel)], null, 3).catch(() => {});
         }
     }
 
