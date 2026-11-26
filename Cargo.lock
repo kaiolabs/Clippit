@@ -388,7 +388,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "thiserror 1.0.69",
  "toml 0.8.23",
  "tracing",
 ]
@@ -406,7 +405,6 @@ dependencies = [
  "image",
  "sha2",
  "tesseract",
- "thiserror 1.0.69",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -436,7 +434,6 @@ dependencies = [
  "interprocess",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
  "tokio",
  "tracing",
 ]

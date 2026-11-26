@@ -130,7 +130,7 @@ impl SuggestionEngine {
         }
 
         // Ordenar por score e retornar top N
-        suggestions.sort_by(|a, b| b.score.cmp(&a.score));
+        suggestions.sort_by_key(|s| std::cmp::Reverse(s.score));
         suggestions.truncate(max_results);
         suggestions
     }

@@ -439,11 +439,9 @@ pub fn setup_search_filter(
                         return gtk::glib::Propagation::Stop;
                     }
                 }
-                gtk::gdk::Key::Escape => {
-                    if popover_visible {
-                        suggestions_popover_for_keys.borrow().hide();
-                        return gtk::glib::Propagation::Stop;
-                    }
+                gtk::gdk::Key::Escape if popover_visible => {
+                    suggestions_popover_for_keys.borrow().hide();
+                    return gtk::glib::Propagation::Stop;
                 }
                 _ => {}
             }
