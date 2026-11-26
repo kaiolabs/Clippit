@@ -70,9 +70,12 @@ clippit-doutor --relatorio                            # health of every part
 - **Settings app**: run it in a separate GTK Broadway display and look at it in a browser:
   ```bash
   gtk4-broadwayd :7 &
-  GDK_BACKEND=broadway BROADWAY_DISPLAY=:7 XDG_CONFIG_HOME=/tmp/clippit-test ./target/release/clippit-dashboard
-  # open http://127.0.0.1:8087
+  GDK_BACKEND=broadway BROADWAY_DISPLAY=:7 XDG_CONFIG_HOME=/tmp/clippit-test \
+    dbus-run-session -- ./target/release/clippit-dashboard
+  # open http://127.0.0.1:8087 — and close it when done (pkill -x gtk4-broadwayd)
   ```
+  `dbus-run-session` matters: the app is single-instance, so a test copy on the shared session bus
+  would swallow the user's click on "Clippit" in the app menu and nothing would appear.
   A separate `XDG_CONFIG_HOME` keeps your real settings untouched. Put a `gtk-4.0/settings.ini` with
   `gtk-xft-dpi=98304` there, or the pages render too narrow.
 - **Extension screenshots**: write an output folder to `$XDG_RUNTIME_DIR/clippit-corretor/selftest-foto`
