@@ -113,39 +113,10 @@ pub fn create_page() -> gtk::Widget {
     // ---- Modelo
     let model = adw::PreferencesGroup::new();
     model.set_title("Modelo local");
+    // Qual modelo usar e onde ele roda: página Modelos de IA.
     model.set_description(Some(
         "Tudo roda no seu computador. O modelo sobe quando precisa e desliga sozinho depois de 1 minuto parado.",
     ));
-
-    let device = adw::ComboRow::new();
-    device.set_title("Onde rodar");
-    device.set_subtitle("Automático usa a placa NVIDIA só quando ela está livre");
-    // As placas que existem nesta máquina (o llama.cpp é quem diz).
-    let minfo = super::modelos::info();
-    let mut options: Vec<(&'static str, &'static str)> = vec![("auto", "Automático")];
-    for g in super::modelos::gpus(&minfo) {
-        match g.as_str() {
-            "nvidia" => options.push(("nvidia", "Placa de vídeo NVIDIA")),
-            "amd" => options.push(("amd", "Placa de vídeo AMD")),
-            "intel" => options.push(("intel", "Placa integrada Intel")),
-            _ => {}
-        }
-    }
-    options.push(("cpu", "Só processador"));
-    device.set_model(Some(&gtk::StringList::new(
-        &options.iter().map(|o| o.1).collect::<Vec<_>>(),
-    )));
-    let current = conf::get("device").unwrap_or_else(|| "auto".into());
-    device.set_selected(options.iter().position(|o| o.0 == current).unwrap_or(0) as u32);
-    device.connect_selected_notify(move |row| {
-        conf::set("device", options[row.selected() as usize].0);
-        // Para valer já: desliga o modelo, que sobe no lugar novo na próxima correção.
-        let _ = std::process::Command::new(corrector_cmd())
-            .arg("--stop")
-            .status();
-    });
-    model.add(&device);
-    super::modelos::add_rows(&model, &minfo);
 
     // Modo jogo: o mesmo que Ctrl+Shift+E.
     let game = adw::ActionRow::new();

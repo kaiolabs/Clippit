@@ -8,6 +8,19 @@ re-read automatically: no restart needed, except where noted.
 
 Plain `key = value` lines; `#` starts a comment. Every key is optional.
 
+### Turning the AI on and off
+
+| Key | Default | Meaning |
+|---|---|---|
+| `ia` | `true` | `false` turns the whole AI off: no model ever loads, the spell checker uses only the dictionary. |
+| `ia_chat` | `true` | AI chat (Alt+I and `?` in the launcher). |
+| `ia_acoes` | `true` | Actions on the selected text (Alt+A). |
+| `ia_assistente` | `true` | Reply assistant (Alt+K) and what it learns about people. |
+| `ia_corretor` | `true` | `false` = spell checker with the dictionary only. |
+| `ia_doutor` | `true` | The doctor sends new errors to the AI (known problems are fixed either way). |
+
+Same switches in the settings app: **Geral → Inteligência artificial**.
+
 ### AI and models
 
 | Key | Default | Meaning |
@@ -16,6 +29,9 @@ Plain `key = value` lines; `#` starts a comment. Every key is optional.
 | `model_gpu` | `~/.local/share/clippit/models/Qwen3.5-4B-Q4_K_M.gguf` | Model used on the GPU. |
 | `model_cpu` | `~/.local/share/clippit/models/Qwen3.5-0.8B-Q4_K_M.gguf` | Model used on the CPU (game mode, busy GPU, or no GPU). |
 | `model` | — | If set, overrides both of the above. |
+| `modelo_corretor`, `modelo_chat`, `modelo_assistente`, `modelo_acoes`, `modelo_doutor` | — (default model) | A model for one task. Switching between tasks with different models reloads the model (a few seconds). A model that doesn't fit in the free VRAM runs on the CPU. |
+| `model_embed` | `Qwen3-Embedding-0.6B-Q8_0.gguf` | Embedding model for the reply assistant's similarity search. |
+| `pastas_modelos` | — | Extra folders (comma-separated) to look for `.gguf` files. Already searched: the Clippit models folder, `~/models`, LM Studio, the Hugging Face and llama.cpp caches. |
 | `model_visao` | the `mmproj-…-F16.gguf` matching `model_gpu` | Vision projector so the GPU model can read screenshots. |
 | `visao` | `true` | Allow vision (only on the GPU, only with enough free VRAM). |
 | `llama_dir` | newest `~/.local/share/clippit/llama.cpp/llama-*`, then `llama-server` in `PATH` | Folder with `llama-server`. |
@@ -29,12 +45,15 @@ Change models from the settings app (**Corretor → Modelos**), or from the term
 ```bash
 clippit-correct --modelos               # catalog, downloaded files, current choice (JSON)
 clippit-correct --baixar qwen3.5-2b     # download a model from the catalog
+clippit-correct --hf-arquivos unsloth/Qwen3.5-9B-GGUF   # list the .gguf files of any Hugging Face repo
+clippit-correct --baixar-url https://huggingface.co/.../model.gguf   # download any .gguf
 clippit-correct --instalar-llama vulkan # (re)install the AI engine; or "cpu"
 clippit-correct --stop                  # unload now so the next use picks up the change
 ```
 
-Any GGUF model that `llama-server` can run works: put it in `~/.local/share/clippit/models/` and select
-it, or point `model_gpu` / `model_cpu` to it.
+Any GGUF model that `llama-server` can run works. In **Settings → Modelos de IA** every model list has
+"Escolher arquivo…" (any `.gguf` on your disk) and "Baixar modelos" accepts a Hugging Face link or
+repository name.
 
 ### Corrector and assistant
 
