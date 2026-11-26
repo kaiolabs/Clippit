@@ -80,8 +80,10 @@ EMBED_PORT = 18087
 EMBED_URL = f"http://127.0.0.1:{EMBED_PORT}"
 LLAMA_URL = f"http://127.0.0.1:{LLAMA_PORT}"
 PIPE_URL = f"http://127.0.0.1:{PIPE_PORT}"
-DICT = ("/usr/share/hunspell/pt_BR.aff", "/usr/share/hunspell/pt_BR.dic")
-DICT_EN = ("/usr/share/hunspell/en_US.aff", "/usr/share/hunspell/en_US.dic")
+# CLIPPIT_HUNSPELL_DIR: onde ficam os dicionários quando não é /usr/share/hunspell (o pacote do Nix aponta).
+DICT_DIR = os.environ.get("CLIPPIT_HUNSPELL_DIR", "/usr/share/hunspell")
+DICT = (os.path.join(DICT_DIR, "pt_BR.aff"), os.path.join(DICT_DIR, "pt_BR.dic"))
+DICT_EN = (os.path.join(DICT_DIR, "en_US.aff"), os.path.join(DICT_DIR, "en_US.dic"))
 
 DEFAULTS = {
     "device": "auto",

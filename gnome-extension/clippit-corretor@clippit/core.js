@@ -120,8 +120,15 @@ const CHUNK_CACHE_SIZE = 500;
 // Apps onde Ctrl+S é "salvar": o atalho só vale lá com o painel aberto.
 const SAVE_APPS = /^(cursor|code|code-oss|vscodium|codium|gnome-text-editor|org\.gnome\.TextEditor|gedit|org\.gnome\.gedit|sublime_text|jetbrains-.*|libreoffice.*|soffice|gimp.*|inkscape|org\.inkscape\.Inkscape|blender|kdenlive|org\.kde\.kdenlive|obs|com\.obsproject\.Studio|resolve|zed|dev\.zed\.Zed)$/i;
 const MAX_PASTE_CHARS = 4000;   // acima disso o texto pode vir cortado pelo app
-// O PATH do gnome-shell nem sempre inclui ~/.local/bin.
-const CORRECTOR_CMD = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'clippit-correct']);
+// O PATH do gnome-shell nem sempre inclui ~/.local/bin (onde o install.sh põe
+// os programas); sem cópia lá (pacote do Nix, por exemplo), vale a do PATH.
+const clippitTool = name => {
+    const local = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', name]);
+    if (GLib.file_test(local, GLib.FileTest.IS_EXECUTABLE))
+        return local;
+    return GLib.find_program_in_path(name) ?? local;
+};
+const CORRECTOR_CMD = clippitTool('clippit-correct');
 
 // ---- Visual (mesmas cores do popup do Clippit) --------------------------
 // Fica aqui, e não no stylesheet.css, porque o GNOME só relê o CSS ao entrar
@@ -1738,7 +1745,7 @@ class Assistente {
 // janela, faz contas e conversões, busca no histórico do Clippit e em
 // arquivos, roda comandos do sistema, pesquisa na web e pergunta à IA local.
 
-const BUSCA_CMD = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'clippit-busca']);
+const BUSCA_CMD = clippitTool('clippit-busca');
 const LAUNCH_WIDTH = 760;
 const LAUNCH_HEIGHT = 470;
 const LAUNCH_ROWS = 40;
@@ -5314,7 +5321,6 @@ class Lancador {
 
     _commands() {
         const spawn = argv => () => Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
-        const home = GLib.get_home_dir();
         return this._aiFilter([
             {id: 'cmd:historico', key: 'cmd:historico', icon: 'edit-paste-symbolic', title: 'Histórico da área de transferência',
                 subtitle: 'Tudo o que você copiou, com prévia', words: ['historico', 'clipboard', 'copiados', 'area de transferencia', 'cb'],
@@ -5364,7 +5370,7 @@ class Lancador {
                 hint: 'Executar', run: () => this._c._assistente?._toggleGameMode()},
             {id: 'cmd:clippit', key: 'cmd:clippit', icon: 'preferences-system-symbolic', title: 'Configurações do Clippit',
                 subtitle: 'Corretor, assistente, aprendizado', words: ['clippit', 'painel', 'dashboard'], hint: 'Abrir',
-                run: spawn([GLib.build_filenamev([home, '.local', 'bin', 'clippit-dashboard'])])},
+                run: spawn([clippitTool('clippit-dashboard')])},
             {id: 'cmd:settings', key: 'cmd:settings', icon: 'org.gnome.Settings-symbolic', title: 'Configurações do sistema',
                 subtitle: 'GNOME', words: ['settings', 'configurações', 'ajustes'], hint: 'Abrir', run: spawn(['gnome-control-center'])},
             {id: 'cmd:corretor', key: 'cmd:corretor', icon: 'tools-check-spelling-symbolic', title: 'Rodar a prova do corretor',

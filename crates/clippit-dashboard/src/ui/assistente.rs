@@ -94,9 +94,7 @@ fn fill(group: &adw::PreferencesGroup, rows: &Rc<RefCell<Vec<adw::ActionRow>>>) 
 }
 
 fn learned() -> (u64, u64, u64, u64, u64, std::path::PathBuf) {
-    let cmd = dirs::home_dir()
-        .unwrap_or_default()
-        .join(".local/bin/clippit-correct");
+    let cmd = clippit_core::tools::tool("clippit-correct");
     let out = std::process::Command::new(cmd).arg("--learned").output();
     let text = out
         .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
@@ -161,9 +159,7 @@ fn learning_group(window_hint: &gtk::Widget) -> adw::PreferencesGroup {
     {
         let train = train.clone();
         export.connect_clicked(move |_| {
-            let cmd = dirs::home_dir()
-                .unwrap_or_default()
-                .join(".local/bin/clippit-correct");
+            let cmd = clippit_core::tools::tool("clippit-correct");
             if let Ok(o) = std::process::Command::new(cmd)
                 .arg("--exportar-treino")
                 .output()

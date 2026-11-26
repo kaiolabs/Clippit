@@ -49,6 +49,96 @@ back in so GNOME loads the extension.
 
 To remove it: `./scripts/uninstall.sh` (your data is only deleted if you say so).
 
+### Nix and NixOS
+
+The repository is a flake. It has the package, a Home Manager module (recommended: it also sets up the
+services, the GNOME extension, the shortcuts and your settings), a NixOS module and a dev shell.
+
+**Try it without installing:**
+
+```bash
+nix run github:kaiolabs/Clippit            # opens the settings app
+nix shell github:kaiolabs/Clippit          # every clippit-* command in this shell
+```
+
+Without flakes enabled, add `--extra-experimental-features 'nix-command flakes'`.
+
+**Home Manager.** Add the input to your `flake.nix`:
+
+```nix
+inputs.clippit = {
+  url = "github:kaiolabs/Clippit";
+  inputs.nixpkgs.follows = "nixpkgs";
+};
+```
+
+Then, in your Home Manager configuration (with `inputs` passed in `extraSpecialArgs`):
+
+```nix
+{ inputs, pkgs, ... }:
+{
+  imports = [ inputs.clippit.homeManagerModules.default ];
+
+  programs.clippit = {
+    enable = true;
+
+    # ~/.config/clippit/corretor.conf: AI, models, spell checker, shortcuts
+    settings = {
+      device = "auto";
+      nomes = [ "Maria Silva" "Maria" ];
+      atalho_ia = "<Super>i";
+    };
+
+    # ~/.config/clippit/config.toml: history, privacy, OCR, language
+    historySettings = {
+      general.max_history_items = 500;
+      ui.language = "pt";
+    };
+  };
+}
+```
+
+Every key of `settings` and `historySettings` is in [docs/configuration.md](docs/configuration.md).
+Only the keys you set are written: the settings app keeps working, and those keys go back to the Nix
+value on the next `home-manager switch`.
+
+Other options:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `package` | the flake's package | Use `.override { llama-cpp = pkgs.llama-cpp.override { vulkanSupport = true; }; }` for the AI on the GPU, or `.override { withAI = false; }` to leave the AI out. |
+| `gnomeExtension` | `true` | Turn on the GNOME extension (added to the list, your other extensions stay). |
+| `historyShortcut` | `"<Alt>c"` | GNOME shortcut for the history; `null` leaves GNOME's shortcuts alone. |
+| `freeAltSpace` | `true` | Free Alt+Space (GNOME's window menu) for the launcher. |
+| `popupAutostart` | `true` | Start the history popup hidden at login. |
+| `doctor` | `true` | Run the doctor every 2 minutes. |
+
+**NixOS only** (no Home Manager): installs the package for every user and starts the services. The
+settings stay in the settings app.
+
+```nix
+{ inputs, ... }:
+{
+  imports = [ inputs.clippit.nixosModules.default ];
+  programs.clippit.enable = true;
+}
+```
+
+Or just the package, through the overlay: `nixpkgs.overlays = [ inputs.clippit.overlays.default ];` and
+`environment.systemPackages = [ pkgs.clippit ];` (start the services yourself:
+`systemctl --user enable --now clippit.service`).
+
+**Development:** `nix develop` gives Rust, the GTK/Tesseract libraries and clippy, so `cargo build`
+works like on Ubuntu.
+
+Notes for Nix:
+
+- The AI engine is the `llama-cpp` from nixpkgs (CPU by default). Don't use "install llama.cpp" in the
+  settings app: it downloads an Ubuntu build that doesn't run on NixOS. Models are downloaded as usual.
+- The GNOME extension declares GNOME Shell 46 in `metadata.json`; on newer versions GNOME may refuse to
+  load it.
+- Voice dictation needs `faster-whisper`, which is not in the package.
+
 ## Privacy
 
 - History, AI, spell checking, voice dictation and OCR run locally.

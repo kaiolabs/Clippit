@@ -1,6 +1,7 @@
 pub mod config;
 pub mod history;
 pub mod storage;
+pub mod tools;
 pub mod types;
 pub mod validator;
 

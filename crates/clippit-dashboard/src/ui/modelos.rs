@@ -13,9 +13,7 @@ use std::rc::Rc;
 const PICK: &str = "__escolher__";
 
 fn corrector() -> std::path::PathBuf {
-    dirs::home_dir()
-        .unwrap_or_default()
-        .join(".local/bin/clippit-correct")
+    clippit_core::tools::tool("clippit-correct")
 }
 
 pub fn info() -> Value {
