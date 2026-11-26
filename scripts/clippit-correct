@@ -15,6 +15,8 @@ Uso:
     echo "pergunta" | clippit-correct --perguntar → resposta curta da IA (lançador)
     clippit-correct --modelos                   → modelos disponíveis, baixados e escolhidos (JSON)
     clippit-correct --baixar qwen3.5-4b         → baixa um modelo do catálogo (mostra o progresso)
+    clippit-correct --hf-arquivos org/repo      → arquivos .gguf de um repositório do Hugging Face
+    clippit-correct --baixar-url <link.gguf>    → baixa qualquer .gguf por link
     clippit-correct --instalar-llama [vulkan|cpu] → baixa o llama.cpp pronto
 
 Como corrige:
@@ -167,6 +169,34 @@ def mmproj_for(model):
         return os.path.expanduser(cfg["model_visao"])
     stem = re.sub(r"-(?:UD-)?(?:I?Q\d.*|F16|BF16|F32)\.gguf$", "", os.path.basename(model))
     return os.path.join(MODELS_DIR, f"mmproj-{stem}-F16.gguf")
+
+
+# Funções que usam a IA. Cada uma pode ser desligada (ia_<nome> = false) e ter o
+# seu modelo (modelo_<nome> = caminho.gguf); "ia = false" desliga a IA inteira.
+AI_TASKS = {
+    "corretor": "Corretor (sem IA, usa só o dicionário)",
+    "chat": "Chat com a IA (Alt+I)",
+    "assistente": "Assistente de resposta (Alt+K)",
+    "acoes": "Ações no texto (Alt+A)",
+    "doutor": "Doutor analisa erros com a IA",
+}
+_OFF = ("false", "0", "nao", "não", "desligado", "off")
+
+
+def ai_on(task=None):
+    cfg = load_config()
+    if str(cfg.get("ia", "true")).strip().lower() in _OFF:
+        return False
+    return task is None or str(cfg.get(f"ia_{task}", "true")).strip().lower() not in _OFF
+
+
+def model_for(task):
+    """Modelo escolhido para a tarefa, ou None (= o padrão da placa/processador)."""
+    path = os.path.expanduser(str(load_config().get(f"modelo_{task}", "") or "").strip())
+    return path if path and os.path.exists(path) else None
+
+
+AI_OFF_MSG = "A IA está desligada nas configurações do Clippit (Geral → Inteligência artificial)."
 
 SYSTEM = (
     "Você é um corretor de texto em português do Brasil. Corrija ortografia, acentuação, "
@@ -813,7 +843,7 @@ _facts_lock = threading.Lock()
 
 def extract_facts(payload):
     """Depois que você responde: anota fatos duradouros sobre a pessoa (em segundo plano)."""
-    if not learning_on():
+    if not learning_on() or not ai_on("assistente"):
         return
     with _facts_lock:  # uma de cada vez, para uma anotação não apagar a outra
         _extract_facts(payload)
@@ -1013,6 +1043,11 @@ def correct_chunk(text):
     bad = misspelled(words)
     if looks_fine(text, words, bad):
         return text  # já está certo: nem chama o modelo
+    if not ai_on("corretor"):
+        # IA desligada: só o dicionário (o guard abaixo corrige o que ele sabe).
+        return " ".join(guard(words, words))
+    if RT:
+        RT.use("corretor")
     out = ask_model(text, bad)
     # Proteção: se o modelo "respondeu" em vez de corrigir, mantém o original.
     if not out or len(out) > 2 * len(text) + 20 or len(out) < 0.5 * len(text):
@@ -2595,22 +2630,114 @@ _WIN_WORDS = {"esquerda": "na esquerda", "direita": "na direita", "fechar": "fec
 
 # ---------- modelos: listar, baixar e instalar o llama.cpp ----------
 
-def models_info():
-    """O que o painel mostra: catálogo (baixado ou não), arquivos .gguf locais e os escolhidos."""
-    import glob
+MODEL_DIRS = ["~/.local/share/clippit/models", "~/models", "~/Models", "~/.cache/llama.cpp", "~/.lmstudio/models",
+              "~/.cache/lm-studio/models", "~/.cache/huggingface/hub", "~/.local/share/nomic.ai/GPT4All"]
+
+
+def find_ggufs():
+    """Todo .gguf nas pastas de costume (Clippit, LM Studio, cache do Hugging Face,
+    ~/models) e nas de 'pastas_modelos' do corretor.conf. tipo: texto, visao ou embed."""
     cfg = load_config()
-    local = sorted(glob.glob(os.path.join(MODELS_DIR, "*.gguf")))
-    cat = [{**m, "baixado": os.path.exists(os.path.join(MODELS_DIR, m["arquivo"])),
+    dirs = MODEL_DIRS + [x.strip() for x in cfg.get("pastas_modelos", "").split(",") if x.strip()]
+    seen, out = set(), []
+
+    def add(path):
+        real = os.path.realpath(path)
+        if real in seen or not os.path.isfile(real) or real.endswith(".part"):
+            return
+        seen.add(real)
+        name = os.path.basename(path).lower()
+        tipo = "visao" if "mmproj" in name else "embed" if "embed" in name else "texto"
+        out.append({"arquivo": os.path.basename(path), "caminho": path, "mb": os.path.getsize(real) // 1048576,
+                    "tipo": tipo})
+    for d in dirs:
+        root = os.path.expanduser(d)
+        if not os.path.isdir(root):
+            continue
+        base = root.rstrip(os.sep).count(os.sep)
+        for dp, dns, fns in os.walk(root, followlinks=False):
+            if dp.count(os.sep) - base >= 5:
+                dns[:] = []
+            dns[:] = [x for x in dns if not x.startswith(".")]
+            for f in fns:
+                if f.lower().endswith(".gguf"):
+                    add(os.path.join(dp, f))
+    # Os escolhidos à mão (podem estar em qualquer lugar).
+    for k, v in cfg.items():
+        if (k.startswith("modelo_") or k.startswith("model_")) and str(v).lower().endswith(".gguf"):
+            pth = os.path.expanduser(str(v))
+            if os.path.exists(pth):
+                add(pth)
+    return sorted(out, key=lambda m: (m["tipo"], m["arquivo"].lower()))
+
+
+def models_info():
+    """O que o painel mostra: catálogo, todos os .gguf achados, os escolhidos e as chaves da IA."""
+    cfg = load_config()
+    found = find_ggufs()
+    have = {m["arquivo"] for m in found}
+    cat = [{**m, "baixado": m["arquivo"] in have or os.path.exists(os.path.join(MODELS_DIR, m["arquivo"])),
             "caminho": os.path.join(MODELS_DIR, m["arquivo"])} for m in CATALOG]
-    known = {m["arquivo"] for m in CATALOG}
-    outros = [{"arquivo": os.path.basename(p), "caminho": p, "mb": os.path.getsize(p) // 1048576}
-              for p in local if os.path.basename(p) not in known and not os.path.basename(p).startswith("mmproj-")]
     model = cfg.get("model") or ""
     d = llama_dir()
-    return {"catalogo": cat, "outros": outros,
-            "escolhidos": {"gpu": model or cfg["model_gpu"], "cpu": model or cfg["model_cpu"]},
+    return {"catalogo": cat, "locais": found,
+            "outros": [m for m in found if m["tipo"] == "texto"],  # (compatibilidade)
+            "escolhidos": {"gpu": model or cfg["model_gpu"], "cpu": model or cfg["model_cpu"],
+                           **{t: cfg.get(f"modelo_{t}", "") for t in AI_TASKS},
+                           "visao": cfg.get("model_visao", ""), "embed": cfg.get("model_embed", "")},
+            "tarefas": AI_TASKS, "ia": ai_on(), "ia_tarefas": {t: ai_on(t) for t in AI_TASKS},
             "llama": d if os.path.exists(os.path.join(d, "llama-server")) else None,
             "placas": [k for k, v in devices().items() if v], "pasta": MODELS_DIR}
+
+
+def hf_repo(text):
+    """'org/repo', 'https://huggingface.co/org/repo/...' → 'org/repo'."""
+    t = text.strip()
+    m = re.match(r"^(?:https?://)?(?:www\.)?(?:huggingface\.co|hf\.co)/([\w.-]+/[\w.-]+)", t)
+    if m:
+        return m.group(1)
+    return t if re.fullmatch(r"[\w.-]+/[\w.-]+", t) else None
+
+
+def hf_files(text):
+    """Arquivos .gguf de um repositório do Hugging Face (nome, tamanho, link)."""
+    repo = hf_repo(text)
+    if not repo:
+        raise RuntimeError("cole um link do Hugging Face ou o nome do repositório (ex.: unsloth/Qwen3.5-4B-GGUF)")
+    if text.strip().lower().endswith(".gguf"):  # link direto de um arquivo
+        url = re.sub(r"/blob/", "/resolve/", text.strip())
+        if not url.startswith("http"):
+            url = "https://" + url
+        return {"repo": repo, "arquivos": [{"arquivo": url.rsplit("/", 1)[-1], "mb": None, "url": url}]}
+    req = urllib.request.Request(f"{HF}/api/models/{repo}/tree/main?recursive=1", headers={"User-Agent": "Clippit"})
+    try:
+        items = json.load(urllib.request.urlopen(req, timeout=30))
+    except urllib.error.HTTPError as e:
+        raise RuntimeError("repositório não encontrado (ou é privado)" if e.code in (401, 404) else str(e))
+    files = [{"arquivo": i["path"], "mb": (i.get("lfs", {}).get("size") or i.get("size") or 0) // 1048576,
+              "url": f"{HF}/{repo}/resolve/main/{urllib.parse.quote(i['path'])}"}
+             for i in items if i.get("type") == "file" and i["path"].lower().endswith(".gguf")]
+    if not files:
+        raise RuntimeError("esse repositório não tem arquivos .gguf (o Clippit usa modelos GGUF)")
+    return {"repo": repo, "arquivos": sorted(files, key=lambda f: f["mb"] or 0)}
+
+
+def download_url(url):
+    """Baixa um .gguf de um link (Hugging Face ou outro https) para a pasta de modelos."""
+    url = re.sub(r"/blob/", "/resolve/", url.strip())
+    if not re.match(r"^https://", url) or not url.lower().split("?")[0].endswith(".gguf"):
+        raise RuntimeError("o link precisa ser https e apontar para um arquivo .gguf")
+    name = os.path.basename(urllib.parse.unquote(url.split("?")[0]))
+    if name.lower().startswith("mmproj"):
+        # mmproj-F16.gguf de vários repositórios teriam o mesmo nome: põe o do repositório.
+        repo = hf_repo(url)
+        if repo:
+            stem = re.sub(r"-GGUF$", "", repo.split("/")[1], flags=re.I)
+            name = f"mmproj-{stem}-{name.split('-', 1)[1]}" if "-" in name else f"mmproj-{stem}.gguf"
+    dest = os.path.join(MODELS_DIR, name)
+    if not os.path.exists(dest):
+        _download(url, dest)
+    return dest
 
 
 def _download(url, dest):
@@ -3050,6 +3177,14 @@ def tool_modo_de_energia(args):
 
 
 def diagnose(payload):
+    if not ai_on("doutor"):
+        return "{}"
+    if RT:
+        RT.use("doutor")
+    return _diagnose(payload)
+
+
+def _diagnose(payload):
     """Doutor do Clippit: a IA lê os erros novos dos logs e diz o que houve e
     como corrigir. Só pode escolher uma correção da lista de seguras; outra
     coisa vai como comando sugerido (o usuário confere e aperta Rodar)."""
@@ -3341,6 +3476,10 @@ def transform_text(d):
         return ""
     if acao == "corrigir":
         return correct_text(texto)
+    if not ai_on("acoes"):
+        return AI_OFF_MSG
+    if RT:
+        RT.use("acoes")
     instr = TRANSFORMS.get(acao) or (f"Faça isto com o texto: {d.get('instrucao')}. Responda só com o resultado."
                                      if d.get("instrucao") else TRANSFORMS["explicar"])
     _status(json.dumps({"passos": [], "pensando": True, "texto": ""}, ensure_ascii=False))
@@ -3359,6 +3498,11 @@ def ask_question(question, history=None, confirmed=None, attachments=None):
         os.unlink(CANCEL_FILE)  # um Parar antigo não vale para esta pergunta
     except OSError:
         pass
+    if not ai_on("chat"):
+        return json.dumps({"resposta": AI_OFF_MSG, "passos": [], "fontes": [], "saidas": [], "acoes": [],
+                           "escolha": None, "confirmar": None}, ensure_ascii=False)
+    if RT:
+        RT.use("chat")
     AGENT["rodando"] = True
     AFTER_ANSWER.clear()
     try:
@@ -3654,6 +3798,10 @@ def drop_invented(text, known):
 
 
 def assist(payload):
+    if not ai_on("assistente"):
+        return json.dumps({"opcoes": [AI_OFF_MSG]}, ensure_ascii=False)
+    if RT:
+        RT.use("assistente")
     context = (payload.get("context") or "").strip()
     names = my_names(load_config())
     system = ASSIST_SYSTEM + (f"\n\nSeu nome é {names[0]}. Mensagens assinadas por outros nomes são de "
@@ -3765,6 +3913,7 @@ class Runtime:
         self.dev = pick_device(cfg)
         model = cfg["model"] or (cfg["model_gpu"] if self.dev else cfg["model_cpu"])
         self.model = model if os.path.exists(model) else cfg["model_cpu"]
+        self.default = (self.model, self.dev)  # o padrão; cada tarefa pode pedir outro
         # GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM: não mapeia a memória da placa no
         # processador. Com isso ligado, o driver aberto da NVIDIA 580 enchia o
         # espaço de endereços ("can't alloc VA space") a cada carga do modelo e,
@@ -3829,6 +3978,23 @@ class Runtime:
         with open(READY_FILE, "w") as f:
             f.write(f"{self.dev or 'cpu'} com {os.path.basename(self.model)}{' + visão' if self.vision else ''}")
 
+    def use(self, task):
+        """Garante o modelo certo para a tarefa (troca se precisar; leva alguns
+        segundos). Um modelo que não cabe na memória livre da placa roda no
+        processador: placa sem memória já derrubou a sessão gráfica."""
+        want = model_for(task) or self.default[0]
+        dev = self.default[1]
+        if want == self.model and self.child and self.child.poll() is None:
+            return
+        if dev:
+            st = nvidia_state()
+            mine = os.path.getsize(self.model) // 1048576 if (self.dev and self.child and self.child.poll() is None) else 0
+            need = os.path.getsize(want) // 1048576 + 1200
+            if not st or st[1] + mine < need:
+                dev = None
+        self.model, self.dev = want, dev
+        self.start(vision=False)
+
     def can_vision(self):
         if gpu_blocked():
             return False
@@ -3851,12 +4017,13 @@ class Runtime:
 
     # ---- modelo de busca (embeddings), no processador
     def ensure_embedder(self):
-        if not os.path.exists(EMBED_MODEL):
+        embed = os.path.expanduser(load_config().get("model_embed", "") or "") or EMBED_MODEL
+        if not os.path.exists(embed):
             return False
         if self.embedder and self.embedder.poll() is None:
             return True
         self.embedder = subprocess.Popen(
-            [os.path.join(llama_dir(), "llama-server"), "-m", EMBED_MODEL, "--host", "127.0.0.1",
+            [os.path.join(llama_dir(), "llama-server"), "-m", embed, "--host", "127.0.0.1",
              "--port", str(EMBED_PORT), "--embedding", "--pooling", "last", "-c", "2048", "-np", "1",
              "-ngl", "0", "--device", "none", "-t", "4", "--no-webui"],
             env=self.env, stdout=self.log, stderr=self.log)
@@ -3890,7 +4057,8 @@ def serve(cfg):
     except FileNotFoundError:
         pass
     RT = Runtime(cfg)
-    RT.start(vision=False)
+    if ai_on():
+        RT.start(vision=False)
     SPELL = Speller()
     ENGLISH = Speller(DICT_EN)
     freq()
@@ -3901,7 +4069,8 @@ def serve(cfg):
             pass
 
         def do_GET(self):
-            ok = self.path == "/health" and (RT.restarting or llama_healthy())
+            # Sem modelo carregado (IA desligada ou ainda não usada) o servidor está pronto.
+            ok = self.path == "/health" and (RT.restarting or not RT.child or llama_healthy())
             self.send_response(200 if ok else 503)
             self.end_headers()
 
@@ -3960,17 +4129,18 @@ def serve(cfg):
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     # Aquece antes de avisar que está pronto (na GPU a 1ª chamada é lenta).
-    try:
-        ask_model("oi tudo bem", [])
-    except Exception:
-        pass
+    if RT.child:
+        try:
+            ask_model("oi tudo bem", [])
+        except Exception:
+            pass
 
     idle = float(cfg["idle_seconds"])
     ticks = 0
     while True:
         time.sleep(2)
         ticks += 1
-        if not RT.restarting and RT.child.poll() is not None:
+        if not RT.restarting and RT.child and RT.child.poll() is not None:
             stop()
         # Na GPU em modo auto: se outro programa passar a usar a placa
         # (render, jogo), desliga; a próxima correção sobe no processador.
@@ -4225,10 +4395,15 @@ def main():
                           "pasta": LEARN_DIR}, ensure_ascii=False))
     elif arg == "--modelos":
         print(json.dumps(models_info(), ensure_ascii=False))
-    elif arg in ("--baixar", "--instalar-llama"):
+    elif arg == "--hf-arquivos":
         try:
-            path = download_model(sys.argv[2]) if arg == "--baixar" else \
-                install_llama(sys.argv[2] if len(sys.argv) > 2 else "auto")
+            print(json.dumps(hf_files(sys.argv[2]), ensure_ascii=False))
+        except Exception as e:
+            print(json.dumps({"erro": str(e)}, ensure_ascii=False))
+    elif arg in ("--baixar", "--baixar-url", "--instalar-llama"):
+        try:
+            path = download_model(sys.argv[2]) if arg == "--baixar" else download_url(sys.argv[2]) \
+                if arg == "--baixar-url" else install_llama(sys.argv[2] if len(sys.argv) > 2 else "auto")
             print(f"OK {path}", flush=True)
         except Exception as e:
             print(f"ERRO {e}", flush=True)

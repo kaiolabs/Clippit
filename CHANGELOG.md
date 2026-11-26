@@ -17,6 +17,10 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - Doctor (`clippit-doutor`): checks every part every 2 minutes and fixes what breaks.
 - `scripts/install.sh` / `uninstall.sh` for a full per-user install; CI for Rust, scripts and the extension.
 
+- AI controls: turn the whole AI off (dictionary-only spell checker) or each feature separately;
+  a model per task (corrector, chat, assistant, text actions, doctor); any `.gguf` on disk or from any
+  Hugging Face repository (Settings → Modelos de IA).
+
 ### Changed
 - GPUs are detected by name; threads, CPU mask, llama.cpp folder and the vision model are configurable.
 

@@ -31,6 +31,7 @@ pub fn create_content() -> gtk::Widget {
     let items = vec![
         ("Geral", "preferences-system-symbolic"),
         ("Funcionalidades", "view-app-grid-symbolic"),
+        ("Modelos de IA", "starred-symbolic"),
         ("Corretor", "tools-check-spelling-symbolic"),
         ("Assistente", "mail-reply-sender-symbolic"),
         ("Atalhos", "input-keyboard-symbolic"),
@@ -63,9 +64,10 @@ pub fn create_content() -> gtk::Widget {
 
     stack.add_named(&general::create_page(), Some("0"));
     stack.add_named(&funcionalidades::create_page(), Some("1"));
-    stack.add_named(&corretor::create_page(), Some("2"));
-    stack.add_named(&assistente::create_page(), Some("3"));
-    stack.add_named(&hotkeys::create_page(), Some("4"));
+    stack.add_named(&modelos::create_page(), Some("2"));
+    stack.add_named(&corretor::create_page(), Some("3"));
+    stack.add_named(&assistente::create_page(), Some("4"));
+    stack.add_named(&hotkeys::create_page(), Some("5"));
 
     // Connect sidebar selection to stack
     let stack_clone = stack.clone();

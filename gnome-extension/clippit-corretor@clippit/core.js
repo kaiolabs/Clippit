@@ -104,6 +104,12 @@ function unbindShortcuts(owner) {
     owner._keyWatchIds = [];
 }
 
+// IA: "ia = false" desliga tudo; "ia_<tarefa> = false" só aquela função.
+const aiOn = task => confOn('ia') && confOn(`ia_${task}`);
+function aiOffNotice(what) {
+    Main.notify('Clippit', `${what} está desligado. Para ligar: Configurações do Clippit → Geral → Inteligência artificial.`);
+}
+
 const confOn = (key, fallback = true) => !['false', 'nao', 'não', '0'].includes(String(confValue(key, fallback)).toLowerCase());
 const WATCH_INTERVAL_MS = 300;  // checa se o campo perdeu o foco
 const CORRECT_TIMEOUT_S = 25;
@@ -890,6 +896,10 @@ class Assistente {
     }
 
     async _safeOpen() {
+        if (!aiOn('assistente')) {
+            aiOffNotice('O assistente de resposta');
+            return;
+        }
         try {
             await this.open();
         } catch (e) {
@@ -2607,6 +2617,10 @@ class Lancador {
 
     // Abre o lançador já numa tela; se ela já está aberta, fecha.
     toggleView(view) {
+        if (view === 'ia' && !aiOn('chat')) {
+            aiOffNotice('O chat com a IA');
+            return;
+        }
         if (this._panel && !this._grab) {
             // Estava solto: reativa (e troca de tela se for outra).
             this._wake();
@@ -3269,6 +3283,10 @@ class Lancador {
     // ---- Alt+A: ações no texto selecionado --------------------------------
 
     async openTextActions(fromLauncher = false) {
+        if (!aiOn('acoes')) {
+            aiOffNotice('As ações no texto');
+            return;
+        }
         // O texto selecionado (seleção primária); sem seleção, o que está copiado.
         let text = (await clipboardText(St.ClipboardType.PRIMARY)).trim();
         let from = 'selecionado';
@@ -3292,6 +3310,12 @@ class Lancador {
             this.open('texto');
         else
             this._enterView('texto');
+    }
+
+    // Comandos de IA somem do lançador quando a função está desligada.
+    _aiFilter(items) {
+        const need = {'cmd:ia': 'chat', 'cmd:conversas': 'chat', 'cmd:acoes': 'acoes'};
+        return items.filter(it => !need[it.id] || aiOn(need[it.id]));
     }
 
     _textActionItems(q) {
@@ -5063,6 +5087,10 @@ class Lancador {
         const ql = fold(q);
 
         // Pergunta à IA: tela própria ou "? como faço…"
+        if ((this._view === 'ia' || q.startsWith('?')) && !aiOn('chat')) {
+            return [{id: 'ia-off', icon: 'starred-symbolic', score: 1000, title: 'A IA está desligada',
+                subtitle: 'Configurações do Clippit → Geral → Inteligência artificial', keepOpen: true, run: () => {}}];
+        }
         if (this._view === 'ia' || q.startsWith('?')) {
             const question = this._view === 'ia' ? q : q.slice(1).trim();
             items.push({
@@ -5287,7 +5315,7 @@ class Lancador {
     _commands() {
         const spawn = argv => () => Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
         const home = GLib.get_home_dir();
-        return [
+        return this._aiFilter([
             {id: 'cmd:historico', key: 'cmd:historico', icon: 'edit-paste-symbolic', title: 'Histórico da área de transferência',
                 subtitle: 'Tudo o que você copiou, com prévia', words: ['historico', 'clipboard', 'copiados', 'area de transferencia', 'cb'],
                 hint: 'Abrir', keepOpen: true, run: () => this._enterView('historico')},
@@ -5346,7 +5374,7 @@ class Lancador {
                     const out = await runProcess([CORRECTOR_CMD, '--prova'], null, 600);
                     Main.notify('Clippit — prova do corretor', out.split('\n').slice(1, 3).join(' ').trim());
                 }},
-        ];
+        ]);
     }
 
     // ---- Ações -------------------------------------------------------------

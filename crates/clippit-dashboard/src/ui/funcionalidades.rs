@@ -209,6 +209,7 @@ const GRUPOS: &[(&str, &[Feature])] = &[
                 "Histórico, IA, corretor, voz e leitura de imagens rodam localmente.",
                 "A internet só é usada quando você pede (pesquisa, notícias, cotação, clima).",
                 "Arquivos com senhas e chaves não são lidos pela IA.",
+                "Dá para desligar a IA toda, ou só algumas funções, em Geral → Inteligência artificial.",
             ],
         },
     ]),

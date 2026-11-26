@@ -37,6 +37,73 @@ fn switch_row(
     row
 }
 
+/// Chave geral da IA e uma por função. Desligada, nenhum modelo roda.
+fn ai_group() -> adw::PreferencesGroup {
+    use super::conf;
+    let g = group("Inteligência artificial");
+    g.set_description(Some("Tudo roda no seu computador. Escolha onde quer usar a IA; os modelos ficam em Modelos de IA."));
+    let on = |k: &str| conf::get_bool(k, true);
+    let master = adw::ActionRow::new();
+    master.set_title("Usar IA");
+    master.set_subtitle("Desligada: nenhum modelo roda e o corretor usa só o dicionário");
+    let master_sw = gtk::Switch::new();
+    master_sw.set_active(on("ia"));
+    master_sw.set_valign(gtk::Align::Center);
+    master.add_suffix(&master_sw);
+    master.set_activatable_widget(Some(&master_sw));
+    g.add(&master);
+    let mut rows = Vec::new();
+    for (key, title, sub) in [
+        ("ia_chat", "Chat com a IA", "Alt+I e o \"?\" no lançador"),
+        (
+            "ia_acoes",
+            "Ações no texto",
+            "Resumir, traduzir, reescrever (Alt+A)",
+        ),
+        (
+            "ia_assistente",
+            "Assistente de resposta",
+            "Sugere respostas para conversas (Alt+K)",
+        ),
+        (
+            "ia_corretor",
+            "Corretor com IA",
+            "Desligado: o corretor usa só o dicionário",
+        ),
+        (
+            "ia_doutor",
+            "Doutor com IA",
+            "Analisa erros novos do Clippit; os conhecidos ele corrige de qualquer jeito",
+        ),
+    ] {
+        let row = adw::ActionRow::new();
+        row.set_title(title);
+        row.set_subtitle(sub);
+        let sw = gtk::Switch::new();
+        sw.set_active(on(key));
+        sw.set_valign(gtk::Align::Center);
+        sw.connect_active_notify(move |s| {
+            conf::set(key, if s.is_active() { "true" } else { "false" });
+        });
+        row.add_suffix(&sw);
+        row.set_activatable_widget(Some(&sw));
+        row.set_sensitive(master_sw.is_active());
+        g.add(&row);
+        rows.push(row);
+    }
+    master_sw.connect_active_notify(move |s| {
+        let v = s.is_active();
+        conf::set("ia", if v { "true" } else { "false" });
+        for r in &rows {
+            r.set_sensitive(v);
+        }
+        if !v {
+            super::modelos::restart_ai(); // desliga o modelo que estiver carregado
+        }
+    });
+    g
+}
+
 fn group(title: &str) -> adw::PreferencesGroup {
     let g = adw::PreferencesGroup::new();
     g.set_title(title);
@@ -68,6 +135,9 @@ pub fn create_page() -> gtk::Widget {
         |c, v| c.ui.show_notifications = v,
     ));
     page.add(&hist);
+
+    // ---- Inteligência artificial (fica no corretor.conf, lido pela extensão e pela IA)
+    page.add(&ai_group());
 
     // ---- Imagens
     let img = group("Imagens");
