@@ -7,9 +7,7 @@ use gtk::prelude::*;
 use libadwaita as adw;
 
 fn corrector_cmd() -> std::path::PathBuf {
-    dirs::home_dir()
-        .unwrap_or_default()
-        .join(".local/bin/clippit-correct")
+    clippit_core::tools::tool("clippit-correct")
 }
 
 pub fn switch_row(
@@ -76,7 +74,7 @@ fn model_status() -> (bool, String) {
         }
         Err(_) => (
             false,
-            "clippit-correct não encontrado em ~/.local/bin".into(),
+            "clippit-correct não encontrado (~/.local/bin ou PATH)".into(),
         ),
     }
 }

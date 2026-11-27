@@ -31,3 +31,7 @@ Thumbs.db
 *.gguf
 *.log
 .env
+
+# Nix
+result
+result-*

@@ -25,7 +25,7 @@ import time
 
 HOME = os.path.expanduser("~")
 DATA = os.path.join(HOME, ".local/share/clippit")
-CONF = os.path.join(HOME, ".config/clippit")
+CONF = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config"), "clippit")
 DOC = os.path.join(DATA, "doutor")
 STATE = os.path.join(DOC, "estado.json")
 LOG = os.path.join(DOC, "doutor.log")
@@ -33,6 +33,13 @@ SNAP = os.path.join(DOC, "copias")  # últimas versões boas dos arquivos de dad
 SUGGESTION = os.path.join(DOC, "sugestao.json")
 RUN = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "clippit-correct")
 BIN = os.path.join(HOME, ".local/bin")
+
+
+def tool(name):
+    """O programa do Clippit em ~/.local/bin (install.sh) ou, sem ele lá, o do PATH (Nix)."""
+    local = os.path.join(BIN, name)
+    return local if os.path.exists(local) else (shutil.which(name) or local)
+
 EXT = "clippit-corretor@clippit"
 
 # Arquivos de dados em JSON (o que quebrar aqui derruba uma função inteira).
@@ -121,7 +128,7 @@ def fix_reiniciar_daemon():
 
 
 def fix_reiniciar_ia():
-    run([os.path.join(BIN, "clippit-correct"), "--stop"], timeout=20)
+    run([tool("clippit-correct"), "--stop"], timeout=20)
     return True
 
 
@@ -187,7 +194,7 @@ def fix_restaurar_atalhos():
         run(["gsettings", "set", base, "custom-keybindings", str(items)])
     kb = f"{base}.custom-keybinding:{path}"
     run(["gsettings", "set", kb, "name", "Clippit"])
-    run(["gsettings", "set", kb, "command", os.path.join(BIN, "clippit-historico")])
+    run(["gsettings", "set", kb, "command", tool("clippit-historico")])
     run(["gsettings", "set", kb, "binding", "<Alt>c"])
     run(["gsettings", "set", "org.gnome.desktop.wm.keybindings", "activate-window-menu", "[]"])
     return True
@@ -445,7 +452,7 @@ def new_errors(st):
 
 def _diagnose(payload):
     try:
-        p = subprocess.run([os.path.join(BIN, "clippit-correct"), "--diagnosticar"], input=json.dumps(payload),
+        p = subprocess.run([tool("clippit-correct"), "--diagnosticar"], input=json.dumps(payload),
                            capture_output=True, text=True, timeout=240)
         d = json.loads(p.stdout or "{}")
     except (OSError, subprocess.TimeoutExpired, ValueError) as e:

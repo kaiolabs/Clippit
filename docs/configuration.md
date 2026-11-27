@@ -4,6 +4,12 @@ Most settings are in the **Clippit settings app** (open "Clippit" from the app m
 every option for people who prefer editing files. Both files live in `~/.config/clippit/` and are
 re-read automatically: no restart needed, except where noted.
 
+With the Home Manager module, set these keys in Nix instead: `programs.clippit.settings` for
+`corretor.conf` and `programs.clippit.historySettings` for `config.toml` (see the README, "Nix and
+NixOS").
+
+A `config.toml` may set only some keys; the rest takes the defaults below.
+
 ## `corretor.conf` — extension, AI and shortcuts
 
 Plain `key = value` lines; `#` starts a comment. Every key is optional.

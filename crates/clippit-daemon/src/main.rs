@@ -31,7 +31,10 @@ async fn main() -> Result<()> {
 
     // Initialize history manager
     let db_path = get_db_path();
-    let history_manager = Arc::new(Mutex::new(HistoryManager::new(db_path, 100)?));
+    let history_manager = Arc::new(Mutex::new(HistoryManager::new(
+        db_path,
+        clippit_core::Config::load()?.general.max_history_items,
+    )?));
 
     // Clone for clipboard monitor
     let history_clone = Arc::clone(&history_manager);
