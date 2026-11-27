@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 
 // What GNOME Shell did for the extension, per compositor: windows (list,
 // focus, move, tile), the cursor position, screenshots and global shortcuts
@@ -21,6 +22,28 @@ Singleton {
         if (kind === "hyprland")
             Sys.run(["hyprctl", "eval", "return 1"], null, 3).then(out => comp.hyprLua = !/unknown request/i.test(out),
                 () => comp.hyprLua = false);
+    }
+
+    // Reloading the config (rebuild, edit, `hyprctl reload`) wipes the binds
+    // made at runtime: put them back.
+    Connections {
+        target: comp.kind === "hyprland" ? Hyprland : null
+        function onRawEvent(event) {
+            if (event.name === "configreloaded")
+                rebindTimer.restart();
+        }
+    }
+
+    Timer {
+        id: rebindTimer
+        interval: 500
+        onTriggered: comp.rebind()
+    }
+
+    function rebind() {
+        const keys = Object.keys(binds);
+        binds = {};
+        keys.forEach(k => setKey(k, true));
     }
 
     // ---- Global shortcuts -------------------------------------------------
