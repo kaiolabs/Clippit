@@ -110,6 +110,31 @@ Singleton {
         Quickshell.execDetached(argv);
     }
 
+    // Apps get their own systemd scope, so restarting clippit-shell.service does not kill them.
+    // systemd-run moves itself into the scope before it execs the app, so nothing stays in the
+    // service cgroup. If the user manager refuses scopes, launch without one rather than not at all.
+    property bool scopes: true
+
+    function launch(argv) {
+        if (scopes)
+            detach(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--slice=app.slice", "--"].concat(argv));
+        else
+            detach(argv);
+    }
+
+    Component.onCompleted: run(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--", "true"], null, 5)
+        .catch(e => {
+            console.warn("clippit: systemd scopes unavailable, apps start in the shell's cgroup:", e.message);
+            sys.scopes = false;
+        })
+
+    function launchApp(entry) {
+        if (entry.runInTerminal || entry.workingDirectory)
+            entry.execute();
+        else
+            launch(entry.command);
+    }
+
     function quote(s) {
         return "'" + String(s).replace(/'/g, "'\\''") + "'";
     }
@@ -134,9 +159,10 @@ Singleton {
 
     function openUri(uri, appId) {
         if (appId)
-            detach(["gtk-launch", appId.replace(/\.desktop$/, ""), uri]);
+            launch(["sh", "-c", "command -v gtk-launch >/dev/null && exec gtk-launch \"$0\" \"$1\"; exec xdg-open \"$1\"",
+                appId.replace(/\.desktop$/, ""), uri]);
         else
-            detach(["xdg-open", uri]);
+            launch(["xdg-open", uri]);
     }
 
     // Files.
