@@ -69,6 +69,7 @@ function confValue(key, fallback) {
 
 // Atalhos globais. O usuário troca no painel (Atalhos); ficam no corretor.conf
 // como atalho_<nome> = <Alt>space (formato do GTK). "desligado" tira o atalho.
+// @shortcuts:begin (o scripts/test-shortcuts.mjs testa este trecho)
 const SHORTCUTS = {
     lancador: '<Alt>space', ia: '<Alt>i', acoes: '<Alt>a', assistente: '<Alt>k', modo_jogo: '<Control><Shift>e',
     sugestoes: '<Alt>o', aplicar: '<Alt>s', ajuste: '<Alt>f', emoji: '<Alt>e', snippets: '<Alt>semicolon',
@@ -81,25 +82,36 @@ const INNER_SHORTCUTS = {
     copiar: '<Control>Return', voltar: 'BackSpace', categoria: 'Tab',
 };
 const DEFAULT_KEYS = {...INNER_SHORTCUTS, ...SHORTCUTS};
-const keyOf = id => confValue(`atalho_${id}`, DEFAULT_KEYS[id]) || DEFAULT_KEYS[id];
-
 const _MOD_BITS = {control: 1, primary: 1, ctrl: 1, alt: 2, mod1: 2, shift: 4, super: 8, mod4: 8, meta: 8};
 const _KEY_ALIASES = {iso_left_tab: 'tab', kp_enter: 'return', iso_enter: 'return', kp_delete: 'delete'};
 const _accelCache = new Map();
 
-// "<Control><Shift>e" → {mods, key}. null se não entender.
+// "<Control><Shift>e" → {mods, key}. null se não entender (inclusive modificador desconhecido, como
+// <Hyper> ou <Mod2>: tratar como "sem modificador" faria o atalho disparar enquanto você digita).
 function parseAccel(accel) {
     if (_accelCache.has(accel))
         return _accelCache.get(accel);
-    let rest = String(accel).trim(), mods = 0, m;
+    let rest = String(accel).trim(), mods = 0, m, ok = true;
     while ((m = rest.match(/^<(\w+)>/))) {
-        mods |= _MOD_BITS[m[1].toLowerCase()] ?? 0;
+        const bit = _MOD_BITS[m[1].toLowerCase()];
+        if (bit === undefined)
+            ok = false;
+        mods |= bit ?? 0;
         rest = rest.slice(m[0].length);
     }
     const key = rest.toLowerCase();
-    const parsed = key ? {mods, key: _KEY_ALIASES[key] ?? key} : null;
+    const parsed = ok && key ? {mods, key: _KEY_ALIASES[key] ?? key} : null;
     _accelCache.set(accel, parsed);
     return parsed;
+}
+
+// O valor de `atalho_<id>` no corretor.conf (ou o padrão). `copiar` só vale com Enter: qualquer
+// outra tecla volta para o padrão, para a tela mostrar o mesmo que o lançador realmente usa.
+function keyOf(id) {
+    const value = confValue(`atalho_${id}`, DEFAULT_KEYS[id]) || DEFAULT_KEYS[id];
+    if (id === 'copiar' && value !== 'desligado' && parseAccel(value)?.key !== 'return')
+        return DEFAULT_KEYS[id];
+    return value;
 }
 
 function _heldMods(ev) {
@@ -128,16 +140,24 @@ function keyLabel(id, sep = ' ') {
     return parts.join(sep);
 }
 
-// A tecla apertada é o atalho `id` (o que o usuário escolheu no painel, ou o padrão)?
-function keyIs(ev, id) {
+// A tecla apertada é o atalho `id` (o que o usuário escolheu no painel, ou o padrão)? Os modificadores
+// têm que ser exatamente os do atalho (Ctrl+Shift+N não é Ctrl+N). `ignoreShift`: Shift só inverte
+// o sentido (Tab / Shift+Tab).
+function keyIs(ev, id, ignoreShift = false) {
     const accel = keyOf(id);
     if (accel === 'desligado')
         return false;
     const p = parseAccel(accel);
-    if (!p || (_heldMods(ev) & p.mods) !== p.mods)
+    if (!p)
         return false;
     const name = Clutter.keyval_name(ev.get_key_symbol())?.toLowerCase();
-    return (_KEY_ALIASES[name] ?? name) === p.key;
+    let held = _heldMods(ev), want = p.mods;
+    // Shift+Tab chega como outra tecla (ISO_Left_Tab) com o Shift apertado.
+    if (name === 'iso_left_tab' || ignoreShift) {
+        held &= ~4;
+        want &= ~4;
+    }
+    return held === want && (_KEY_ALIASES[name] ?? name) === p.key;
 }
 
 // O atalho `id` usa Ctrl/Alt/Shift/Super? (sem eles, só vale com o campo vazio, para não atrapalhar a digitação)
@@ -150,22 +170,71 @@ function hasMods(id) {
 function modIs(ev, id) {
     const accel = keyOf(id);
     const p = accel === 'desligado' ? null : parseAccel(accel);
-    return !!p && p.mods !== 0 && (_heldMods(ev) & p.mods) === p.mods;
+    return !!p && p.mods !== 0 && _heldMods(ev) === p.mods;
+}
+// @shortcuts:end
+
+// Reserva (want) ou solta uma tecla global para `owner`. Vários atalhos podem usar a mesma tecla:
+// cada um entra com o seu `id` e a tecla só é solta quando o último sai (sem `id`, solta de vez).
+// Devolve false se o GNOME não deixou reservar (quem chamou tenta de novo depois).
+function setGrab(owner, field, accel, want, fn, id, tag, quiet = false) {
+    const grabs = owner[field] ??= new Map();
+    let grab = grabs.get(accel);
+    if (want) {
+        if (!grab) {
+            const action = global.display.grab_accelerator(accel, Meta.KeyBindingFlags.NONE);
+            if (action === Meta.KeyBindingAction.NONE) {
+                if (!quiet)
+                    console.log(`${TAG} ${tag}não consegui reservar ${accel}`);
+                return false;
+            }
+            const name = Meta.external_binding_name_for_action(action);
+            Main.wm.allowKeybinding(name, Shell.ActionMode.ALL);
+            grab = {action, name, fns: new Map()};
+            grabs.set(accel, grab);
+        }
+        grab.fns.set(id ?? accel, fn);
+    } else if (grab) {
+        if (id === null || id === undefined)
+            grab.fns.clear();
+        else
+            grab.fns.delete(id);
+        if (!grab.fns.size) {
+            global.display.ungrab_accelerator(grab.action);
+            Main.wm.allowKeybinding(grab.name, Shell.ActionMode.NONE);
+            grabs.delete(accel);
+        }
+    }
+    if (!owner._accelId && grabs.size) {
+        owner._accelId = global.display.connect('accelerator-activated', (_d, action) => {
+            for (const g of owner[field].values()) {
+                if (g.action === action) {
+                    for (const f of [...g.fns.values()])
+                        f();
+                }
+            }
+        });
+    }
+    return true;
 }
 
 // Registra atalhos que podem mudar com o painel aberto: confere a cada 2 s e
-// troca na hora (sem precisar religar nada).
+// troca na hora (sem precisar religar nada). Se o GNOME não deixou reservar (a tecla
+// estava com outro programa), tenta de novo na próxima conferida.
 function bindShortcuts(owner, list) {
-    const cur = {};
+    const cur = {}, warned = {};
     const apply = () => {
         for (const [id, fn] of list) {
             const want = keyOf(id);
             if (cur[id] === want)
                 continue;
             if (cur[id] && cur[id] !== 'desligado')
-                owner._setKey(cur[id], false);
-            if (want !== 'desligado')
-                owner._setKey(want, true, fn);
+                owner._setKey(cur[id], false, undefined, id);
+            if (want !== 'desligado' && !owner._setKey(want, true, fn, id, warned[id] === want)) {
+                warned[id] = want;
+                cur[id] = undefined;
+                continue;
+            }
             if (cur[id])
                 console.log(`${TAG} atalho ${id}: ${cur[id]} → ${want}`);
             cur[id] = want;
@@ -929,30 +998,8 @@ class Assistente {
         }
     }
 
-    _setKey(accel, want, fn) {
-        const grab = this._grabs.get(accel);
-        if (want && !grab) {
-            const action = global.display.grab_accelerator(accel, Meta.KeyBindingFlags.NONE);
-            if (action === Meta.KeyBindingAction.NONE) {
-                console.log(`${TAG} não consegui reservar ${accel}`);
-                return;
-            }
-            const name = Meta.external_binding_name_for_action(action);
-            Main.wm.allowKeybinding(name, Shell.ActionMode.ALL);
-            this._grabs.set(accel, {action, name, fn});
-        } else if (!want && grab) {
-            global.display.ungrab_accelerator(grab.action);
-            Main.wm.allowKeybinding(grab.name, Shell.ActionMode.NONE);
-            this._grabs.delete(accel);
-        }
-        if (!this._accelId && this._grabs.size) {
-            this._accelId = global.display.connect('accelerator-activated', (_d, action) => {
-                for (const g of this._grabs.values()) {
-                    if (g.action === action)
-                        g.fn();
-                }
-            });
-        }
+    _setKey(accel, want, fn, id = null, quiet = false) {
+        return setGrab(this, '_grabs', accel, want, fn, id, '', quiet);
     }
 
     // ---- Abrir: print → OCR → resposta ----------------------------------
@@ -1247,7 +1294,7 @@ class Assistente {
         // Rodapé padrão (o mesmo do lançador).
         const foot = makeFooter();
         foot.set('Assistente', 'starred-symbolic', [{label: 'Inserir', key: '↵'}, {label: 'Ajustar', key: keyLabel('ajuste')},
-            {label: 'Outra', key: keyLabel('assistente')}, {label: 'Fechar', key: keyLabel('fechar')}]);
+            {label: 'Outra', key: keyLabel('assistente')}, {label: 'Fechar', key: 'Esc'}]);
         const footer = foot.actor;
         panel.add_child(footer);
         this._footer = footer;
@@ -2732,9 +2779,12 @@ class Lancador {
 
     // Abre o lançador já na lista de snippets (";"); se ela já está aberta, fecha.
     toggleSnippets() {
-        if (this._panel && !this._grab)
-            this._wake();
-        else if (this._panel && this._view === 'root' && this._entry.text.startsWith(';')) {
+        const showing = this._panel && this._view === 'root' && this._entry.text.startsWith(';');
+        if (this._panel && !this._grab) {
+            this._wake(); // estava solto: volta (sem apagar o que você já digitou)
+            if (showing)
+                return;
+        } else if (showing) {
             this._close();
             return;
         }
@@ -2774,30 +2824,8 @@ class Lancador {
         }
     }
 
-    _setKey(accel, want, fn) {
-        const grab = this._grabs.get(accel);
-        if (want && !grab) {
-            const action = global.display.grab_accelerator(accel, Meta.KeyBindingFlags.NONE);
-            if (action === Meta.KeyBindingAction.NONE) {
-                console.log(`${TAG} lançador: não consegui reservar ${accel}`);
-                return;
-            }
-            const name = Meta.external_binding_name_for_action(action);
-            Main.wm.allowKeybinding(name, Shell.ActionMode.ALL);
-            this._grabs.set(accel, {action, name, fn});
-        } else if (!want && grab) {
-            global.display.ungrab_accelerator(grab.action);
-            Main.wm.allowKeybinding(grab.name, Shell.ActionMode.NONE);
-            this._grabs.delete(accel);
-        }
-        if (!this._accelId && this._grabs.size) {
-            this._accelId = global.display.connect('accelerator-activated', (_d, action) => {
-                for (const g of this._grabs.values()) {
-                    if (g.action === action)
-                        g.fn();
-                }
-            });
-        }
+    _setKey(accel, want, fn, id = null, quiet = false) {
+        return setGrab(this, '_grabs', accel, want, fn, id, 'lançador: ', quiet);
     }
 
     // ---- Uso (os mais usados aparecem primeiro) --------------------------
@@ -3761,7 +3789,7 @@ class Lancador {
             this._render();
             return true;
         }
-        if (keyIs(ev, 'categoria')) {
+        if (keyIs(ev, 'categoria', true)) {
             // Troca de categoria (com Shift volta).
             const cats = this._emojiCats();
             const i = cats.indexOf(this._emojiCat ?? 'Sorrisos e emoções');
@@ -4544,7 +4572,7 @@ class Lancador {
             y_align: Clutter.ActorAlign.CENTER}));
         head.add_child(new St.Label({text: 'Área de transferência', style: LSTYLE.sideTitle, x_expand: true,
             y_align: Clutter.ActorAlign.CENTER}));
-        head.add_child(keycap('Alt C'));
+        head.add_child(keycap(keyLabel('lado')));
         side.add_child(head);
         this._sideScroll = new St.ScrollView({
             hscrollbar_policy: St.PolicyType.NEVER, vscrollbar_policy: St.PolicyType.AUTOMATIC,
@@ -6692,8 +6720,8 @@ export class Corretor {
 
         // Rodapé padrão (o mesmo do lançador).
         const foot = makeFooter();
-        foot.set('Corretor', 'tools-check-spelling-symbolic', [{label: 'Corrigir tudo', key: 'Alt S'},
-            {label: 'Fechar', key: keyLabel('fechar')}]);
+        foot.set('Corretor', 'tools-check-spelling-symbolic', [{label: 'Corrigir tudo', key: keyLabel('aplicar')},
+            {label: 'Fechar', key: 'Esc'}]);
         panel.add_child(foot.actor);
 
         this._panel = panel;
@@ -6764,7 +6792,7 @@ export class Corretor {
         const panel = Boolean(this._panel);
         const issues = Boolean(this._badge?.visible) && this._state === 'issues';
         const applyAll = () => this._apply(this._pending());
-        this._setKey('Escape', panel, () => this._dismissPanel());
+        this._setKey('Escape', panel, () => this._dismissPanel(), 'escape');
         // Alt+O: abre o painel (ou verifica e abre); com ele aberto, fecha.
         const badgeUp = Boolean(this._badge?.visible) && ['issues', 'idle', 'error'].includes(this._state);
         // Atalho trocado no painel: solta o antigo antes de pegar o novo.
@@ -6774,37 +6802,14 @@ export class Corretor {
                 this._setKey(k, false);
         }
         if (open !== 'desligado')
-            this._setKey(open, panel || badgeUp, () => this._onBadgeClicked());
+            this._setKey(open, panel || badgeUp, () => this._onBadgeClicked(), 'sugestoes');
         if (all !== 'desligado')
-            this._setKey(all, panel || issues, applyAll);
-        this._setKey('<Control>s', panel || (issues && !SAVE_APPS.test(this._appName())), applyAll);
+            this._setKey(all, panel || issues, applyAll, 'aplicar');
+        this._setKey('<Control>s', panel || (issues && !SAVE_APPS.test(this._appName())), applyAll, 'ctrl-s');
     }
 
-    _setKey(accel, want, fn) {
-        this._keyGrabs ??= new Map();
-        const grab = this._keyGrabs.get(accel);
-        if (want && !grab) {
-            const action = global.display.grab_accelerator(accel, Meta.KeyBindingFlags.NONE);
-            if (action === Meta.KeyBindingAction.NONE) {
-                console.log(`${TAG} não consegui reservar a tecla ${accel}`);
-                return;
-            }
-            const name = Meta.external_binding_name_for_action(action);
-            Main.wm.allowKeybinding(name, Shell.ActionMode.ALL);
-            this._keyGrabs.set(accel, {action, name, fn});
-        } else if (!want && grab) {
-            global.display.ungrab_accelerator(grab.action);
-            Main.wm.allowKeybinding(grab.name, Shell.ActionMode.NONE);
-            this._keyGrabs.delete(accel);
-        }
-        if (!this._accelId && this._keyGrabs.size) {
-            this._accelId = global.display.connect('accelerator-activated', (_d, action) => {
-                for (const g of this._keyGrabs.values()) {
-                    if (g.action === action)
-                        g.fn();
-                }
-            });
-        }
+    _setKey(accel, want, fn, id = null, quiet = false) {
+        return setGrab(this, '_keyGrabs', accel, want, fn, id, 'a tecla ', quiet);
     }
 
     _ungrabKeys() {

@@ -94,12 +94,14 @@ format; `desligado` disables a shortcut. Easier: **Settings → Atalhos → Troc
 
 Shortcuts that only work **inside the launcher** (same format; `desligado` disables them; also in
 **Settings → Atalhos**). Keys that don't type anything (`Tab`, `Escape`, `Delete`, `F1`…) can be used alone.
+The modifiers must match exactly (`<Control><Shift>n` is not `<Control>n`); a modifier the extension doesn't
+know (`<Hyper>`, `<Mod2>`) disables the shortcut. Two shortcuts can share a key: both actions run.
 
 | Key | Default | Action |
 |---|---|---|
 | `atalho_fechar` | `Escape` | Stop the AI answer; a second press closes the launcher |
 | `atalho_lado` | `<Alt>c` | Open or close the clipboard list beside the launcher |
-| `atalho_copiar` | `<Control>Return` | Enter with these modifiers copies instead of pasting (only the modifiers count) |
+| `atalho_copiar` | `<Control>Return` | Enter with these modifiers copies instead of pasting. It must use Enter and at least one modifier; anything else falls back to the default |
 | `atalho_voltar` | `BackSpace` | Back to the start (only with an empty field when it has no modifier) |
 | `atalho_ditado` | `<Alt>v` | Dictation in the AI chat |
 | `atalho_nova_conversa` | `<Control>n` | New AI conversation |
