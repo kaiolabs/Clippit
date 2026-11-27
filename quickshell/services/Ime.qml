@@ -23,7 +23,8 @@ Singleton {
     signal call(int id, string method, var args)
 
     // Password, PIN and private fields are never read.
-    readonly property bool sensitive: purpose === 8 || purpose === 9 || (hints & 0x40) !== 0
+    // text-input-v3: purpose 8 password, 9 PIN; hints 0x40 hidden text, 0x80 sensitive data.
+    readonly property bool sensitive: purpose === 8 || purpose === 9 || (hints & 0xc0) !== 0
 
     function send(obj) {
         if (proc.running)
