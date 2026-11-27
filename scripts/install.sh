@@ -30,6 +30,22 @@ for a in "$@"; do
     esac
 done
 
+# A path as the command in a .desktop Exec= line (Desktop Entry spec): quoted when it has spaces or
+# other special characters, with ", `, $ and \ escaped (twice: quoting rule + string escape rule).
+desktop_exec() {
+    local p=$1
+    if [[ "$p" =~ [^A-Za-z0-9_./+-] ]]; then
+        p=${p//\\/\\\\\\\\}
+        p=${p//\"/\\\\\"}
+        p=${p//\`/\\\\\`}
+        p=${p//\$/\\\\\$}
+        p=${p//%/%%}
+        printf '"%s"' "$p"
+    else
+        printf '%s' "${p//%/%%}"
+    fi
+}
+
 say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 ok() { printf '    ✓ %s\n' "$*"; }
 warn() { printf '    ! %s\n' "$*"; }
@@ -122,7 +138,15 @@ if gsettings get org.gnome.desktop.wm.keybindings activate-window-menu | grep -q
 fi
 mkdir -p "$APPS" "$HOME/.local/share/icons/hicolor/256x256/apps"
 install -m644 "$ROOT/assets/logo_clippit.png" "$HOME/.local/share/icons/hicolor/256x256/apps/clippit.png"
-install -m644 "$ROOT/assets/clippit.desktop" "$APPS/clippit.desktop"
+# GNOME starts with a PATH that lacks ~/.local/bin: with a bare "Exec=clippit-dashboard" it can't
+# find the program and hides the app from the menu and search. So use the full path.
+DASH_EXEC=$(desktop_exec "$BIN/clippit-dashboard")
+DASH_TRY=${BIN//\\/\\\\}/clippit-dashboard
+DASH_EXEC="$DASH_EXEC" DASH_TRY="$DASH_TRY" awk '
+    /^Exec=clippit-dashboard/ { print "Exec=" ENVIRON["DASH_EXEC"]; print "TryExec=" ENVIRON["DASH_TRY"]; next }
+    { print }
+' "$ROOT/assets/clippit.desktop" > "$APPS/clippit.desktop"
+chmod 644 "$APPS/clippit.desktop"
 update-desktop-database "$APPS" 2>/dev/null || true
 ok "\"Clippit\" in the app menu opens the settings"
 

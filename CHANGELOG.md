@@ -10,6 +10,9 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ## [Unreleased]
 
 ### Added
+- Settings → Atalhos: the shortcuts used inside the launcher (close/stop, back, clipboard beside, copy only,
+  dictation, new/previous conversation, transform, pin, delete, enlarge preview, emoji category) can now be
+  changed too. New global shortcuts open the emoji picker (Alt+E) and the snippets list (Alt+;) directly.
 - Settings: **Funcionalidades** page explaining every feature; configurable shortcuts (Atalhos → Trocar);
   model choice, model downloads and AI engine install (Corretor → Modelos).
 - Local AI chat with tools: windows, system controls, clipboard search, paste into the field, screenshots,

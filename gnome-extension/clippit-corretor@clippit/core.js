@@ -69,25 +69,172 @@ function confValue(key, fallback) {
 
 // Atalhos globais. O usuário troca no painel (Atalhos); ficam no corretor.conf
 // como atalho_<nome> = <Alt>space (formato do GTK). "desligado" tira o atalho.
+// @shortcuts:begin (o scripts/test-shortcuts.mjs testa este trecho)
 const SHORTCUTS = {
     lancador: '<Alt>space', ia: '<Alt>i', acoes: '<Alt>a', assistente: '<Alt>k', modo_jogo: '<Control><Shift>e',
-    sugestoes: '<Alt>o', aplicar: '<Alt>s', ajuste: '<Alt>f',
+    sugestoes: '<Alt>o', aplicar: '<Alt>s', ajuste: '<Alt>f', emoji: '<Alt>e', snippets: '<Alt>semicolon',
 };
-const keyOf = id => confValue(`atalho_${id}`, SHORTCUTS[id]) || SHORTCUTS[id];
+// Atalhos de dentro do lançador (só valem com ele aberto). Mesmo arquivo, mesma troca no painel.
+// Formato do GTK; "desligado" tira o atalho. Em `copiar` só os modificadores contam (Enter + eles).
+const INNER_SHORTCUTS = {
+    fechar: 'Escape', ditado: '<Alt>v', lado: '<Alt>c', nova_conversa: '<Control>n', conversas: '<Control>h',
+    transformar: 'Tab', fixar: '<Control>p', apagar: '<Control>Delete', ampliar: '<Control>space',
+    copiar: '<Control>Return', voltar: 'BackSpace', categoria: 'Tab',
+};
+const DEFAULT_KEYS = {...INNER_SHORTCUTS, ...SHORTCUTS};
+const _MOD_BITS = {control: 1, primary: 1, ctrl: 1, alt: 2, mod1: 2, shift: 4, super: 8, mod4: 8, meta: 8};
+const _KEY_ALIASES = {iso_left_tab: 'tab', kp_enter: 'return', iso_enter: 'return', kp_delete: 'delete'};
+const _accelCache = new Map();
+
+// "<Control><Shift>e" → {mods, key}. null se não entender (inclusive modificador desconhecido, como
+// <Hyper> ou <Mod2>: tratar como "sem modificador" faria o atalho disparar enquanto você digita).
+function parseAccel(accel) {
+    if (_accelCache.has(accel))
+        return _accelCache.get(accel);
+    let rest = String(accel).trim(), mods = 0, m, ok = true;
+    while ((m = rest.match(/^<(\w+)>/))) {
+        const bit = _MOD_BITS[m[1].toLowerCase()];
+        if (bit === undefined)
+            ok = false;
+        mods |= bit ?? 0;
+        rest = rest.slice(m[0].length);
+    }
+    const key = rest.toLowerCase();
+    const parsed = ok && key ? {mods, key: _KEY_ALIASES[key] ?? key} : null;
+    _accelCache.set(accel, parsed);
+    return parsed;
+}
+
+// O valor de `atalho_<id>` no corretor.conf (ou o padrão). `copiar` só vale com Enter: qualquer
+// outra tecla volta para o padrão, para a tela mostrar o mesmo que o lançador realmente usa.
+function keyOf(id) {
+    const value = confValue(`atalho_${id}`, DEFAULT_KEYS[id]) || DEFAULT_KEYS[id];
+    if (id === 'copiar' && value !== 'desligado' && parseAccel(value)?.key !== 'return')
+        return DEFAULT_KEYS[id];
+    return value;
+}
+
+function _heldMods(ev) {
+    const st = ev.get_state();
+    return (st & Clutter.ModifierType.CONTROL_MASK ? 1 : 0) | (st & Clutter.ModifierType.MOD1_MASK ? 2 : 0) |
+        (st & Clutter.ModifierType.SHIFT_MASK ? 4 : 0) |
+        (st & (Clutter.ModifierType.SUPER_MASK | Clutter.ModifierType.MOD4_MASK) ? 8 : 0);
+}
+
+// Como mostrar o atalho `id` na tela: 'Ctrl P' (rodapés, sep ' ') ou 'Ctrl+P' (textos, sep '+').
+function keyLabel(id, sep = ' ') {
+    const accel = keyOf(id);
+    if (accel === 'desligado')
+        return '—';
+    const p = parseAccel(accel);
+    if (!p)
+        return accel;
+    const names = {return: '↵', delete: 'Del', space: 'Espaço', escape: 'Esc', backspace: '⌫', tab: 'Tab',
+        semicolon: ';', colon: ':', period: '.', comma: ',', slash: '/'};
+    const parts = [];
+    if (p.mods & 1) parts.push('Ctrl');
+    if (p.mods & 4) parts.push('Shift');
+    if (p.mods & 2) parts.push('Alt');
+    if (p.mods & 8) parts.push('Super');
+    parts.push(names[p.key] ?? (p.key.length === 1 ? p.key.toUpperCase() : p.key[0].toUpperCase() + p.key.slice(1)));
+    return parts.join(sep);
+}
+
+// A tecla apertada é o atalho `id` (o que o usuário escolheu no painel, ou o padrão)? Os modificadores
+// têm que ser exatamente os do atalho (Ctrl+Shift+N não é Ctrl+N). `ignoreShift`: Shift só inverte
+// o sentido (Tab / Shift+Tab).
+function keyIs(ev, id, ignoreShift = false) {
+    const accel = keyOf(id);
+    if (accel === 'desligado')
+        return false;
+    const p = parseAccel(accel);
+    if (!p)
+        return false;
+    const name = Clutter.keyval_name(ev.get_key_symbol())?.toLowerCase();
+    let held = _heldMods(ev), want = p.mods;
+    // Shift+Tab chega como outra tecla (ISO_Left_Tab) com o Shift apertado.
+    if (name === 'iso_left_tab' || ignoreShift) {
+        held &= ~4;
+        want &= ~4;
+    }
+    return held === want && (_KEY_ALIASES[name] ?? name) === p.key;
+}
+
+// O atalho `id` usa Ctrl/Alt/Shift/Super? (sem eles, só vale com o campo vazio, para não atrapalhar a digitação)
+function hasMods(id) {
+    const p = parseAccel(keyOf(id));
+    return !!p && p.mods !== 0;
+}
+
+// Enter com os modificadores do atalho `id` (ex.: Ctrl+Enter = só copiar).
+function modIs(ev, id) {
+    const accel = keyOf(id);
+    const p = accel === 'desligado' ? null : parseAccel(accel);
+    return !!p && p.mods !== 0 && _heldMods(ev) === p.mods;
+}
+// @shortcuts:end
+
+// Reserva (want) ou solta uma tecla global para `owner`. Vários atalhos podem usar a mesma tecla:
+// cada um entra com o seu `id` e a tecla só é solta quando o último sai (sem `id`, solta de vez).
+// Devolve false se o GNOME não deixou reservar (quem chamou tenta de novo depois).
+function setGrab(owner, field, accel, want, fn, id, tag, quiet = false) {
+    const grabs = owner[field] ??= new Map();
+    let grab = grabs.get(accel);
+    if (want) {
+        if (!grab) {
+            const action = global.display.grab_accelerator(accel, Meta.KeyBindingFlags.NONE);
+            if (action === Meta.KeyBindingAction.NONE) {
+                if (!quiet)
+                    console.log(`${TAG} ${tag}não consegui reservar ${accel}`);
+                return false;
+            }
+            const name = Meta.external_binding_name_for_action(action);
+            Main.wm.allowKeybinding(name, Shell.ActionMode.ALL);
+            grab = {action, name, fns: new Map()};
+            grabs.set(accel, grab);
+        }
+        grab.fns.set(id ?? accel, fn);
+    } else if (grab) {
+        if (id === null || id === undefined)
+            grab.fns.clear();
+        else
+            grab.fns.delete(id);
+        if (!grab.fns.size) {
+            global.display.ungrab_accelerator(grab.action);
+            Main.wm.allowKeybinding(grab.name, Shell.ActionMode.NONE);
+            grabs.delete(accel);
+        }
+    }
+    if (!owner._accelId && grabs.size) {
+        owner._accelId = global.display.connect('accelerator-activated', (_d, action) => {
+            for (const g of owner[field].values()) {
+                if (g.action === action) {
+                    for (const f of [...g.fns.values()])
+                        f();
+                }
+            }
+        });
+    }
+    return true;
+}
 
 // Registra atalhos que podem mudar com o painel aberto: confere a cada 2 s e
-// troca na hora (sem precisar religar nada).
+// troca na hora (sem precisar religar nada). Se o GNOME não deixou reservar (a tecla
+// estava com outro programa), tenta de novo na próxima conferida.
 function bindShortcuts(owner, list) {
-    const cur = {};
+    const cur = {}, warned = {};
     const apply = () => {
         for (const [id, fn] of list) {
             const want = keyOf(id);
             if (cur[id] === want)
                 continue;
             if (cur[id] && cur[id] !== 'desligado')
-                owner._setKey(cur[id], false);
-            if (want !== 'desligado')
-                owner._setKey(want, true, fn);
+                owner._setKey(cur[id], false, undefined, id);
+            if (want !== 'desligado' && !owner._setKey(want, true, fn, id, warned[id] === want)) {
+                warned[id] = want;
+                cur[id] = undefined;
+                continue;
+            }
             if (cur[id])
                 console.log(`${TAG} atalho ${id}: ${cur[id]} → ${want}`);
             cur[id] = want;
@@ -851,30 +998,8 @@ class Assistente {
         }
     }
 
-    _setKey(accel, want, fn) {
-        const grab = this._grabs.get(accel);
-        if (want && !grab) {
-            const action = global.display.grab_accelerator(accel, Meta.KeyBindingFlags.NONE);
-            if (action === Meta.KeyBindingAction.NONE) {
-                console.log(`${TAG} não consegui reservar ${accel}`);
-                return;
-            }
-            const name = Meta.external_binding_name_for_action(action);
-            Main.wm.allowKeybinding(name, Shell.ActionMode.ALL);
-            this._grabs.set(accel, {action, name, fn});
-        } else if (!want && grab) {
-            global.display.ungrab_accelerator(grab.action);
-            Main.wm.allowKeybinding(grab.name, Shell.ActionMode.NONE);
-            this._grabs.delete(accel);
-        }
-        if (!this._accelId && this._grabs.size) {
-            this._accelId = global.display.connect('accelerator-activated', (_d, action) => {
-                for (const g of this._grabs.values()) {
-                    if (g.action === action)
-                        g.fn();
-                }
-            });
-        }
+    _setKey(accel, want, fn, id = null, quiet = false) {
+        return setGrab(this, '_grabs', accel, want, fn, id, '', quiet);
     }
 
     // ---- Abrir: print → OCR → resposta ----------------------------------
@@ -889,7 +1014,7 @@ class Assistente {
             if (out.modo_jogo) {
                 Main.notify('Clippit — modo jogo ligado',
                     `${out.liberado_mb > 100 ? `${gb} GB liberados na placa de vídeo. ` : 'A placa de vídeo está livre. '}` +
-                    'O corretor continua funcionando no processador. Ctrl+Shift+E para voltar ao normal.');
+                    `O corretor continua funcionando no processador. ${keyLabel('modo_jogo', '+')} para voltar ao normal.`);
             } else {
                 Main.notify('Clippit — modo jogo desligado',
                     'O modelo volta a usar a placa de vídeo na próxima correção, se ela estiver livre.');
@@ -1048,7 +1173,7 @@ class Assistente {
         } catch (e) {
             console.log(`${TAG} assistente falhou: ${e.message}`);
             if (gen === this._gen)
-                this._setStatus('O modelo não respondeu. Tente de novo (Alt+K).', false);
+                this._setStatus(`O modelo não respondeu. Tente de novo (${keyLabel('assistente', '+')}).`, false);
         }
     }
 
@@ -1151,9 +1276,7 @@ class Assistente {
                 return Clutter.EVENT_STOP;
             }
             // Alt+F de novo: solta o teclado e volta para o campo do app.
-            const sym = ev.get_key_symbol();
-            if ((sym === Clutter.KEY_f || sym === Clutter.KEY_F) &&
-                (ev.get_state() & Clutter.ModifierType.MOD1_MASK)) {
+            if (keyIs(ev, 'ajuste')) {
                 this._releaseKeyboard();
                 return Clutter.EVENT_STOP;
             }
@@ -1170,8 +1293,8 @@ class Assistente {
 
         // Rodapé padrão (o mesmo do lançador).
         const foot = makeFooter();
-        foot.set('Assistente', 'starred-symbolic', [{label: 'Inserir', key: '↵'}, {label: 'Ajustar', key: 'Alt F'},
-            {label: 'Outra', key: 'Alt K'}, {label: 'Fechar', key: 'Esc'}]);
+        foot.set('Assistente', 'starred-symbolic', [{label: 'Inserir', key: '↵'}, {label: 'Ajustar', key: keyLabel('ajuste')},
+            {label: 'Outra', key: keyLabel('assistente')}, {label: 'Fechar', key: 'Esc'}]);
         const footer = foot.actor;
         panel.add_child(footer);
         this._footer = footer;
@@ -2354,7 +2477,8 @@ class Lancador {
             console.log(`${TAG} lançador: D-Bus indisponível (${e.message})`);
         }
         // Alt+I: abre direto na tela da IA (aperte de novo para fechar).
-        bindShortcuts(this, [['ia', () => this.toggleView('ia')]]);
+        bindShortcuts(this, [['ia', () => this.toggleView('ia')], ['emoji', () => this.toggleView('emoji')],
+            ['snippets', () => this.toggleSnippets()]]);
         // Foto do lançador (só para conferir o visual): tela inicial e histórico.
         const probe6 = GLib.build_filenamev([GLib.get_user_runtime_dir(), 'clippit-corretor', 'selftest-foto']);
         if (GLib.file_test(probe6, GLib.FileTest.EXISTS)) {
@@ -2653,6 +2777,25 @@ class Lancador {
             this._enterView(view);
     }
 
+    // Abre o lançador já na lista de snippets (";"); se ela já está aberta, fecha.
+    toggleSnippets() {
+        const showing = this._panel && this._view === 'root' && this._entry.text.startsWith(';');
+        if (this._panel && !this._grab) {
+            this._wake(); // estava solto: volta (sem apagar o que você já digitou)
+            if (showing)
+                return;
+        } else if (showing) {
+            this._close();
+            return;
+        }
+        if (!this._panel)
+            this.open('root');
+        else if (this._view !== 'root')
+            this._enterView('root');
+        this._entry.text = ';';
+        this._entry.clutter_text.set_cursor_position(-1);
+    }
+
     disable() {
         this._close();
         this._gamesMon?.cancel();
@@ -2681,30 +2824,8 @@ class Lancador {
         }
     }
 
-    _setKey(accel, want, fn) {
-        const grab = this._grabs.get(accel);
-        if (want && !grab) {
-            const action = global.display.grab_accelerator(accel, Meta.KeyBindingFlags.NONE);
-            if (action === Meta.KeyBindingAction.NONE) {
-                console.log(`${TAG} lançador: não consegui reservar ${accel}`);
-                return;
-            }
-            const name = Meta.external_binding_name_for_action(action);
-            Main.wm.allowKeybinding(name, Shell.ActionMode.ALL);
-            this._grabs.set(accel, {action, name, fn});
-        } else if (!want && grab) {
-            global.display.ungrab_accelerator(grab.action);
-            Main.wm.allowKeybinding(grab.name, Shell.ActionMode.NONE);
-            this._grabs.delete(accel);
-        }
-        if (!this._accelId && this._grabs.size) {
-            this._accelId = global.display.connect('accelerator-activated', (_d, action) => {
-                for (const g of this._grabs.values()) {
-                    if (g.action === action)
-                        g.fn();
-                }
-            });
-        }
+    _setKey(accel, want, fn, id = null, quiet = false) {
+        return setGrab(this, '_grabs', accel, want, fn, id, 'lançador: ', quiet);
     }
 
     // ---- Uso (os mais usados aparecem primeiro) --------------------------
@@ -2790,7 +2911,7 @@ class Lancador {
         this._fixLabel = new St.Label({style: LSTYLE.fixText, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         this._fixLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this._fixRow.add_child(this._fixLabel);
-        this._fixBtn = textButton('Corrigir  Alt+S', LSTYLE.runBtn, LSTYLE.runBtnHover, () => this._applyFix());
+        this._fixBtn = textButton(`Corrigir  ${keyLabel('aplicar', '+')}`, LSTYLE.runBtn, LSTYLE.runBtnHover, () => this._applyFix());
         this._fixRow.add_child(this._fixBtn);
         panel.add_child(this._fixRow);
         // "@": anexar um app ou arquivo à pergunta (lista sob o campo).
@@ -3009,7 +3130,7 @@ class Lancador {
         this._entry.hint_text = {
             root: 'Buscar apps, comandos e mais…',
             historico: 'Filtrar o que você copiou…',
-            ia: 'Pergunte algo… (@ anexa app, arquivo ou print · Alt+V fala)',
+            ia: `Pergunte algo… (@ anexa app, arquivo ou print · ${keyLabel('ditado', '+')} fala)`,
             conversas: 'Procurar nas conversas…',
             texto: 'O que fazer com o texto? Escolha abaixo ou escreva…',
             emoji: 'Buscar emoji e símbolos…',
@@ -3145,13 +3266,13 @@ class Lancador {
             return;
         }
         const rec = this._rec = {proc, path, t0: GLib.get_monotonic_time()};
-        this._setFixState('rec', 'Ouvindo… fale e aperte Alt+V para terminar');
+        this._setFixState('rec', `Ouvindo… fale e aperte ${keyLabel('ditado', '+')} para terminar`);
         rec.tick = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
             if (this._rec !== rec)
                 return GLib.SOURCE_REMOVE;
             const secs = Math.floor((GLib.get_monotonic_time() - rec.t0) / 1e6);
             if (this._fixLabel)
-                this._fixLabel.text = `Ouvindo… ${secs} s · Alt+V para terminar`;
+                this._fixLabel.text = `Ouvindo… ${secs} s · ${keyLabel('ditado', '+')} para terminar`;
             if (secs >= 90) { // limite de segurança
                 this._stopDictation(true);
                 return GLib.SOURCE_REMOVE;
@@ -3188,7 +3309,7 @@ class Lancador {
                 ct.insert_text(piece, pos);
                 this._setFixState(null);
             } else {
-                this._setFixState('error', 'Não entendi nada. Tente de novo (Alt+V).');
+                this._setFixState('error', `Não entendi nada. Tente de novo (${keyLabel('ditado', '+')}).`);
             }
         } catch (e) {
             if (this._panel)
@@ -3214,7 +3335,7 @@ class Lancador {
             }));
         items.push({
             id: 'cbtx:pin', data: h, icon: 'view-pin-symbolic', score: 0,
-            title: h.fixado ? 'Desafixar do topo' : 'Fixar no topo (não some com o tempo)', subtitle: 'Ctrl+P',
+            title: h.fixado ? 'Desafixar do topo' : 'Fixar no topo (não some com o tempo)', subtitle: keyLabel('fixar', '+'),
             hint: 'Aplicar', keepOpen: true, run: () => this._togglePin(h),
         });
         return items;
@@ -3305,7 +3426,7 @@ class Lancador {
             }
         }
         if (!text) {
-            Main.notify('Clippit', 'Selecione (ou copie) um texto e aperte Alt+A.');
+            Main.notify('Clippit', `Selecione (ou copie) um texto e aperte ${keyLabel('acoes', '+')}.`);
             return;
         }
         if (this._panel && !fromLauncher)
@@ -3327,7 +3448,7 @@ class Lancador {
 
     _textActionItems(q) {
         if (!this._selText)
-            return [{id: 'tx-vazio', title: 'Selecione um texto em qualquer app e aperte Alt+A', subtitle: '',
+            return [{id: 'tx-vazio', title: `Selecione um texto em qualquer app e aperte ${keyLabel('acoes', '+')}`, subtitle: '',
                 icon: 'edit-select-all-symbolic', score: 0, keepOpen: true, run: () => {}}];
         const preview = this._selText.replace(/\s+/g, ' ').slice(0, 70);
         const section = `Texto ${this._selFrom}: “${preview}${this._selText.length > 70 ? '…' : ''}”`;
@@ -3418,7 +3539,7 @@ class Lancador {
             this._txLabel.clutter_text.set_markup(tx.error ? esc(shown) : mdToMarkup(shown));
         this._chatBox.add_child(this._txLabel);
         this._setFooter('Texto selecionado', 'edit-select-all-symbolic', tx.pending ? [{label: 'Escrevendo…'}]
-            : [{label: 'Colar no lugar', key: '↵'}, {label: 'Copiar', key: 'Ctrl ↵'}, {label: 'Voltar', key: '⌫'}]);
+            : [{label: 'Colar no lugar', key: '↵'}, {label: 'Copiar', key: keyLabel('copiar')}, {label: 'Voltar', key: '⌫'}]);
     }
 
     // ---- Snippets (;gatilho) ------------------------------------------------
@@ -3636,7 +3757,8 @@ class Lancador {
         cur.tile.set_style(LSTYLE.tileOn);
         const pinned = this._emojiPrefs().fixados.includes(cur.x.e);
         this._setFooter(`${cur.x.e}  ${cur.x.desc}`, 'face-smile-symbolic', [{label: 'Colar', key: '↵'},
-            {label: 'Copiar', key: 'Ctrl ↵'}, {label: pinned ? 'Desafixar' : 'Fixar', key: 'Ctrl P'}]);
+            {label: 'Copiar', key: keyLabel('copiar')}, {label: pinned ? 'Desafixar' : 'Fixar', key: keyLabel('fixar')},
+            {label: 'Categoria', key: keyLabel('categoria')}]);
         if (scroll) {
             GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
                 const adj = this._chatScrollBox?.vadjustment;
@@ -3656,10 +3778,27 @@ class Lancador {
     }
 
     _emojiKey(sym, ev) {
-        const ctrl = (ev.get_state() & Clutter.ModifierType.CONTROL_MASK) !== 0;
+        const copy = modIs(ev, 'copiar');
         const shift = (ev.get_state() & Clutter.ModifierType.SHIFT_MASK) !== 0;
         const flat = this._emojiFlat ?? [];
         const cur = flat[this._emojiSel];
+        if (cur && keyIs(ev, 'fixar')) {
+            const p = this._emojiPrefs();
+            p.fixados = p.fixados.includes(cur.x.e) ? p.fixados.filter(e => e !== cur.x.e) : [...p.fixados, cur.x.e];
+            this._saveEmojiPrefs();
+            this._render();
+            return true;
+        }
+        if (keyIs(ev, 'categoria', true)) {
+            // Troca de categoria (com Shift volta).
+            const cats = this._emojiCats();
+            const i = cats.indexOf(this._emojiCat ?? 'Sorrisos e emoções');
+            this._emojiCat = cats[(i + (shift || sym === Clutter.KEY_ISO_Left_Tab ? cats.length - 1 : 1)) % cats.length];
+            this._emojiSel = 0;
+            this._entry.text = '';
+            this._render();
+            return true;
+        }
         const moveRow = d => {
             if (!cur)
                 return;
@@ -3683,28 +3822,7 @@ class Lancador {
         case Clutter.KEY_Return:
         case Clutter.KEY_KP_Enter:
         case Clutter.KEY_ISO_Enter:
-            this._emojiUse(ctrl);
-            return true;
-        case Clutter.KEY_Tab:
-        case Clutter.KEY_ISO_Left_Tab: {
-            const cats = this._emojiCats();
-            const i = cats.indexOf(this._emojiCat ?? 'Sorrisos e emoções');
-            this._emojiCat = cats[(i + (shift || sym === Clutter.KEY_ISO_Left_Tab ? cats.length - 1 : 1)) % cats.length];
-            this._emojiSel = 0;
-            this._entry.text = '';
-            this._render();
-            return true;
-        }
-        case Clutter.KEY_p:
-        case Clutter.KEY_P:
-            if (!ctrl || !cur)
-                return false;
-            {
-                const p = this._emojiPrefs();
-                p.fixados = p.fixados.includes(cur.x.e) ? p.fixados.filter(e => e !== cur.x.e) : [...p.fixados, cur.x.e];
-                this._saveEmojiPrefs();
-                this._render();
-            }
+            this._emojiUse(copy);
             return true;
         }
         return false;
@@ -4454,7 +4572,7 @@ class Lancador {
             y_align: Clutter.ActorAlign.CENTER}));
         head.add_child(new St.Label({text: 'Área de transferência', style: LSTYLE.sideTitle, x_expand: true,
             y_align: Clutter.ActorAlign.CENTER}));
-        head.add_child(keycap('Alt C'));
+        head.add_child(keycap(keyLabel('lado')));
         side.add_child(head);
         this._sideScroll = new St.ScrollView({
             hscrollbar_policy: St.PolicyType.NEVER, vscrollbar_policy: St.PolicyType.AUTOMATIC,
@@ -4517,11 +4635,11 @@ class Lancador {
                 this._sideList.add_child(row);
                 return row;
             });
-            this._sideFootBar.set('', 'edit-paste-symbolic', [{label: 'Colar no campo', key: '↵'}, {label: 'Voltar', key: 'Tab'}]);
+            this._sideFootBar.set('', 'edit-paste-symbolic', [{label: 'Colar no campo', key: '↵'}, {label: 'Voltar', key: keyLabel('transformar')}]);
             return;
         }
-        this._sideFootBar.set('', 'edit-paste-symbolic', [{label: 'Colar', key: '↵'}, {label: 'Transformar', key: 'Tab'},
-            {label: 'Fixar', key: 'Ctrl P'}]);
+        this._sideFootBar.set('', 'edit-paste-symbolic', [{label: 'Colar', key: '↵'}, {label: 'Transformar', key: keyLabel('transformar')},
+            {label: 'Fixar', key: keyLabel('fixar')}]);
         if (!items.length)
             this._sideList.add_child(emptyState('clipboard-list', '#f97316', 'Nada copiado ainda', 'O que você copiar aparece aqui.'));
         this._sideRows = items.map((h, i) => {
@@ -4811,18 +4929,17 @@ class Lancador {
 
     _onKey(ev) {
         const sym = ev.get_key_symbol();
-        const ctrl = (ev.get_state() & Clutter.ModifierType.CONTROL_MASK) !== 0;
-        const alt = (ev.get_state() & Clutter.ModifierType.MOD1_MASK) !== 0;
-        // Alt+V: ditado (fala a pergunta).
-        if (alt && (sym === Clutter.KEY_v || sym === Clutter.KEY_V)) {
+        const copy = modIs(ev, 'copiar');
+        // Ditado (fala a pergunta).
+        if (keyIs(ev, 'ditado')) {
             if (this._view !== 'ia')
                 this._enterView('ia');
             this._toggleDictation();
             return Clutter.EVENT_STOP;
         }
-        // Alt+C (atalho geral do Clippit): no histórico fecha; nas outras
+        // Atalho da área de transferência (padrão Alt+C): no histórico fecha; nas outras
         // telas abre/fecha a área de transferência ao lado.
-        if (alt && (sym === Clutter.KEY_c || sym === Clutter.KEY_C)) {
+        if (keyIs(ev, 'lado')) {
             if (this._isHistory())
                 this._close();
             else
@@ -4854,27 +4971,27 @@ class Lancador {
                 if (this._sideTx)
                     this._sideApplyTx(TEXT_TRANSFORMS[this._sideSel]);
                 else
-                    this._sideUse(ctrl);
+                    this._sideUse(copy);
                 return Clutter.EVENT_STOP;
             }
-            if (sym === Clutter.KEY_Tab) {
+            if (keyIs(ev, 'transformar')) {
                 const h = this._sideItems?.[this._sideSel];
                 this._sideTx = this._sideTx ? null : h ?? null;
                 this._sideSel = this._sideTx ? 0 : Math.max(0, this._sideItems.indexOf(h));
                 this._paintSide();
                 return Clutter.EVENT_STOP;
             }
-            if (ctrl && (sym === Clutter.KEY_p || sym === Clutter.KEY_P) && !this._sideTx) {
+            if (keyIs(ev, 'fixar') && !this._sideTx) {
                 const h = this._sideItems?.[this._sideSel];
                 if (h)
                     this._togglePin(h);
                 return Clutter.EVENT_STOP;
             }
         }
-        if (this._fix && ((alt && [Clutter.KEY_s, Clutter.KEY_S, Clutter.KEY_o, Clutter.KEY_O].includes(sym)) ||
+        if (this._fix && ((keyIs(ev, 'aplicar') || keyIs(ev, 'sugestoes')) ||
             sym === Clutter.KEY_Tab || sym === Clutter.KEY_ISO_Left_Tab) && this._applyFix())
             return Clutter.EVENT_STOP;
-        if (this._isHistory() && sym === Clutter.KEY_Tab) {
+        if (this._isHistory() && keyIs(ev, 'transformar')) {
             // Tab: transformar o item (MAIÚSCULAS, JSON, links, traduzir…); Tab de novo volta.
             const h = this._shown?.[this._sel]?.data;
             this._cbTx = this._cbTx ? null : h?.tipo ? h : null;
@@ -4882,29 +4999,30 @@ class Lancador {
             this._refresh();
             return Clutter.EVENT_STOP;
         }
-        if (this._isHistory() && this._cbTx && sym === Clutter.KEY_BackSpace && !this._entry.text) {
+        const back = keyIs(ev, 'voltar') && (!this._entry.text || hasMods('voltar'));
+        if (this._isHistory() && this._cbTx && back) {
             this._cbTx = null;
             this._refresh();
             return Clutter.EVENT_STOP;
         }
-        if (this._isHistory() && ctrl && (sym === Clutter.KEY_p || sym === Clutter.KEY_P)) {
+        if (this._isHistory() && keyIs(ev, 'fixar')) {
             const h = this._cbTx ?? this._shown?.[this._sel]?.data;
             if (h?.tipo)
                 this._togglePin(h);
             return Clutter.EVENT_STOP;
         }
-        if (this._isHistory() && ctrl && (sym === Clutter.KEY_Delete || sym === Clutter.KEY_KP_Delete)) {
+        if (this._isHistory() && keyIs(ev, 'apagar')) {
             this._deleteHistory(this._shown?.[this._sel]);
             return Clutter.EVENT_STOP;
         }
-        if (this._isHistory() && ctrl && sym === Clutter.KEY_space) {
+        if (this._isHistory() && keyIs(ev, 'ampliar')) {
             this._toggleZoom();
             return Clutter.EVENT_STOP;
         }
         if (this._view === 'texto' && this._tx) {
             if ([Clutter.KEY_Return, Clutter.KEY_KP_Enter, Clutter.KEY_ISO_Enter].includes(sym)) {
                 if (!this._tx.pending && this._tx.text) {
-                    if (ctrl) {
+                    if (copy) {
                         St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, this._tx.text);
                         this._consumed = true;
                         this._close();
@@ -4915,32 +5033,32 @@ class Lancador {
                 }
                 return Clutter.EVENT_STOP;
             }
-            if (sym === Clutter.KEY_BackSpace && !this._entry.text) {
+            if (back) {
                 this._tx = null; // volta para a lista de ações
                 this._render();
                 return Clutter.EVENT_STOP;
             }
         }
-        if (sym === Clutter.KEY_BackSpace && !this._entry.text && this._view !== 'root') {
+        if (back && this._view !== 'root') {
             this._enterView('root');
             return Clutter.EVENT_STOP;
         }
-        if (this._view === 'ia' && ctrl && (sym === Clutter.KEY_h || sym === Clutter.KEY_H)) {
+        if (this._view === 'ia' && keyIs(ev, 'conversas')) {
             this._convs = null;
             this._enterView('conversas');
             return Clutter.EVENT_STOP;
         }
-        if (this._view === 'conversas' && ctrl && (sym === Clutter.KEY_Delete || sym === Clutter.KEY_KP_Delete)) {
+        if (this._view === 'conversas' && keyIs(ev, 'apagar')) {
             this._deleteConv(this._shown?.[this._sel]);
             return Clutter.EVENT_STOP;
         }
-        if (this._view === 'ia' && ctrl && (sym === Clutter.KEY_n || sym === Clutter.KEY_N)) {
-            this._chat = []; // nova conversa (a anterior fica salva em Ctrl+H)
+        if (this._view === 'ia' && keyIs(ev, 'nova_conversa')) {
+            this._chat = []; // nova conversa (a anterior fica salva em «conversas»)
             this._chatId = null;
             this._render();
             return Clutter.EVENT_STOP;
         }
-        if (sym === Clutter.KEY_Escape) {
+        if (keyIs(ev, 'fechar')) {
             // IA respondendo: o primeiro Esc só para a resposta.
             if (this._view === 'ia' && this._chat?.some(m => m.pending)) {
                 this._stopAsk();
@@ -4981,7 +5099,7 @@ class Lancador {
                     this._send(q);
                 } else if (last?.confirm && !last.confirmState) {
                     this._confirm(last, true);
-                } else if (last && ctrl && last.sources?.length) {
+                } else if (last && copy && last.sources?.length) {
                     Gio.AppInfo.launch_default_for_uri(last.sources[0], global.create_app_launch_context(0, -1));
                     this._close();
                 } else if (last?.text) {
@@ -4994,7 +5112,7 @@ class Lancador {
             }
             const item = this._shown?.[this._sel];
             if (item)
-                this._activate(item, ctrl);
+                this._activate(item, copy);
             return Clutter.EVENT_STOP;
         }
         return Clutter.EVENT_PROPAGATE;
@@ -5326,10 +5444,10 @@ class Lancador {
                 subtitle: 'Tudo o que você copiou, com prévia', words: ['historico', 'clipboard', 'copiados', 'area de transferencia', 'cb'],
                 hint: 'Abrir', keepOpen: true, run: () => this._enterView('historico')},
             {id: 'cmd:ia', key: 'cmd:ia', icon: 'starred-symbolic', title: 'Perguntar à IA',
-                subtitle: 'Vê o sistema, pesquisa, cotações, clima · Alt+I', words: ['ia', 'ai', 'chat', 'pergunta', 'assistente'],
+                subtitle: `Vê o sistema, pesquisa, cotações, clima · ${keyLabel('ia', '+')}`, words: ['ia', 'ai', 'chat', 'pergunta', 'assistente'],
                 hint: 'Abrir', keepOpen: true, run: () => this._enterView('ia')},
             {id: 'cmd:conversas', key: 'cmd:conversas', icon: 'user-available-symbolic', title: 'Conversas anteriores com a IA',
-                subtitle: 'Retomar uma conversa · Ctrl+H na IA', words: ['conversas', 'historico ia', 'chats'],
+                subtitle: `Retomar uma conversa · ${keyLabel('conversas', '+')} na IA`, words: ['conversas', 'historico ia', 'chats'],
                 hint: 'Abrir', keepOpen: true, run: () => {
                     this._convs = null;
                     this._enterView('conversas');
@@ -5346,7 +5464,7 @@ class Lancador {
                 subtitle: 'Digite : e o nome (ex.: :coração)', words: ['emoji', 'emoticon', 'simbolo'],
                 hint: 'Abrir', keepOpen: true, run: () => this._enterView('emoji')},
             {id: 'cmd:acoes', key: 'cmd:acoes', icon: 'edit-select-all-symbolic', title: 'Ações no texto selecionado',
-                subtitle: 'Resumir, traduzir, corrigir… · Alt+A', words: ['resumir', 'traduzir', 'texto selecionado'],
+                subtitle: `Resumir, traduzir, corrigir… · ${keyLabel('acoes', '+')}`, words: ['resumir', 'traduzir', 'texto selecionado'],
                 hint: 'Abrir', keepOpen: true, run: () => this.openTextActions(true)},
             {id: 'cmd:lock', key: 'cmd:lock', icon: 'system-lock-screen-symbolic', title: 'Bloquear tela', subtitle: 'Sistema',
                 words: ['travar', 'lock', 'bloquear'], hint: 'Executar', run: () => Main.screenShield.lock(true)},
@@ -5366,7 +5484,7 @@ class Lancador {
                     Main.notify('Clippit', 'Lixeira esvaziada.');
                 }},
             {id: 'cmd:game', key: 'cmd:game', icon: 'input-gaming-symbolic', title: 'Modo jogo (liga/desliga)',
-                subtitle: 'Tira a IA da placa de vídeo · Ctrl+Shift+E', words: ['jogo', 'game', 'liberar placa', 'vram'],
+                subtitle: `Tira a IA da placa de vídeo · ${keyLabel('modo_jogo', '+')}`, words: ['jogo', 'game', 'liberar placa', 'vram'],
                 hint: 'Executar', run: () => this._c._assistente?._toggleGameMode()},
             {id: 'cmd:clippit', key: 'cmd:clippit', icon: 'preferences-system-symbolic', title: 'Configurações do Clippit',
                 subtitle: 'Corretor, assistente, aprendizado', words: ['clippit', 'painel', 'dashboard'], hint: 'Abrir',
@@ -5441,7 +5559,7 @@ class Lancador {
             this._chatEmpty.get_child()?.destroy();
             this._chatEmpty.set_child(emptyState('sparkles', '#3b82f6', 'Pergunte qualquer coisa',
                 'A IA vê o seu computador, cotações, clima, notícias e a web, e lembra da conversa.\n' +
-                '@ anexa app, arquivo ou print · Alt+V para falar'));
+                `@ anexa app, arquivo ou print · ${keyLabel('ditado', '+')} para falar`));
             this._answerScroll.hide();
             this._chatEmpty.show();
         }
@@ -5500,10 +5618,10 @@ class Lancador {
         const busy = this._chat.some(m => m.pending);
         const last = [...this._chat].reverse().find(m => m.role === 'assistant' && !m.pending);
         const asking = last?.confirm && !last.confirmState;
-        this._setFooter('IA local', 'starred-symbolic', busy ? [{label: 'Parar', key: 'Esc', run: () => this._stopAsk()}]
-            : asking ? [{label: 'Rodar', key: '↵'}, {label: 'Cancelar', key: 'Esc'}]
-                : [{label: 'Enviar', key: '↵'}, last?.sources?.length && {label: 'Abrir fonte', key: 'Ctrl ↵'},
-                    {label: 'Nova', key: 'Ctrl N'}, {label: 'Conversas', key: 'Ctrl H'}, {label: 'Copiados', key: 'Alt C'}]);
+        this._setFooter('IA local', 'starred-symbolic', busy ? [{label: 'Parar', key: keyLabel('fechar'), run: () => this._stopAsk()}]
+            : asking ? [{label: 'Rodar', key: '↵'}, {label: 'Cancelar', key: keyLabel('fechar')}]
+                : [{label: 'Enviar', key: '↵'}, last?.sources?.length && {label: 'Abrir fonte', key: keyLabel('copiar')},
+                    {label: 'Nova', key: keyLabel('nova_conversa')}, {label: 'Conversas', key: keyLabel('conversas')}, {label: 'Copiados', key: keyLabel('lado')}]);
         this._scrollChatToEnd();
     }
 
@@ -5971,18 +6089,18 @@ class Lancador {
         const it = this._shown?.[this._sel];
         const cbMode = this._isHistory();
         if (cbMode && this._cbTx)
-            this._setFooter('Transformar', 'edit-paste-symbolic', [{label: 'Colar', key: '↵'}, {label: 'Copiar', key: 'Ctrl ↵'},
-                {label: 'Voltar', key: 'Tab'}]);
+            this._setFooter('Transformar', 'edit-paste-symbolic', [{label: 'Colar', key: '↵'}, {label: 'Copiar', key: keyLabel('copiar')},
+                {label: 'Voltar', key: keyLabel('transformar')}]);
         else if (cbMode)
-            this._setFooter('Histórico', 'edit-paste-symbolic', [{label: 'Colar', key: '↵'}, {label: 'Copiar', key: 'Ctrl ↵'},
-                {label: 'Transformar', key: 'Tab'}, {label: 'Fixar', key: 'Ctrl P'}, {label: 'Apagar', key: 'Ctrl Del'},
-                {label: 'Ampliar', key: 'Ctrl Espaço'}]);
+            this._setFooter('Histórico', 'edit-paste-symbolic', [{label: 'Colar', key: '↵'}, {label: 'Copiar', key: keyLabel('copiar')},
+                {label: 'Transformar', key: keyLabel('transformar')}, {label: 'Fixar', key: keyLabel('fixar')}, {label: 'Apagar', key: keyLabel('apagar')},
+                {label: 'Ampliar', key: keyLabel('ampliar')}]);
         else if (this._view === 'conversas')
-            this._setFooter('Conversas', 'user-available-symbolic', it ? [{label: 'Abrir', key: '↵'}, {label: 'Apagar', key: 'Ctrl Del'}] : []);
+            this._setFooter('Conversas', 'user-available-symbolic', it ? [{label: 'Abrir', key: '↵'}, {label: 'Apagar', key: keyLabel('apagar')}] : []);
         else if (it)
             this._setFooter(this._view === 'texto' ? 'Texto selecionado' : 'Clippit',
                 this._view === 'texto' ? 'edit-select-all-symbolic' : 'edit-find-symbolic',
-                [{label: it.hint ?? 'Abrir', key: '↵'}, it.alt && {label: 'Ação extra', key: 'Ctrl ↵'},
+                [{label: it.hint ?? 'Abrir', key: '↵'}, it.alt && {label: 'Ação extra', key: keyLabel('copiar')},
                     this._view === 'texto' && {label: 'Voltar', key: '⌫'}]);
         else
             this._setFooter('Clippit', 'edit-find-symbolic', []);
@@ -6602,7 +6720,7 @@ export class Corretor {
 
         // Rodapé padrão (o mesmo do lançador).
         const foot = makeFooter();
-        foot.set('Corretor', 'tools-check-spelling-symbolic', [{label: 'Corrigir tudo', key: 'Alt S'},
+        foot.set('Corretor', 'tools-check-spelling-symbolic', [{label: 'Corrigir tudo', key: keyLabel('aplicar')},
             {label: 'Fechar', key: 'Esc'}]);
         panel.add_child(foot.actor);
 
@@ -6674,7 +6792,7 @@ export class Corretor {
         const panel = Boolean(this._panel);
         const issues = Boolean(this._badge?.visible) && this._state === 'issues';
         const applyAll = () => this._apply(this._pending());
-        this._setKey('Escape', panel, () => this._dismissPanel());
+        this._setKey('Escape', panel, () => this._dismissPanel(), 'escape');
         // Alt+O: abre o painel (ou verifica e abre); com ele aberto, fecha.
         const badgeUp = Boolean(this._badge?.visible) && ['issues', 'idle', 'error'].includes(this._state);
         // Atalho trocado no painel: solta o antigo antes de pegar o novo.
@@ -6684,37 +6802,14 @@ export class Corretor {
                 this._setKey(k, false);
         }
         if (open !== 'desligado')
-            this._setKey(open, panel || badgeUp, () => this._onBadgeClicked());
+            this._setKey(open, panel || badgeUp, () => this._onBadgeClicked(), 'sugestoes');
         if (all !== 'desligado')
-            this._setKey(all, panel || issues, applyAll);
-        this._setKey('<Control>s', panel || (issues && !SAVE_APPS.test(this._appName())), applyAll);
+            this._setKey(all, panel || issues, applyAll, 'aplicar');
+        this._setKey('<Control>s', panel || (issues && !SAVE_APPS.test(this._appName())), applyAll, 'ctrl-s');
     }
 
-    _setKey(accel, want, fn) {
-        this._keyGrabs ??= new Map();
-        const grab = this._keyGrabs.get(accel);
-        if (want && !grab) {
-            const action = global.display.grab_accelerator(accel, Meta.KeyBindingFlags.NONE);
-            if (action === Meta.KeyBindingAction.NONE) {
-                console.log(`${TAG} não consegui reservar a tecla ${accel}`);
-                return;
-            }
-            const name = Meta.external_binding_name_for_action(action);
-            Main.wm.allowKeybinding(name, Shell.ActionMode.ALL);
-            this._keyGrabs.set(accel, {action, name, fn});
-        } else if (!want && grab) {
-            global.display.ungrab_accelerator(grab.action);
-            Main.wm.allowKeybinding(grab.name, Shell.ActionMode.NONE);
-            this._keyGrabs.delete(accel);
-        }
-        if (!this._accelId && this._keyGrabs.size) {
-            this._accelId = global.display.connect('accelerator-activated', (_d, action) => {
-                for (const g of this._keyGrabs.values()) {
-                    if (g.action === action)
-                        g.fn();
-                }
-            });
-        }
+    _setKey(accel, want, fn, id = null, quiet = false) {
+        return setGrab(this, '_keyGrabs', accel, want, fn, id, 'a tecla ', quiet);
     }
 
     _ungrabKeys() {

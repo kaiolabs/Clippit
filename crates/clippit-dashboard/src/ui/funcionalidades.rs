@@ -22,8 +22,8 @@ const GRUPOS: &[(&str, &[Feature])] = &[
             teclas: &["{lancador}"],
             passos: &[
                 "Aperte {lancador} e digite o nome de um app, de um arquivo ou um site.",
-                "Enter abre. Esc fecha. Clicar fora volta para a janela de trás sem perder o que você digitou.",
-                "A seta ← (ou Backspace com o campo vazio) volta para o início.",
+                "Enter abre. {fechar} fecha. Clicar fora volta para a janela de trás sem perder o que você digitou.",
+                "{voltar} (com o campo vazio) volta para o início.",
             ],
         },
         Feature {
@@ -49,19 +49,20 @@ const GRUPOS: &[(&str, &[Feature])] = &[
         Feature {
             titulo: "Emoji e símbolos",
             resumo: "Grade de emoji com busca em português",
-            teclas: &[":"],
+            teclas: &["{emoji}", ":"],
             passos: &[
-                "No lançador, digite : e o nome (\":coração\", \":fogo\") ou procure \"emoji\".",
-                "Enter cola o emoji na janela de trás. Os que você mais usa aparecem primeiro.",
+                "{emoji} abre a grade direto. Ou, no lançador, digite : e o nome (\":coração\", \":fogo\").",
+                "Enter cola o emoji na janela de trás; {copiar} só copia. Os que você mais usa aparecem primeiro.",
+                "{categoria} troca de categoria (com Shift volta); {fixar} fixa o emoji no topo.",
             ],
         },
         Feature {
             titulo: "Snippets (textos prontos)",
             resumo: "Um gatilho curto vira um texto inteiro, em qualquer campo",
-            teclas: &[";"],
+            teclas: &["{snippets}", ";"],
             passos: &[
                 "Em qualquer campo de texto, digite o gatilho (ex.: ;email) e ele vira o texto salvo.",
-                "No lançador, ; mostra a lista de snippets.",
+                "{snippets} abre a lista direto; no lançador, digitar ; faz o mesmo.",
                 "Para criar: peça à IA (\"cria um snippet ;pix com a minha chave\"). Aceita {data}, {hora} e {area} (o que está copiado).",
             ],
         },
@@ -73,16 +74,16 @@ const GRUPOS: &[(&str, &[Feature])] = &[
             teclas: &["{historico}"],
             passos: &[
                 "{historico} abre o histórico em qualquer lugar. Digite para filtrar.",
-                "Enter cola na janela de trás; Ctrl+Enter só copia.",
-                "Ctrl+P fixa no topo (não some com o tempo); Ctrl+Del apaga; Ctrl+Espaço amplia a prévia.",
+                "Enter cola na janela de trás; {copiar} só copia.",
+                "{fixar} fixa no topo (não some com o tempo); {apagar} apaga; {ampliar} amplia a prévia.",
             ],
         },
         Feature {
             titulo: "Transformar antes de colar",
             resumo: "MAIÚSCULAS, uma linha só, só os números e mais",
-            teclas: &["Tab"],
+            teclas: &["{transformar}"],
             passos: &[
-                "No histórico, escolha o item e aperte Tab.",
+                "No histórico, escolha o item e aperte {transformar}.",
                 "Escolha a transformação; o resultado é colado na janela de trás.",
             ],
         },
@@ -104,9 +105,9 @@ const GRUPOS: &[(&str, &[Feature])] = &[
             teclas: &["{ia}"],
             passos: &[
                 "{ia} abre o chat (ou digite ? no lançador).",
-                "@ anexa um app, um arquivo ou um print; Alt+V fala a pergunta.",
-                "Ctrl+N começa outra conversa; Ctrl+H mostra as anteriores.",
-                "Esc para a resposta no meio; o segundo Esc fecha.",
+                "@ anexa um app, um arquivo ou um print; {ditado} fala a pergunta.",
+                "{nova_conversa} começa outra conversa; {conversas} mostra as anteriores.",
+                "{fechar} para a resposta no meio; o segundo {fechar} fecha.",
             ],
         },
         Feature {
@@ -144,8 +145,8 @@ const GRUPOS: &[(&str, &[Feature])] = &[
         Feature {
             titulo: "Ditado",
             resumo: "Fale em vez de digitar",
-            teclas: &["Alt+V"],
-            passos: &["No chat da IA, aperte Alt+V, fale e aperte de novo. A voz vira texto no seu computador."],
+            teclas: &["{ditado}"],
+            passos: &["No chat da IA, aperte {ditado}, fale e aperte de novo. A voz vira texto no seu computador."],
         },
     ]),
     ("Escrita", &[
@@ -221,7 +222,7 @@ fn resolve(t: &str) -> String {
     if out.contains("{historico}") {
         out = out.replace("{historico}", &history_key());
     }
-    for (id, ..) in super::atalhos::SHORTCUTS {
+    for (id, ..) in super::atalhos::all() {
         let tag = format!("{{{id}}}");
         if out.contains(&tag) {
             out = out.replace(&tag, &super::atalhos::pretty(&super::atalhos::current(id)));
