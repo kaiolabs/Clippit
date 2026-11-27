@@ -36,17 +36,18 @@ def doc_keys(section):
 def compare_quickshell_shortcuts(extension):
     """Quickshell's default shortcuts (Conf.qml) must match the extension's (core.js)."""
     conf = (ROOT / "quickshell/services/Conf.qml").read_text(encoding="utf-8")
-    quickshell = dict(
-        re.findall(r'(\w+):\s*"(<[^"]+|\w+)"', conf.split("shortcuts: ({", 1)[1].split("})", 1)[0])
-    )
-    gnome = dict(
-        re.findall(r"(\w+):\s*'([^']+)'", extension.split("const SHORTCUTS = {", 1)[1].split("};", 1)[0])
-    )
+
+    def table(text, marker, end):
+        return dict(re.findall(r"(\w+):\s*[\"']([^\"']+)[\"']", text.split(marker, 1)[1].split(end, 1)[0]))
+
     failed = False
-    for id_ in sorted(set(quickshell) | set(gnome)):
-        if quickshell.get(id_) != gnome.get(id_):
-            print(f"default shortcut differs: {id_}: quickshell={quickshell.get(id_)} extension={gnome.get(id_)}")
-            failed = True
+    for name, marker in (("shortcuts", "const SHORTCUTS = {"), ("innerShortcuts", "const INNER_SHORTCUTS = {")):
+        quickshell = table(conf, f"{name}: ({{", "})")
+        gnome = table(extension, marker, "};")
+        for id_ in sorted(set(quickshell) | set(gnome)):
+            if quickshell.get(id_) != gnome.get(id_):
+                print(f"default shortcut differs: {id_}: quickshell={quickshell.get(id_)} extension={gnome.get(id_)}")
+                failed = True
     return failed
 
 
@@ -70,7 +71,9 @@ def main():
         if p.is_file()
     )
     extension = (ROOT / "gnome-extension/clippit-corretor@clippit/core.js").read_text(encoding="utf-8")
-    shortcut_ids = re.findall(r"(\w+):\s*'<", extension.split("const SHORTCUTS = {", 1)[1].split("};", 1)[0])
+    shortcut_ids = []
+    for table in ("const SHORTCUTS = {", "const INNER_SHORTCUTS = {"):
+        shortcut_ids += re.findall(r"(\w+):\s*'[^']+'", extension.split(table, 1)[1].split("};", 1)[0])
     failed |= compare_quickshell_shortcuts(extension)
     correct = (ROOT / "scripts/clippit-correct").read_text(encoding="utf-8")
     ai_tasks = re.findall(r'^    "(\w+)":', correct.split("AI_TASKS = {", 1)[1].split("}", 1)[0], re.M)

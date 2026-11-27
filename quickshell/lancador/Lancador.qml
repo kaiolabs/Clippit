@@ -116,6 +116,8 @@ Scope {
         }, true);
         Atalhos.set(l, Conf.keyOf("ia"), true, () => l.toggleView("ia"), true);
         Atalhos.set(l, Conf.keyOf("acoes"), true, () => l.openTextActions(false), true);
+        Atalhos.set(l, Conf.keyOf("emoji"), true, () => l.toggleView("emoji"), true);
+        Atalhos.set(l, Conf.keyOf("snippets"), true, () => l.toggleSnippets(), true);
         Atalhos.set(l, Conf.value("atalho_historico", "<Alt>c"), true, () => l.toggleView("historico"), true);
     }
 
@@ -153,7 +155,27 @@ Scope {
             enterView(v);
     }
 
-    function openLauncher(v) {
+    // The shortcut for snippets: opens the launcher already on ";" (the trigger list).
+    function toggleSnippets() {
+        const showing = open && view === "root" && query.startsWith(";");
+        if (open && !grabbed) {
+            wake();
+            if (showing)
+                return;
+        } else if (showing) {
+            close();
+            return;
+        }
+        if (!open) {
+            openLauncher("root", ";");
+            return;
+        }
+        if (view !== "root")
+            enterView("root");
+        setEntry(";", -1);
+    }
+
+    function openLauncher(v, text) {
         if (open)
             return;
         const s = saved;
@@ -185,7 +207,9 @@ Scope {
                 l.winList = ws;
                 l.refresh(true);
             });
-            if (fresh) {
+            if (text) {
+                l.setEntry(text, -1);
+            } else if (fresh) {
                 if (s.view !== "root")
                     l.enterView(s.view);
                 l.setEntry(s.text, -1);

@@ -572,35 +572,35 @@ Scope {
         if (l.view === "ia") {
             const lastA = l.chat.slice().reverse().find(m => m.role === "assistant" && !m.pending);
             const asking = lastA && lastA.confirm && !lastA.confirmState;
-            return {where: "IA local", icon: "sparkles", actions: l.busyChat ? [{label: "Parar", key: "Esc", run: () => l.stopAsk()}]
-                : asking ? [{label: "Rodar", key: "↵"}, {label: "Cancelar", key: "Esc"}]
-                : [{label: "Enviar", key: "↵"}, lastA && lastA.sources && lastA.sources.length ? {label: "Abrir fonte", key: "Ctrl ↵"} : null,
-                    {label: "Nova", key: "Ctrl N"}, {label: "Conversas", key: "Ctrl H"}, {label: "Copiados", key: "Alt C"}]};
+            return {where: "IA local", icon: "sparkles", actions: l.busyChat ? [{label: "Parar", key: Conf.label("fechar"), run: () => l.stopAsk()}]
+                : asking ? [{label: "Rodar", key: "↵"}, {label: "Cancelar", key: Conf.label("fechar")}]
+                : [{label: "Enviar", key: "↵"}, lastA && lastA.sources && lastA.sources.length ? {label: "Abrir fonte", key: Conf.label("copiar")} : null,
+                    {label: "Nova", key: Conf.label("nova_conversa")}, {label: "Conversas", key: Conf.label("conversas")}, {label: "Copiados", key: Conf.label("lado")}]};
         }
         if (l.view === "texto" && l.tx)
             return {where: "Texto selecionado", icon: "wand-sparkles", actions: l.tx.pending ? [{label: "Escrevendo…"}]
-                : [{label: "Colar no lugar", key: "↵"}, {label: "Copiar", key: "Ctrl ↵"}, {label: "Voltar", key: "⌫"}]};
+                : [{label: "Colar no lugar", key: "↵"}, {label: "Copiar", key: Conf.label("copiar")}, {label: "Voltar", key: Conf.label("voltar")}]};
         if (l.view === "emoji") {
             const cur = emojiGridCurrent();
             if (!cur)
                 return {where: "Emoji", icon: "smile", actions: []};
             const pinned = l.emojiPrefs.fixados.indexOf(cur.e) >= 0;
-            return {where: cur.e + "  " + cur.desc, icon: "smile", actions: [{label: "Colar", key: "↵"}, {label: "Copiar", key: "Ctrl ↵"},
-                {label: pinned ? "Desafixar" : "Fixar", key: "Ctrl P"}]};
+            return {where: cur.e + "  " + cur.desc, icon: "smile", actions: [{label: "Colar", key: "↵"}, {label: "Copiar", key: Conf.label("copiar")},
+                {label: pinned ? "Desafixar" : "Fixar", key: Conf.label("fixar")}]};
         }
         if (l.isHistory && l.cbTx)
-            return {where: "Transformar", icon: "clipboard-list", actions: [{label: "Colar", key: "↵"}, {label: "Copiar", key: "Ctrl ↵"},
-                {label: "Voltar", key: "Tab"}]};
+            return {where: "Transformar", icon: "clipboard-list", actions: [{label: "Colar", key: "↵"}, {label: "Copiar", key: Conf.label("copiar")},
+                {label: "Voltar", key: Conf.label("transformar")}]};
         if (l.isHistory)
-            return {where: "Histórico", icon: "clipboard-list", actions: [{label: "Colar", key: "↵"}, {label: "Copiar", key: "Ctrl ↵"},
-                {label: "Transformar", key: "Tab"}, {label: "Fixar", key: "Ctrl P"}, {label: "Apagar", key: "Ctrl Del"},
-                {label: "Ampliar", key: "Ctrl Espaço"}]};
+            return {where: "Histórico", icon: "clipboard-list", actions: [{label: "Colar", key: "↵"}, {label: "Copiar", key: Conf.label("copiar")},
+                {label: "Transformar", key: Conf.label("transformar")}, {label: "Fixar", key: Conf.label("fixar")}, {label: "Apagar", key: Conf.label("apagar")},
+                {label: "Ampliar", key: Conf.label("ampliar")}]};
         if (l.view === "conversas")
-            return {where: "Conversas", icon: "messages-square", actions: it ? [{label: "Abrir", key: "↵"}, {label: "Apagar", key: "Ctrl Del"}] : []};
+            return {where: "Conversas", icon: "messages-square", actions: it ? [{label: "Abrir", key: "↵"}, {label: "Apagar", key: Conf.label("apagar")}] : []};
         if (it)
             return {where: l.view === "texto" ? "Texto selecionado" : "Clippit", icon: l.view === "texto" ? "wand-sparkles" : "search",
-                actions: [{label: it.hint || "Abrir", key: "↵"}, it.alt ? {label: "Ação extra", key: "Ctrl ↵"} : null,
-                    l.view === "texto" ? {label: "Voltar", key: "⌫"} : null]};
+                actions: [{label: it.hint || "Abrir", key: "↵"}, it.alt ? {label: "Ação extra", key: Conf.label("copiar")} : null,
+                    l.view === "texto" ? {label: "Voltar", key: Conf.label("voltar")} : null]};
         return {where: "Clippit", icon: "search", actions: []};
     }
 
@@ -615,20 +615,21 @@ Scope {
         const k = event.key;
         if (Quickshell.env("CLIPPIT_DEBUG"))
             console.log("clippit: tecla " + k + " mods " + event.modifiers);
-        const ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
-        const alt = (event.modifiers & Qt.AltModifier) !== 0;
         const shift = (event.modifiers & Qt.ShiftModifier) !== 0;
+        // The shortcuts the user can change (Settings → Atalhos) come from Conf, like core.js.
+        const copy = Conf.modIs(event, "copiar");
+        const back = Conf.keyIs(event, "voltar") && (!entry.text || Conf.hasMods("voltar"));
         const enter = k === Qt.Key_Return || k === Qt.Key_Enter;
         const stop = () => {
             event.accepted = true;
         };
-        if (alt && k === Qt.Key_V) {
+        if (Conf.keyIs(event, "ditado")) {
             if (l.view !== "ia")
                 l.enterView("ia");
             l.toggleDictation();
             return stop();
         }
-        if (alt && k === Qt.Key_C) {
+        if (Conf.keyIs(event, "lado")) {
             if (l.isHistory)
                 l.close();
             else
@@ -659,77 +660,77 @@ Scope {
                 if (l.sideTx)
                     l.sideApplyTx(Busca.TEXT_TRANSFORMS[l.sideSel]);
                 else
-                    l.sideUse(ctrl);
+                    l.sideUse(copy);
                 return stop();
             }
-            if (k === Qt.Key_Tab) {
+            if (Conf.keyIs(event, "transformar")) {
                 l.sideTab();
                 return stop();
             }
-            if (ctrl && k === Qt.Key_P && !l.sideTx) {
+            if (Conf.keyIs(event, "fixar") && !l.sideTx) {
                 const h = l.sideItems[l.sideSel];
                 if (h)
                     l.togglePin(h);
                 return stop();
             }
         }
-        if (l.fix && ((alt && (k === Qt.Key_S || k === Qt.Key_O)) || k === Qt.Key_Tab || k === Qt.Key_Backtab) && l.applyFix())
+        if (l.fix && (Conf.keyIs(event, "aplicar") || Conf.keyIs(event, "sugestoes") || k === Qt.Key_Tab || k === Qt.Key_Backtab) && l.applyFix())
             return stop();
-        if (l.isHistory && k === Qt.Key_Tab) {
+        if (l.isHistory && Conf.keyIs(event, "transformar")) {
             const h = l.shown[l.sel] ? l.shown[l.sel].data : null;
             l.cbTx = l.cbTx ? null : h && h.tipo ? h : null;
             l.sel = 0;
             l.refresh(false);
             return stop();
         }
-        if (l.isHistory && l.cbTx && k === Qt.Key_Backspace && !entry.text) {
+        if (l.isHistory && l.cbTx && back) {
             l.cbTx = null;
             l.refresh(false);
             return stop();
         }
-        if (l.isHistory && ctrl && k === Qt.Key_P) {
+        if (l.isHistory && Conf.keyIs(event, "fixar")) {
             const h = l.cbTx || (l.shown[l.sel] ? l.shown[l.sel].data : null);
             if (h && h.tipo)
                 l.togglePin(h);
             return stop();
         }
-        if (l.isHistory && ctrl && k === Qt.Key_Delete) {
+        if (l.isHistory && Conf.keyIs(event, "apagar")) {
             l.deleteHistory(l.shown[l.sel]);
             return stop();
         }
-        if (l.isHistory && ctrl && k === Qt.Key_Space) {
+        if (l.isHistory && Conf.keyIs(event, "ampliar")) {
             l.zoom = !l.zoom;
             return stop();
         }
         if (l.view === "texto" && l.tx) {
             if (enter) {
-                l.txKey(true, ctrl);
+                l.txKey(true, copy);
                 return stop();
             }
-            if (k === Qt.Key_Backspace && !entry.text) {
+            if (back) {
                 l.tx = null;
                 l.refresh(false);
                 return stop();
             }
         }
-        if (k === Qt.Key_Backspace && !entry.text && l.view !== "root") {
+        if (back && l.view !== "root") {
             l.enterView("root");
             return stop();
         }
-        if (l.view === "ia" && ctrl && k === Qt.Key_H) {
+        if (l.view === "ia" && Conf.keyIs(event, "conversas")) {
             l.convs = null;
             l.enterView("conversas");
             return stop();
         }
-        if (l.view === "conversas" && ctrl && k === Qt.Key_Delete) {
+        if (l.view === "conversas" && Conf.keyIs(event, "apagar")) {
             l.deleteConv(l.shown[l.sel]);
             return stop();
         }
-        if (l.view === "ia" && ctrl && k === Qt.Key_N) {
+        if (l.view === "ia" && Conf.keyIs(event, "nova_conversa")) {
             l.newChat();
             return stop();
         }
-        if (k === Qt.Key_Escape) {
+        if (Conf.keyIs(event, "fechar")) {
             // AI answering: the first Esc only stops the answer.
             if (l.view === "ia" && l.busyChat) {
                 l.stopAsk();
@@ -738,7 +739,7 @@ Scope {
             l.close();
             return stop();
         }
-        if (l.view === "emoji" && emojiKey(k, ctrl, shift, enter))
+        if (l.view === "emoji" && emojiKey(event, copy, shift, enter))
             return stop();
         if (l.view === "ia" && (k === Qt.Key_Down || k === Qt.Key_Up) && !entry.text.trim() && l.pendingChoice()) {
             l.moveChoice(l.pendingChoice(), k === Qt.Key_Down ? 1 : -1);
@@ -757,15 +758,16 @@ Scope {
                 return stop();
             }
             if (l.view === "ia") {
-                l.chatEnter(ctrl);
+                l.chatEnter(copy);
                 return stop();
             }
-            l.activate(l.shown[l.sel], ctrl);
+            l.activate(l.shown[l.sel], copy);
             return stop();
         }
     }
 
-    function emojiKey(k, ctrl, shift, enter) {
+    function emojiKey(event, copy, shift, enter) {
+        const k = event.key;
         const flat = emojiFlat;
         const cur = flat[l.emojiSel];
         const moveRow = d => {
@@ -788,18 +790,17 @@ Scope {
         case Qt.Key_Down:
             moveRow(1);
             return true;
-        case Qt.Key_Tab:
-        case Qt.Key_Backtab:
-            l.nextEmojiCat(shift || k === Qt.Key_Backtab ? -1 : 1);
-            return true;
-        case Qt.Key_P:
-            if (!ctrl || !cur)
-                return false;
+        }
+        if (cur && Conf.keyIs(event, "fixar")) {
             l.emojiPin(cur);
             return true;
         }
+        if (Conf.keyIs(event, "categoria", true)) {
+            l.nextEmojiCat(shift || k === Qt.Key_Backtab ? -1 : 1);
+            return true;
+        }
         if (enter) {
-            l.emojiUse(cur, ctrl);
+            l.emojiUse(cur, copy);
             return true;
         }
         return false;

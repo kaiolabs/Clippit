@@ -89,8 +89,30 @@ format; `desligado` disables a shortcut. Easier: **Settings → Atalhos → Troc
 | `atalho_sugestoes` | `<Alt>o` | Open the spell-check suggestions |
 | `atalho_aplicar` | `<Alt>s` | Apply all corrections |
 | `atalho_ajuste` | `<Alt>f` | Type an adjustment in the reply assistant |
+| `atalho_emoji` | `<Alt>e` | Open the emoji picker |
+| `atalho_snippets` | `<Alt>semicolon` | Open the snippets list |
 | `atalho_historico` | `<Alt>c` | Open the clipboard history (read by the Quickshell interface; GNOME uses its own custom shortcut) |
 | `atalhos_globais` | `true` | Quickshell interface only: `false` leaves the always-on shortcuts (launcher, AI, actions, history, assistant, game mode) to the compositor config, which calls `clippit-shell <function>` |
+
+Shortcuts that only work **inside the launcher** (same format; `desligado` disables them; also in
+**Settings → Atalhos**). Keys that don't type anything (`Tab`, `Escape`, `Delete`, `F1`…) can be used alone.
+The modifiers must match exactly (`<Control><Shift>n` is not `<Control>n`); a modifier the extension doesn't
+know (`<Hyper>`, `<Mod2>`) disables the shortcut. Two shortcuts can share a key: both actions run.
+
+| Key | Default | Action |
+|---|---|---|
+| `atalho_fechar` | `Escape` | Stop the AI answer; a second press closes the launcher |
+| `atalho_lado` | `<Alt>c` | Open or close the clipboard list beside the launcher |
+| `atalho_copiar` | `<Control>Return` | Enter with these modifiers copies instead of pasting. It must use Enter and at least one modifier; anything else falls back to the default |
+| `atalho_voltar` | `BackSpace` | Back to the start (only with an empty field when it has no modifier) |
+| `atalho_ditado` | `<Alt>v` | Dictation in the AI chat |
+| `atalho_nova_conversa` | `<Control>n` | New AI conversation |
+| `atalho_conversas` | `<Control>h` | Previous AI conversations |
+| `atalho_transformar` | `Tab` | Transform the selected history item |
+| `atalho_fixar` | `<Control>p` | Pin or unpin (history and emoji) |
+| `atalho_categoria` | `Tab` | Next emoji category (Shift goes back) |
+| `atalho_apagar` | `<Control>Delete` | Delete (history and conversations) |
+| `atalho_ampliar` | `<Control>space` | Enlarge the preview |
 
 Alt+C (history) is a GNOME custom shortcut; change it in **Settings → Atalhos** or in GNOME Settings →
 Keyboard.

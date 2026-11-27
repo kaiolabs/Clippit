@@ -80,29 +80,32 @@ pub fn create_page() -> gtk::Widget {
     }
     page.add(&ext);
 
-    let fixed = adw::PreferencesGroup::new();
-    fixed.set_title("Dentro do lançador");
-    for (keys, title, sub) in [
+    // Atalhos de dentro do lançador: também dá para trocar (valem na hora, sem reiniciar).
+    for (title, ids) in [
         (
-            &["Esc"][..],
-            "Parar a IA / fechar",
-            "O primeiro Esc para a resposta; o segundo fecha",
+            "Dentro do lançador",
+            &["fechar", "voltar", "lado", "copiar"][..],
         ),
-        (&["Alt+V"][..], "Falar (ditado)", "No chat da IA"),
         (
-            &["Ctrl+N", "Ctrl+H"][..],
-            "Nova conversa / conversas anteriores",
             "No chat da IA",
+            &["ditado", "nova_conversa", "conversas"][..],
         ),
         (
-            &["Tab", "Ctrl+P"][..],
-            "Transformar / fixar",
             "No histórico",
+            &["transformar", "fixar", "apagar", "ampliar"][..],
         ),
+        ("Nos emojis", &["categoria"][..]),
     ] {
-        fixed.add(&super::corretor::key_row(keys, title, sub));
+        let group = adw::PreferencesGroup::new();
+        group.set_title(title);
+        for id in ids {
+            if let Some((id, _def, title, sub)) = super::atalhos::INNER.iter().find(|s| s.0 == *id)
+            {
+                group.add(&super::atalhos::editable_row(id, title, sub));
+            }
+        }
+        page.add(&group);
     }
-    page.add(&fixed);
 
     let hotkey_label_clone = hotkey_label.clone();
     edit_button.connect_clicked(move |btn| {
