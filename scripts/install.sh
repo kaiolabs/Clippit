@@ -122,7 +122,12 @@ if gsettings get org.gnome.desktop.wm.keybindings activate-window-menu | grep -q
 fi
 mkdir -p "$APPS" "$HOME/.local/share/icons/hicolor/256x256/apps"
 install -m644 "$ROOT/assets/logo_clippit.png" "$HOME/.local/share/icons/hicolor/256x256/apps/clippit.png"
-install -m644 "$ROOT/assets/clippit.desktop" "$APPS/clippit.desktop"
+# GNOME starts with a PATH that lacks ~/.local/bin: with a bare "Exec=clippit-dashboard" it can't
+# find the program and hides the app from the menu and search. So use the full path.
+sed -e "s|^Exec=clippit-dashboard|Exec=$BIN/clippit-dashboard|" \
+    -e "/^Exec=/a TryExec=$BIN/clippit-dashboard" \
+    "$ROOT/assets/clippit.desktop" > "$APPS/clippit.desktop"
+chmod 644 "$APPS/clippit.desktop"
 update-desktop-database "$APPS" 2>/dev/null || true
 ok "\"Clippit\" in the app menu opens the settings"
 
