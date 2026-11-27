@@ -519,6 +519,46 @@ fn merge_toml(base: &mut toml::Value, over: toml::Value) {
 mod tests {
     use super::*;
 
+    fn leaf_paths(value: &serde_json::Value, prefix: &str, out: &mut Vec<String>) {
+        match value {
+            serde_json::Value::Object(map) => {
+                for (key, inner) in map {
+                    let path = if prefix.is_empty() {
+                        key.clone()
+                    } else {
+                        format!("{prefix}.{key}")
+                    };
+                    leaf_paths(inner, &path, out);
+                }
+            }
+            _ => out.push(prefix.to_string()),
+        }
+    }
+
+    #[test]
+    fn nix_known_keys_match_the_config_fields() {
+        let known: serde_json::Value =
+            serde_json::from_str(include_str!("../../../nix/known-keys.json")).unwrap();
+        let mut listed: Vec<String> = known["config"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|k| k.as_str().unwrap().to_string())
+            .collect();
+        let mut actual = Vec::new();
+        leaf_paths(
+            &serde_json::to_value(Config::default()).unwrap(),
+            "",
+            &mut actual,
+        );
+        listed.sort();
+        actual.sort();
+        assert_eq!(
+            listed, actual,
+            "update nix/known-keys.json and docs/configuration.md"
+        );
+    }
+
     #[test]
     fn test_partial_config_keeps_defaults() {
         let config = Config::parse("[general]\nmax_history_items = 500\n").unwrap();

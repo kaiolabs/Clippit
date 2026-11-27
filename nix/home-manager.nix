@@ -22,6 +22,26 @@ let
 
   tomlFormat = pkgs.formats.toml { };
 
+  knownKeys = builtins.fromJSON (builtins.readFile ./known-keys.json);
+
+  leafPaths =
+    prefix: attrs:
+    lib.concatLists (
+      lib.mapAttrsToList (
+        name: value:
+        let
+          path = prefix ++ [ name ];
+        in
+        if lib.isAttrs value then leafPaths path value else [ (lib.concatStringsSep "." path) ]
+      ) attrs
+    );
+
+  unknownKeys =
+    known: keys: lib.filter (key: !(lib.elem key known)) keys;
+
+  unknownSettings = unknownKeys knownKeys.corretor (lib.attrNames cfg.settings);
+  unknownHistorySettings = unknownKeys knownKeys.config (leafPaths [ ] cfg.historySettings);
+
   plan = pkgs.writeText "clippit-settings.json" (
     builtins.toJSON {
       inherit (cfg) settings historySettings;
@@ -141,6 +161,14 @@ in
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      {
+        assertion = unknownSettings == [ ];
+        message = "programs.clippit.settings: unknown keys ${lib.concatStringsSep ", " unknownSettings} (see docs/configuration.md).";
+      }
+      {
+        assertion = unknownHistorySettings == [ ];
+        message = "programs.clippit.historySettings: unknown keys ${lib.concatStringsSep ", " unknownHistorySettings} (see docs/configuration.md).";
+      }
       {
         assertion = lib.all (v: !(lib.isString v) || !(lib.hasInfix "#" v)) (lib.attrValues cfg.settings);
         message = "programs.clippit.settings: values cannot contain `#`, corretor.conf reads it as a comment.";
