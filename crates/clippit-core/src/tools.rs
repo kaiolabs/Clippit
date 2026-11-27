@@ -11,9 +11,15 @@ pub fn tool(name: &str) -> PathBuf {
         .unwrap_or_default()
         .join(".local/bin")
         .join(name);
-    if local.exists() {
+    if is_executable(&local) {
         local
     } else {
         PathBuf::from(name)
     }
+}
+
+fn is_executable(path: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    path.metadata()
+        .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
 }

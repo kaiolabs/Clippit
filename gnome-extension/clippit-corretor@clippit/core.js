@@ -4038,8 +4038,8 @@ class Lancador {
     // ---- Jogos sempre na placa dedicada ------------------------------------
 
     _watchGames() {
-        const cmd = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'clippit-jogos-nvidia']);
-        if (!GLib.file_test(cmd, GLib.FileTest.EXISTS))
+        const cmd = clippitTool('clippit-jogos-nvidia');
+        if (!GLib.file_test(cmd, GLib.FileTest.IS_EXECUTABLE))
             return;
         const run = () => runProcess([cmd], null, 60)
             .then(out => {

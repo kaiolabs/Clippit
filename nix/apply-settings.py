@@ -29,8 +29,10 @@ def write_if_changed(path, text):
     except FileNotFoundError:
         pass
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
+    temporary = f"{path}.clippit-tmp"
+    with open(temporary, "w", encoding="utf-8") as f:
         f.write(text)
+    os.replace(temporary, path)
     return True
 
 
@@ -51,11 +53,13 @@ def apply_corretor(path, settings):
     for key, value in settings.items():
         line = f"{key} = {conf_value(value)}"
         pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
-        index = next((i for i, current in enumerate(lines) if pattern.match(current)), None)
-        if index is None:
+        indexes = [i for i, current in enumerate(lines) if pattern.match(current)]
+        if not indexes:
             lines.append(line)
-        else:
-            lines[index] = line
+            continue
+        lines[indexes[0]] = line
+        for i in reversed(indexes[1:]):
+            del lines[i]
     return write_if_changed(path, "\n".join(lines) + "\n")
 
 
@@ -86,10 +90,12 @@ class Dconf:
 
     def read(self, key):
         p = subprocess.run([self.exe, "read", key], capture_output=True, text=True)
+        if p.returncode != 0:
+            raise RuntimeError(f"dconf read {key} failed: {p.stderr.strip()}")
         return p.stdout.strip()
 
     def write(self, key, value):
-        subprocess.run([self.exe, "write", key, value], check=False)
+        subprocess.run([self.exe, "write", key, value], check=True)
 
     def read_list(self, key):
         raw = self.read(key).removeprefix("@as").strip()
@@ -120,8 +126,10 @@ def apply_gnome(plan):
         dconf.write(f"{CLIPPIT_KEYBINDING}binding", gvariant_string(shortcut["binding"]))
     if plan["freeAltSpace"]:
         key = "/org/gnome/desktop/wm/keybindings/activate-window-menu"
-        if "<Alt>space" in dconf.read(key):
-            dconf.write(key, "@as []")
+        bindings = dconf.read_list(key)
+        if "<Alt>space" in bindings:
+            remaining = [b for b in bindings if b != "<Alt>space"]
+            dconf.write(key, str(remaining) if remaining else "@as []")
 
 
 def main():
@@ -134,7 +142,7 @@ def main():
     if plan["historySettings"]:
         if apply_history(os.path.join(config_dir, "config.toml"), plan["historySettings"]):
             # The daemon only reads config.toml when it starts.
-            subprocess.run([plan["systemctl"], "--user", "try-restart", "clippit.service"], check=False)
+            subprocess.run([plan["systemctl"], "--user", "try-restart", "clippit.service"], check=True)
     apply_gnome(plan)
 
 

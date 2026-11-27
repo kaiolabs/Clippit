@@ -137,6 +137,17 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = !(cfg.settings ? brave_api_key);
+        message = ''
+          programs.clippit.settings.brave_api_key would be copied to the world-readable
+          /nix/store. Set the key in the Clippit settings app (or in
+          ~/.config/clippit/corretor.conf) instead.
+        '';
+      }
+    ];
+
     home.packages = [ cfg.package ];
 
     xdg.configFile."autostart/clippit-popup.desktop" = lib.mkIf cfg.popupAutostart {
