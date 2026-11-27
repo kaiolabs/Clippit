@@ -80,7 +80,9 @@ jobs:
       # JavaScript) count; the "unresolved type" warnings are expected.
       - name: QML syntax (quickshell/)
         run: |
-          sudo apt-get update
+          sudo apt-get update \
+            -o Dir::Etc::sourcelist="sources.list.d/ubuntu.sources" \
+            -o Dir::Etc::sourceparts="-"
           sudo apt-get install -y qt6-declarative-dev-tools
           out=$(/usr/lib/qt6/bin/qmllint quickshell/*.qml quickshell/*/*.qml quickshell/lib/*.js 2>&1 || true)
           if grep -q '^Error' <<<"$out"; then grep -A4 '^Error' <<<"$out"; exit 1; fi
