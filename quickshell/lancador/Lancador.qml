@@ -514,12 +514,26 @@ Scope {
         return app === id || app === (entry.startupClass || "").toLowerCase() || DesktopEntries.heuristicLookup(winApp) === entry;
     }
 
+    property var launching: ({})
+
     // Enter on an app that is already running focuses its window instead of opening a second one.
+    // If the window list can't be read, or focusing fails, the app is launched anyway: doing nothing is worse.
     function openApp(entry) {
-        Compositor.windows()
-            .then(all => all.find(w => isInstanceOf(entry, w.app)))
-            .catch(() => null)
-            .then(w => w ? Compositor.activate(w) : Sys.launchApp(entry));
+        const launch = () => {
+            if (Date.now() - (launching[entry.id] || 0) < 5000)
+                return;
+            launching[entry.id] = Date.now();
+            Sys.launchApp(entry);
+        };
+        Compositor.windows().then(all => all.find(w => isInstanceOf(entry, w.app)), e => {
+            console.warn("clippit: window list failed:", e.message);
+            return null;
+        }).then(w => {
+            if (!w)
+                return launch();
+            return (w.minimized ? Compositor.unminimize(w) : Promise.resolve())
+                .then(() => Compositor.activate(w)).catch(launch);
+        });
     }
 
     function appItem(a, score, section) {
