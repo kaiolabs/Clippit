@@ -47,6 +47,29 @@ novo na sessão para o GNOME carregar a extensão.
 
 Para remover: `./scripts/uninstall.sh` (seus dados só são apagados se você confirmar).
 
+### Hyprland, Sway, niri (Quickshell)
+
+Fora do GNOME o lançador, o corretor e o assistente rodam numa interface em [Quickshell](https://quickshell.org)
+no lugar da extensão do GNOME, com as mesmas telas, teclas e configurações. O `install.sh` escolhe sozinho
+quando o GNOME não está rodando; no Nix, use `programs.clippit.quickshell = true;` (e `gnomeExtension = false;`).
+
+- O `clippit-shell` sobe a interface (o serviço de usuário `clippit-shell` faz isso ao entrar). Ele registra
+  Alt+Espaço, Alt+C, Alt+I, Alt+A, Alt+K e Ctrl+Shift+E no Hyprland ou no Sway sozinho, de novo a cada recarga da
+  configuração. No niri, ligue as teclas na configuração dele a `clippit-shell lancador`, `historico`, `ia`,
+  `acoes`, `assistente` e `modo_jogo`.
+- O `clippit-wl` lê e edita o campo de texto em foco (input-method-v2) e desenha o selo ao lado do cursor. Só um
+  método de entrada roda por vez: não funciona junto com fcitx5 ou ibus.
+- Precisa de `quickshell`, `wtype`, `grim` e `wl-clipboard` (o pacote do Nix já traz).
+- O compositor precisa exportar `WAYLAND_DISPLAY` (e, no Hyprland, `HYPRLAND_INSTANCE_SIGNATURE`) para o
+  systemd, por exemplo com `systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE` ao iniciar.
+
+Diferenças do GNOME, porque o compositor não expõe: o painel de sugestões abre no mouse (Hyprland) ou embaixo da
+janela, e não logo acima do cursor; o assistente lê a janela inteira como ela aparece na tela (uma notificação ou outra janela por cima entra no print); rolar fora do lançador não o solta (clicar
+fora solta, no Hyprland); sem desfoque atrás dos painéis. No Sway 1.12 não há selo ao lado do cursor (o Sway cai
+quando ele fecha); o Alt+O continua abrindo as sugestões. Não perturbe precisa de swaync, mako ou dunst; brilho
+precisa do brightnessctl. `clippit-shell estado` mostra o que ele está vendo (compositor, método de entrada,
+atalhos, corretor).
+
 ### Nix e NixOS
 
 O repositório é um flake. Tem o pacote, um módulo do Home Manager (o recomendado: ele também liga os

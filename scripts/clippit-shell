@@ -1,0 +1,28 @@
+#!/bin/sh
+# Interface do Clippit em Quickshell (Hyprland, Sway, niri…). No GNOME quem
+# faz isso é a extensão.
+#   clippit-shell                  → sobe a interface (o serviço clippit-shell.service roda isto)
+#   clippit-shell key '<Alt>space' → um atalho foi apertado (o compositor chama)
+#   clippit-shell lancador|ia|historico|acoes|assistente|modo_jogo
+dir="${CLIPPIT_QUICKSHELL:-}"
+if [ -z "$dir" ]; then
+    base="$(dirname "$(readlink -f "$0")")"
+    for d in "$base/../quickshell" "$base/../share/clippit/quickshell"; do
+        if [ -f "$d/shell.qml" ]; then
+            dir="$d"
+            break
+        fi
+    done
+fi
+if [ -z "$dir" ]; then
+    echo "clippit-shell: não achei a pasta quickshell/ (defina CLIPPIT_QUICKSHELL)" >&2
+    exit 1
+fi
+qs="$(command -v quickshell || command -v qs)"
+if [ -z "$qs" ]; then
+    echo "clippit-shell: Quickshell não está instalado" >&2
+    exit 1
+fi
+# The compositor runs the shortcut binds with its own PATH: hand it an absolute path.
+[ $# -eq 0 ] && CLIPPIT_SHELL="$(readlink -f "$0")" exec "$qs" -p "$dir"
+exec "$qs" ipc -p "$dir" call clippit "$@"

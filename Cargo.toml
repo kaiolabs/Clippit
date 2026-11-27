@@ -5,6 +5,7 @@ members = [
     "crates/clippit-ipc",
     "crates/clippit-dashboard",
     "crates/clippit-popup",
+    "crates/clippit-wl",
 ]
 resolver = "2"
 

@@ -319,6 +319,12 @@ fn show_hotkey_dialog(parent: &gtk::Window, label: gtk::Label) {
                         // 🔄 SYNC: Atualizar gsettings do GNOME para refletir globalmente!
                         eprintln!("🔄 Sincronizando com GNOME gsettings...");
                         let gnome_binding = convert_to_gnome_format(&modifier_final, &key_final);
+                        // Fora do GNOME o clippit-shell lê o atalho do corretor.conf,
+                        // no mesmo formato dos outros atalhos (<Control>, não <Primary>).
+                        super::conf::set(
+                            "atalho_historico",
+                            &gnome_binding.replace("<Primary>", "<Control>"),
+                        );
                         let sync_result = std::process::Command::new("gsettings")
                             .args([
                                 "set",

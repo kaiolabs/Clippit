@@ -27,7 +27,8 @@ The settings app also has a **Funcionalidades** page that explains each feature.
 
 ## Requirements
 
-- **GNOME Shell 46 on Wayland** (tested on Zorin OS 18, based on Ubuntu 24.04). Other versions may need a
+- **GNOME Shell 46 on Wayland** (tested on Zorin OS 18, based on Ubuntu 24.04), or **Hyprland / Sway / niri** with
+  the Quickshell interface (see below). Other GNOME versions may need a
   one-line change in `metadata.json`.
 - Debian/Ubuntu packages (the installer lists the missing ones).
 - [Rust](https://rustup.rs) to build.
@@ -48,6 +49,31 @@ and the default models ([Qwen 3.5](https://huggingface.co/unsloth)). On the firs
 back in so GNOME loads the extension.
 
 To remove it: `./scripts/uninstall.sh` (your data is only deleted if you say so).
+
+### Hyprland, Sway, niri (Quickshell)
+
+Outside GNOME the launcher, the spell checker and the assistant run as a [Quickshell](https://quickshell.org)
+interface instead of the GNOME extension, with the same screens, keys and settings. `install.sh` picks it by
+itself when GNOME isn't running; with Nix, set `programs.clippit.quickshell = true;` (and
+`gnomeExtension = false;`).
+
+- `clippit-shell` starts it (the `clippit-shell` user service does it at login). It registers Alt+Space, Alt+C,
+  Alt+I, Alt+A, Alt+K and Ctrl+Shift+E with Hyprland or Sway by itself, again after every config reload.
+  On niri, bind the keys in its config to `clippit-shell lancador`, `historico`, `ia`, `acoes`, `assistente`
+  and `modo_jogo`.
+- `clippit-wl` reads and edits the focused text field (input-method-v2) and draws the badge next to the
+  cursor. Only one input method can run at a time: it doesn't work together with fcitx5 or ibus.
+- Needs `quickshell`, `wtype`, `grim` and `wl-clipboard` (the Nix package brings them).
+- The compositor must export `WAYLAND_DISPLAY` (and, on Hyprland, `HYPRLAND_INSTANCE_SIGNATURE`) to systemd,
+  e.g. `systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE` at startup.
+
+Differences from GNOME, because the compositor doesn't expose it: the suggestions panel opens at the mouse
+(Hyprland) or at the bottom of the window instead of right above the cursor; the reply assistant reads the
+whole window as it appears on screen (a notification or another window on top of it ends up in the
+screenshot too); scrolling outside the launcher doesn't release it (a click does, on Hyprland); no blur behind
+the panels. On Sway 1.12 there is no badge next to the cursor (Sway crashes when it closes); Alt+O still
+opens the suggestions. Do Not Disturb needs swaync, mako or dunst; brightness needs brightnessctl.
+`clippit-shell estado` shows what it sees (compositor, input method, shortcuts, spell checker).
 
 ### Nix and NixOS
 

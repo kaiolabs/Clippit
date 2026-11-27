@@ -91,6 +91,8 @@ format; `desligado` disables a shortcut. Easier: **Settings → Atalhos → Troc
 | `atalho_ajuste` | `<Alt>f` | Type an adjustment in the reply assistant |
 | `atalho_emoji` | `<Alt>e` | Open the emoji picker |
 | `atalho_snippets` | `<Alt>semicolon` | Open the snippets list |
+| `atalho_historico` | `<Alt>c` | Open the clipboard history (read by the Quickshell interface; GNOME uses its own custom shortcut) |
+| `atalhos_globais` | `true` | Quickshell interface only: `false` leaves the always-on shortcuts (launcher, AI, actions, history, assistant, game mode) to the compositor config, which calls `clippit-shell <function>` |
 
 Shortcuts that only work **inside the launcher** (same format; `desligado` disables them; also in
 **Settings → Atalhos**). Keys that don't type anything (`Tab`, `Escape`, `Delete`, `F1`…) can be used alone.

@@ -9,9 +9,9 @@ EXT_UUID="clippit-corretor@clippit"
 UNITS="$HOME/.config/systemd/user"
 
 echo "==> Stopping services"
-systemctl --user disable --now clippit.service clippit-doutor.timer 2>/dev/null
+systemctl --user disable --now clippit.service clippit-doutor.timer clippit-shell.service 2>/dev/null
 "$BIN/clippit-correct" --stop 2>/dev/null
-rm -f "$UNITS/clippit.service" "$UNITS/clippit-doutor.service" "$UNITS/clippit-doutor.timer"
+rm -f "$UNITS/clippit.service" "$UNITS/clippit-doutor.service" "$UNITS/clippit-doutor.timer" "$UNITS/clippit-shell.service"
 systemctl --user daemon-reload
 
 echo "==> Removing the GNOME extension"
@@ -20,7 +20,7 @@ rm -f "$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
 
 echo "==> Removing programs"
 for f in clippit-daemon clippit-popup clippit-dashboard clippit-correct clippit-busca clippit-historico \
-         clippit-doutor clippit-jogos-nvidia; do
+         clippit-doutor clippit-jogos-nvidia clippit-shell clippit-wl; do
     rm -f "${BIN:?}/$f"
 done
 rm -f "$HOME/.local/share/applications/clippit.desktop" "$HOME/.local/share/icons/hicolor/256x256/apps/clippit.png"

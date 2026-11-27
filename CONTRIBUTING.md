@@ -153,7 +153,7 @@ These rules come from real crashes. Breaking them can log the user out:
 ```
 
 Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`.
-Scopes: `daemon`, `painel` (dashboard), `extensao`, `ia`, `corretor`, `doutor`, `popup`.
+Scopes: `daemon`, `painel` (dashboard), `extensao`, `ia`, `corretor`, `doutor`, `popup`, `quickshell` (the QML interface), `clippit-wl`.
 English or Portuguese, but keep one language per commit. Example:
 `fix(daemon): reconnect the clipboard when Xwayland restarts`.
 

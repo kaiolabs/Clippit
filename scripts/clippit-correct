@@ -1979,10 +1979,10 @@ def _plain(s):
     return "".join(ch for ch in s if unicodedata.category(ch) != "Mn")
 
 
-# ---------- ferramentas que mexem no computador (via extensão do GNOME) ----------
+# ---------- ferramentas que mexem no computador (via extensão do GNOME ou clippit-shell) ----------
 
 def _shell_call(method, *args, timeout=5000):
-    """Chama a extensão do Clippit no GNOME Shell (D-Bus com.clippit.Lancador)."""
+    """Chama a interface do Clippit (D-Bus com.clippit.Lancador): a extensão do GNOME ou o clippit-shell."""
     import gi
     gi.require_version("Gio", "2.0")
     from gi.repository import Gio, GLib
@@ -2014,7 +2014,7 @@ def tool_janelas(args):
                 for w in wins)
         r = json.loads(_shell_call("Janela", acao, alvo))
     except Exception as e:
-        return f"Erro: não consegui falar com a extensão do GNOME ({e})."
+        return f"Erro: não consegui falar com a interface do Clippit ({e})."
     if r.get("erro"):
         return f"Erro: {r['erro']}. Use acao=listar para ver as janelas."
     if r.get("focar"):
@@ -2043,21 +2043,62 @@ def _gsd(name, path, iface, prop, value=None):
 
 
 def _brilho(v=None):
+    """Brilho em %: pelo GNOME; fora dele (Hyprland, Sway…), pelo brightnessctl."""
     from gi.repository import GLib
     args = ("org.gnome.SettingsDaemon.Power", "/org/gnome/SettingsDaemon/Power", "org.gnome.SettingsDaemon.Power.Screen",
             "Brightness")
-    if v is None:
-        return _gsd(*args)
-    _gsd(*args, GLib.Variant("i", max(1, min(100, int(v)))))
+    try:
+        if v is None:
+            return _gsd(*args)
+        return _gsd(*args, GLib.Variant("i", max(1, min(100, int(v)))))
+    except Exception:
+        if v is None:
+            m = re.search(r",(\d+)%,", _run(["brightnessctl", "-m"], timeout=5) or "")
+            return int(m.group(1)) if m else "?"
+        _run(["brightnessctl", "set", f"{max(1, min(100, int(v)))}%"], timeout=5)
 
 
 def _bt_off(v=None):
+    """Bluetooth desligado? Pelo GNOME; fora dele, pelo bluetoothctl."""
     from gi.repository import GLib
     args = ("org.gnome.SettingsDaemon.Rfkill", "/org/gnome/SettingsDaemon/Rfkill", "org.gnome.SettingsDaemon.Rfkill",
             "BluetoothAirplaneMode")
-    if v is None:
-        return _gsd(*args)
-    _gsd(*args, GLib.Variant("b", v))
+    try:
+        if v is None:
+            return _gsd(*args)
+        return _gsd(*args, GLib.Variant("b", v))
+    except Exception:
+        if v is None:
+            return "Powered: yes" not in (_run(["bluetoothctl", "show"], timeout=5) or "")
+        if not v:
+            _run(["rfkill", "unblock", "bluetooth"], timeout=5)
+        _run(["bluetoothctl", "power", "off" if v else "on"], timeout=10)
+
+
+def _dnd(v=None):
+    """Não perturbe: no GNOME pelas notificações do sistema; fora dele, swaync, mako ou dunst."""
+    import shutil
+    if shutil.which("gnome-shell") and _run(["pgrep", "-x", "gnome-shell"], timeout=3):
+        if v is None:
+            return _run(["gsettings", "get", "org.gnome.desktop.notifications", "show-banners"]).strip() == "false"
+        _run(["gsettings", "set", "org.gnome.desktop.notifications", "show-banners", "false" if v else "true"])
+        return None
+    if shutil.which("swaync-client"):
+        if v is None:
+            return (_run(["swaync-client", "-D"], timeout=3) or "").strip() == "true"
+        _run(["swaync-client", "-dn" if v else "-df"], timeout=3)
+    elif shutil.which("makoctl"):
+        on = "do-not-disturb" in (_run(["makoctl", "mode"], timeout=3) or "")
+        if v is None:
+            return on
+        _run(["makoctl", "mode", "-a" if v else "-r", "do-not-disturb"], timeout=3)
+    elif shutil.which("dunstctl"):
+        if v is None:
+            return (_run(["dunstctl", "is-paused"], timeout=3) or "").strip() == "true"
+        _run(["dunstctl", "set-paused", "true" if v else "false"], timeout=3)
+    elif v is None:
+        return "?"
+    return None
 
 
 def _ligar(valor):
@@ -2076,7 +2117,7 @@ def _controles_estado():
         except Exception:
             return "?"
     wifi = safe(lambda: _run(["nmcli", "radio", "wifi"], timeout=5).strip())
-    dnd = safe(lambda: _run(["gsettings", "get", "org.gnome.desktop.notifications", "show-banners"]).strip() == "false")
+    dnd = safe(_dnd)
     dark = safe(lambda: "dark" in _run(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"]))
     music = safe(lambda: (_run(["playerctl", "status"], timeout=3) or "").strip() or "nada tocando")
     song = safe(lambda: (_run(["playerctl", "metadata", "--format", "{{artist}} — {{title}}"], timeout=3) or "").strip())
@@ -2135,8 +2176,8 @@ def tool_controles(args):
         if acao in ("nao_perturbe", "naoperturbe", "dnd"):
             on = _ligar(valor)
             if on is None:
-                on = _run(["gsettings", "get", "org.gnome.desktop.notifications", "show-banners"]).strip() == "true"
-            _run(["gsettings", "set", "org.gnome.desktop.notifications", "show-banners", "false" if on else "true"])
+                on = _dnd() is not True
+            _dnd(on)
             return f"Não perturbe {'ligado' if on else 'desligado'}."
         if acao == "tema":
             v = _plain(valor)
