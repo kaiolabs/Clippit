@@ -21,19 +21,35 @@ KEYBINDINGS = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings"
 CLIPPIT_KEYBINDING = f"{KEYBINDINGS}/clippit/"
 
 
-def write_if_changed(path, text):
+def read_text(path):
     try:
         with open(path, encoding="utf-8") as f:
-            if f.read() == text:
-                return False
+            return f.read()
     except FileNotFoundError:
-        pass
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    temporary = f"{path}.clippit-tmp"
-    with open(temporary, "w", encoding="utf-8") as f:
-        f.write(text)
-    os.replace(temporary, path)
-    return True
+        return None
+
+
+def update_file(path, transform):
+    """Rewrites `path` with transform(current text, or None if absent).
+
+    The settings app writes the same files, so the file is read again right
+    before the swap: if it changed meanwhile, the new text is computed again
+    from the latest content instead of overwriting the other write.
+    """
+    for _ in range(5):
+        current = read_text(path)
+        text = transform(current)
+        if text is None or text == current:
+            return False
+        if read_text(path) != current:
+            continue
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        temporary = f"{path}.clippit-tmp"
+        with open(temporary, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(temporary, path)
+        return True
+    raise RuntimeError(f"{path} keeps changing, giving up")
 
 
 def conf_value(value):
@@ -68,25 +84,24 @@ def remove_path(tree, keys):
 
 
 def apply_corretor(path, settings, stale=()):
-    try:
-        with open(path, encoding="utf-8") as f:
-            lines = f.read().splitlines()
-    except FileNotFoundError:
-        lines = []
-    for key in stale:
-        pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
-        lines = [current for current in lines if not pattern.match(current)]
-    for key, value in settings.items():
-        line = f"{key} = {conf_value(value)}"
-        pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
-        indexes = [i for i, current in enumerate(lines) if pattern.match(current)]
-        if not indexes:
-            lines.append(line)
-            continue
-        lines[indexes[0]] = line
-        for i in reversed(indexes[1:]):
-            del lines[i]
-    return write_if_changed(path, "\n".join(lines) + "\n")
+    def transform(text):
+        lines = (text or "").splitlines()
+        for key in stale:
+            pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
+            lines = [current for current in lines if not pattern.match(current)]
+        for key, value in settings.items():
+            line = f"{key} = {conf_value(value)}"
+            pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
+            indexes = [i for i, current in enumerate(lines) if pattern.match(current)]
+            if not indexes:
+                lines.append(line)
+                continue
+            lines[indexes[0]] = line
+            for i in reversed(indexes[1:]):
+                del lines[i]
+        return "\n".join(lines) + "\n"
+
+    return update_file(path, transform)
 
 
 def deep_merge(base, over):
@@ -99,17 +114,17 @@ def deep_merge(base, over):
 
 
 def apply_history(path, settings, stale=()):
-    try:
-        with open(path, "rb") as f:
-            current = tomllib.load(f)
-    except FileNotFoundError:
-        current = {}
-    except tomllib.TOMLDecodeError:
-        print(f"clippit: {path} is not valid TOML, leaving it as is", file=sys.stderr)
-        return False
-    for keys in stale:
-        remove_path(current, keys)
-    return write_if_changed(path, tomli_w.dumps(deep_merge(current, settings)))
+    def transform(text):
+        try:
+            current = tomllib.loads(text or "")
+        except tomllib.TOMLDecodeError:
+            print(f"clippit: {path} is not valid TOML, leaving it as is", file=sys.stderr)
+            return None
+        for keys in stale:
+            remove_path(current, keys)
+        return tomli_w.dumps(deep_merge(current, settings))
+
+    return update_file(path, transform)
 
 
 class Dconf:
@@ -218,10 +233,8 @@ def main():
             subprocess.run([plan["systemctl"], "--user", "try-restart", "clippit.service"], check=True)  # nosemgrep: argv list without a shell; paths come from the Nix plan
 
     managed = apply_gnome(plan, previous.get("gnome", {}))
-    write_if_changed(
-        state_path(),
-        json.dumps({"settings": list(plan["settings"]), "historySettings": current_history, "gnome": managed}),
-    )
+    state = {"settings": list(plan["settings"]), "historySettings": current_history, "gnome": managed}
+    update_file(state_path(), lambda _: json.dumps(state))
 
 
 if __name__ == "__main__":
