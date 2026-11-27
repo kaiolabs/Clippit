@@ -22,7 +22,7 @@ Singleton {
     readonly property color ok: "#4ade80"
 
     // Without the blur GNOME Shell gave, the glass needs to hide more of what is behind.
-    readonly property color glass: Qt.rgba(26 / 255, 26 / 255, 30 / 255, 0.97)
+    readonly property color glass: Qt.rgba(26 / 255, 26 / 255, 30 / 255, 1)
     readonly property color glassBorder: Qt.rgba(1, 1, 1, 0.10)
     readonly property color surface: Qt.rgba(1, 1, 1, 0.04)
     readonly property color hover: Qt.rgba(1, 1, 1, 0.08)

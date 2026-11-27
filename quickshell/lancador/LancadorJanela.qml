@@ -54,7 +54,12 @@ Scope {
     HyprlandFocusGrab {
         active: Compositor.kind === "hyprland" && win.visible && l.grabbed
         windows: l.side ? [win, sideWin] : [win]
-        onCleared: l.release()
+        // "cleared" also comes right after the grab starts (window not mapped
+        // yet, or not Hyprland): only a click after it is settled lets go.
+        onActiveChanged: grabSince = active ? Date.now() : 0
+        property double grabSince: 0
+        onCleared: if (Compositor.kind === "hyprland" && grabSince && Date.now() - grabSince > 400)
+            l.release()
     }
 
     PanelWindow {
