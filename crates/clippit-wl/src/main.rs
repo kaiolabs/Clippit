@@ -76,15 +76,15 @@ fn main() -> Result<()> {
         }
     });
 
-    let _bus = match bridge::serve(tx) {
-        Ok(bus) => Some(bus),
+    let (_bus, replies) = match bridge::serve(tx) {
+        Ok((bus, replies)) => (Some(bus), replies),
         Err(e) => {
             eprintln!("clippit-wl: D-Bus indisponível: {e}");
-            None
+            (None, bridge::Replies::default())
         }
     };
 
-    let mut state = ime::State::new(&globals, &qh, handle.clone())?;
+    let mut state = ime::State::new(&globals, &qh, handle.clone(), replies)?;
     emit(json!({"ev": "caps", "im": state.has_input_method()}));
 
     loop {

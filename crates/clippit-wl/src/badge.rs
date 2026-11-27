@@ -72,13 +72,33 @@ fn font() -> pango::FontDescription {
     pango::FontDescription::from_string("Inter, Cantarell, sans-serif Semi-Bold 9")
 }
 
-fn text_width(text: &str) -> i32 {
-    let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, 1, 1).expect("cairo");
-    let cr = cairo::Context::new(&surface).expect("cairo");
+fn measure(text: &str) -> Option<i32> {
+    let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, 1, 1).ok()?;
+    let cr = cairo::Context::new(&surface).ok()?;
     let layout = pangocairo::functions::create_layout(&cr);
     layout.set_font_description(Some(&font()));
     layout.set_text(text);
-    layout.pixel_size().0
+    Some(layout.pixel_size().0)
+}
+
+thread_local! {
+    /// The spinner redraws ~30×/s with the same label: measure it once.
+    static LAST_WIDTH: std::cell::RefCell<Option<(String, i32)>> = const { std::cell::RefCell::new(None) };
+}
+
+fn text_width(text: &str) -> i32 {
+    LAST_WIDTH.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if let Some((label, width)) = cache.as_ref() {
+            if label == text {
+                return *width;
+            }
+        }
+        // A rough estimate beats taking the whole process down when cairo fails.
+        let width = measure(text).unwrap_or(text.chars().count() as i32 * 7);
+        *cache = Some((text.to_string(), width));
+        width
+    })
 }
 
 pub fn layout(look: &Look) -> Layout {
@@ -143,12 +163,18 @@ fn piece(
 }
 
 /// Draws the badge at `scale` into ARGB8888 bytes (premultiplied, as wl_shm wants).
-pub fn render(look: &Look, hover: Option<Part>, angle: f64, scale: i32) -> (Layout, Vec<u8>, i32) {
+/// None when cairo fails: the badge is simply not drawn.
+pub fn render(
+    look: &Look,
+    hover: Option<Part>,
+    angle: f64,
+    scale: i32,
+) -> Option<(Layout, Vec<u8>, i32)> {
     let lay = layout(look);
     let (w, h) = (lay.width * scale, lay.height * scale);
-    let mut surface = cairo::ImageSurface::create(cairo::Format::ARgb32, w, h).expect("cairo");
+    let mut surface = cairo::ImageSurface::create(cairo::Format::ARgb32, w, h).ok()?;
     {
-        let cr = cairo::Context::new(&surface).expect("cairo");
+        let cr = cairo::Context::new(&surface).ok()?;
         cr.scale(scale as f64, scale as f64);
         let glass = rgb(0x1e1e22, 0.85);
         let line = (1.0, 1.0, 1.0, 0.12);
@@ -222,6 +248,6 @@ pub fn render(look: &Look, hover: Option<Part>, angle: f64, scale: i32) -> (Layo
         }
     }
     let stride = surface.stride();
-    let data = surface.data().expect("cairo data").to_vec();
-    (lay, data, stride)
+    let data = surface.data().ok()?.to_vec();
+    Some((lay, data, stride))
 }

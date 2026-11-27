@@ -144,10 +144,20 @@ def fix_religar_extensao():
     return run(["gnome-extensions", "enable", EXT])[0] == 0
 
 
+# O quickshell do Clippit roda com `-p <pasta do clippit>/quickshell`: não pega a config pessoal de outra pessoa.
+SHELL_PROCESS = r"(quickshell|qs) -p .*clippit.*/quickshell/?$"
+
+
+def shell_in_use():
+    """A interface Quickshell foi escolhida por quem usa? (serviço habilitado ou já rodando)"""
+    return (run(["systemctl", "--user", "is-enabled", "clippit-shell.service"])[0] == 0
+            or run(["pgrep", "-f", SHELL_PROCESS])[0] == 0)
+
+
 def fix_reiniciar_interface():
     if run(["systemctl", "--user", "cat", "clippit-shell.service"])[0] == 0:
         return run(["systemctl", "--user", "restart", "clippit-shell"], timeout=30)[0] == 0
-    run(["pkill", "-f", "quickshell.*clippit"])
+    run(["pkill", "-f", SHELL_PROCESS])
     try:
         subprocess.Popen([tool("clippit-shell")], start_new_session=True,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -259,8 +269,12 @@ def check_all(st, verbose=False):
 
 
 def check_shell(st, out):
-    """Fora do GNOME: o clippit-shell (Quickshell) tem de estar de pé e respondendo."""
-    if shell_call("Janelas") is None:
+    """Fora do GNOME: o clippit-shell (Quickshell) tem de estar de pé e respondendo.
+    Quem usa só o daemon e o popup (KDE, XFCE, X11…) não escolheu essa interface: não sobe nada."""
+    if not shell_in_use():
+        st["ext_mudo"] = 0
+        out.append(("Interface", "não usada", None))
+    elif shell_call("Janelas") is None:
         st["ext_mudo"] = st.get("ext_mudo", 0) + 1
         if st["ext_mudo"] >= 2:  # duas checagens seguidas
             why = "a interface do Clippit (clippit-shell) parou de responder"

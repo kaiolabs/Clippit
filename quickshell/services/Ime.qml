@@ -81,7 +81,24 @@ Singleton {
                 }
             }
         }
-        onExited: restart.start()
+        onStarted: ime.startedAt = Date.now()
+        onExited: ime.scheduleRestart()
+    }
+
+    // clippit-wl can exit for good (no input-method protocol, another IME holding it, no
+    // WAYLAND_DISPLAY): back off, and give up after a streak of quick failures.
+    property double startedAt: 0
+    property int failures: 0
+    readonly property int maxFailures: 8
+
+    function scheduleRestart() {
+        failures = Date.now() - startedAt > 60000 ? 1 : failures + 1;
+        if (failures >= maxFailures) {
+            console.warn("clippit: clippit-wl não fica de pé; a integração com os campos de texto fica desligada");
+            return;
+        }
+        restart.interval = Math.min(60000, 2000 * Math.pow(2, failures - 1));
+        restart.start();
     }
 
     Timer {

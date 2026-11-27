@@ -182,7 +182,7 @@ Scope {
             l.loadQuicklinks();
             l.loadControls();
             Compositor.windows().then(ws => {
-                l.winList = ws.filter(w => !w.minimized || true);
+                l.winList = ws;
                 l.refresh(true);
             });
             if (fresh) {
@@ -670,7 +670,7 @@ Scope {
                     Sys.notify("Clippit", "Lixeira esvaziada.");
                 }},
             {id: "cmd:game", key: "cmd:game", icon: "input-gaming-symbolic", title: "Modo jogo (liga/desliga)",
-                subtitle: "Tira a IA da placa de vídeo · Ctrl+Shift+E", words: ["jogo", "game", "liberar placa", "vram"],
+                subtitle: "Tira a IA da placa de vídeo · " + Conf.label("modo_jogo", "+"), words: ["jogo", "game", "liberar placa", "vram"],
                 hint: "Executar", run: () => l.assistente.toggleGameMode()},
             {id: "cmd:clippit", key: "cmd:clippit", icon: "preferences-system-symbolic", title: "Configurações do Clippit",
                 subtitle: "Corretor, assistente, aprendizado", words: ["clippit", "painel", "dashboard"], hint: "Abrir",
@@ -957,6 +957,8 @@ Scope {
 
     // ---- Emoji grid ---------------------------------------------------------
 
+    property bool emojiTried: false
+
     function loadEmoji() {
         if (emojiData || emojiLoading)
             return;
@@ -966,6 +968,11 @@ Scope {
                 l.emojiData = list.map(x => ({e: x.e, desc: x.d, cat: x.c, words: x.w, all: Busca.fold(x.w.join(" | "))}));
                 return;
             }
+            if (l.emojiTried) {
+                console.log("clippit: não consegui carregar os emoji");
+                return;
+            }
+            l.emojiTried = true;
             l.emojiLoading = true;
             return Sys.run(Sys.tool("clippit-busca").concat(["emoji"]), null, 30).then(() => {
                 l.emojiLoading = false;
@@ -1062,7 +1069,10 @@ Scope {
     // A notification that stays until you close it, with a sound.
     function alarm(title, body) {
         Sys.notify(title, body, "critical");
-        Sys.detach(["sh", "-c", "canberra-gtk-play -i alarm-clock-elapsed 2>/dev/null || pw-play /run/current-system/sw/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga 2>/dev/null || true"]);
+        Sys.detach(["sh", "-c", "canberra-gtk-play -i alarm-clock-elapsed 2>/dev/null && exit 0; "
+            + "for d in $(echo \"${XDG_DATA_DIRS:-/usr/local/share:/usr/share}\" | tr : ' '); do "
+            + "f=\"$d/sounds/freedesktop/stereo/alarm-clock-elapsed.oga\"; "
+            + "[ -f \"$f\" ] && { pw-play \"$f\" 2>/dev/null || paplay \"$f\" 2>/dev/null; exit 0; }; done"]);
     }
 
     Timer {
@@ -1083,18 +1093,16 @@ Scope {
             .then(stamp => {
                 if (stamp === l.appsStamp)
                     return;
-                const first = l.appsStamp === "";
                 l.appsStamp = stamp;
-                if (!first || true)
-                    Sys.run(Sys.tool("clippit-jogos-nvidia"), null, 60).then(out => {
-                        if (out.startsWith("Na NVIDIA agora"))
-                            console.log("clippit: " + out.trim());
-                    }).catch(() => {});
+                Sys.run(Sys.tool("clippit-jogos-nvidia"), null, 60).then(out => {
+                    if (out.startsWith("Na NVIDIA agora"))
+                        console.log("clippit: " + out.trim());
+                }).catch(() => {});
             }).catch(() => {});
     }
 
     Timer {
-        interval: 20000
+        interval: 60000
         running: true
         repeat: true
         onTriggered: l.watchGames()
@@ -1120,8 +1128,9 @@ Scope {
 
     function loadConvs() {
         const script = "import json,glob,os,sys\nout=[]\nfor f in glob.glob(os.path.join(sys.argv[1],'*.json')):\n" +
-            "    try: out.append(json.load(open(f,encoding='utf-8')))\n    except (OSError, ValueError): pass\nprint(json.dumps(out))";
-        return Sys.run(["python3", "-c", script, convDir], null, 10).then(raw => JSON.parse(raw).sort((a, b) => b.atualizado - a.atualizado))
+            "    try:\n        c=json.load(open(f,encoding='utf-8'))\n        if isinstance(c,dict) and isinstance(c.get('mensagens'),list):\n            c['arquivo']=f\n            out.append(c)\n" +
+            "    except (OSError, ValueError): pass\nprint(json.dumps(out))";
+        return Sys.run(["python3", "-c", script, convDir], null, 10).then(raw => JSON.parse(raw).sort((a, b) => (b.atualizado || 0) - (a.atualizado || 0)))
             .catch(() => []);
     }
 
@@ -1133,7 +1142,7 @@ Scope {
                 l.refresh(false);
             });
         }
-        const items = convs.map(c => ({c, s: q ? Math.max.apply(null, [Busca.matchScore(q, c.titulo)]
+        const items = convs.map(c => ({c, s: q ? Math.max.apply(null, [Busca.matchScore(q, c.titulo || "")]
             .concat(c.mensagens.map(m => Busca.matchScore(q, m.text || "") * 0.8))) : 1})).filter(x => x.s > 0)
             .map(x => {
                 const n = x.c.mensagens.filter(m => m.role === "user").length;
@@ -1157,7 +1166,8 @@ Scope {
         const c = it && it.data && it.data.conv;
         if (!c)
             return;
-        Sys.remove(convDir + "/" + c.id + ".json");
+        if (c.arquivo)
+            Sys.remove(c.arquivo);
         convs = convs.filter(x => x.id !== c.id);
         if (chatId === c.id) {
             chat = [];
@@ -1550,6 +1560,18 @@ Scope {
         send(asked ? asked.text : "", {confirmed: m.confirm, upTo: chat.indexOf(asked)});
     }
 
+    readonly property int confirmGuardMs: 600
+
+    // What the model may open: web pages and mail, or a file inside the home folder.
+    // Its input includes web pages and OCR'd screens, so nothing else (smb://, custom handlers…).
+    function safeUri(uri) {
+        const u = String(uri || "");
+        if (Busca.isWebUrl(u) || /^mailto:/i.test(u))
+            return true;
+        const home = Quickshell.env("HOME");
+        return !!home && u.indexOf("file://" + home + "/") === 0 && u.indexOf("/../") < 0;
+    }
+
     // Opens the app/site the AI asked for and gets out of the way.
     function runActions(actions) {
         let opened = false;
@@ -1569,11 +1591,16 @@ Scope {
                         opened = true;
                     }
                 } else if (a.tipo === "escrever" && a.texto) {
-                    pasteText(a.texto);
+                    // Never typed into the window behind on the model's word alone.
+                    Sys.copy(a.texto);
+                    Sys.notify("Clippit", "Texto copiado: cole com Ctrl+V onde quiser.");
                     opened = true;
-                } else if (a.tipo === "uri" && a.uri) {
-                    Sys.openUri(a.uri, a.app || "");
+                } else if (a.tipo === "uri" && safeUri(a.uri)) {
+                    const known = a.app && DesktopEntries.byId(a.app);
+                    Sys.openUri(a.uri, known ? a.app : "");
                     opened = true;
+                } else if (a.tipo === "uri") {
+                    console.log("clippit: endereço recusado: " + String(a.uri).slice(0, 60));
                 }
             } catch (e) {
                 console.log("clippit: não abriu " + JSON.stringify(a) + ": " + e.message);
@@ -1648,7 +1675,7 @@ Scope {
             return Sys.readJson(l.statusFile, {}).then(last => {
                 l.updateMsg(findReply(), {pending: false, text: data.resposta, steps: (last && last.passos) || [],
                     sources: data.fontes || [], outputs: data.saidas || [], confirm: data.confirmar || null,
-                    choice: data.escolha || null, choiceSel: 0});
+                    choice: data.escolha || null, choiceSel: 0, answeredAt: Date.now()});
                 l.saveChat();
                 if (data.acoes && data.acoes.length && l.runActions(data.acoes)) {
                     l.chatTime = Date.now();
@@ -1715,8 +1742,10 @@ Scope {
         if (q) {
             send(q, {});
         } else if (lastA && lastA.confirm && !lastA.confirmState) {
-            confirm(lastA, true);
-        } else if (lastA && ctrl && lastA.sources && lastA.sources.length) {
+            // An Enter pressed out of habit right as the command shows up must not run it.
+            if (Date.now() - (lastA.answeredAt || 0) > confirmGuardMs)
+                confirm(lastA, true);
+        } else if (lastA && ctrl && lastA.sources && lastA.sources.length && Busca.isWebUrl(lastA.sources[0])) {
             Sys.openUri(lastA.sources[0]);
             close();
         } else if (lastA && lastA.text) {
@@ -1783,11 +1812,19 @@ Scope {
                     answer(JSON.stringify({ok: true, focar: String(wins[0].id), janelas: names.slice(0, 1)}));
                     return;
                 }
+                if (wins.length > 1 && ["fechar", "tela_cheia", "minimizar"].indexOf(acao) >= 0) {
+                    answer(JSON.stringify({erro: "ambíguo: " + wins.length + " janelas casam com \"" + alvo + "\"; peça ao usuário qual", janelas: names}));
+                    return;
+                }
                 wins.forEach(w => Compositor.winOp(w, area ? acao : ops[acao]));
                 answer(JSON.stringify({ok: true, janelas: names}));
             }).catch(e => answer(JSON.stringify({erro: e.message})));
         } else if (method === "Print") {
             const onde = args[0], caminho = args[1];
+            if (caminho.indexOf(Sys.runtimeDir + "/") !== 0 || caminho.indexOf("..") >= 0) {
+                answer("erro: o print só pode ser salvo em " + Sys.runtimeDir);
+                return;
+            }
             Compat.co(function* () {
                 const w = l.prevWin || (yield Compositor.focused());
                 const mons = yield Compositor.monitors();

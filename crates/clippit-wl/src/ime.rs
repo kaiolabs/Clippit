@@ -30,6 +30,31 @@ use wayland_protocols_misc::zwp_input_method_v2::client::{
 use crate::badge::{self, Look, Part};
 use crate::{bridge, emit};
 
+/// linux/input-event-codes.h
+const BTN_LEFT: u32 = 0x110;
+
+/// text-input-v3 content purposes: password = 8, pin = 9.
+const PURPOSE_PASSWORD: u32 = 8;
+const PURPOSE_PIN: u32 = 9;
+/// text-input-v3 content hints: hidden_text = 0x40, sensitive_data = 0x80.
+const HINTS_SECRET: u32 = 0x40 | 0x80;
+
+fn is_sensitive(purpose: u32, hints: u32) -> bool {
+    matches!(purpose, PURPOSE_PASSWORD | PURPOSE_PIN) || hints & HINTS_SECRET != 0
+}
+
+/// Characters → bytes around the cursor, as the protocol counts.
+fn surrounding_bytes(text: &str, cursor: usize, before: usize, after: usize) -> (u32, u32) {
+    let mut cur = cursor.min(text.len());
+    while !text.is_char_boundary(cur) {
+        cur -= 1;
+    }
+    let (head, tail) = text.split_at(cur);
+    let before_bytes: usize = head.chars().rev().take(before).map(char::len_utf8).sum();
+    let after_bytes: usize = tail.chars().take(after).map(char::len_utf8).sum();
+    (before_bytes as u32, after_bytes as u32)
+}
+
 /// What the input method knows about the focused field (applied on "done").
 #[derive(Clone, Default, PartialEq)]
 struct Field {
@@ -70,6 +95,7 @@ pub struct State {
     pool: Option<SlotPool>,
     qh: QueueHandle<State>,
     handle: LoopHandle<'static, State>,
+    replies: bridge::Replies,
 
     manager: Option<ZwpInputMethodManagerV2>,
     im: Option<ZwpInputMethodV2>,
@@ -94,6 +120,7 @@ impl State {
         globals: &GlobalList,
         qh: &QueueHandle<State>,
         handle: LoopHandle<'static, State>,
+        replies: bridge::Replies,
     ) -> Result<Self> {
         let compositor = CompositorState::bind(globals, qh)?;
         let shm = Shm::bind(globals, qh)?;
@@ -109,6 +136,7 @@ impl State {
             pool: None,
             qh: qh.clone(),
             handle,
+            replies,
             manager,
             im: None,
             serial: 0,
@@ -149,8 +177,13 @@ impl State {
     }
 
     pub fn command(&mut self, line: &str) {
-        let Ok(cmd) = serde_json::from_str::<Command>(line) else {
-            return;
+        let cmd = match serde_json::from_str::<Command>(line) {
+            Ok(cmd) => cmd,
+            Err(e) => {
+                // Only the error: the line may carry user text.
+                eprintln!("clippit-wl: invalid command: {e}");
+                return;
+            }
         };
         match cmd {
             Command::Edit {
@@ -165,7 +198,7 @@ impl State {
                     self.draw();
                 }
             }
-            Command::Reply { id, value } => bridge::reply(id, value),
+            Command::Reply { id, value } => self.replies.deliver(id, value),
         }
     }
 
@@ -173,7 +206,6 @@ impl State {
         emit(json!({"ev": "call", "id": call.id, "method": call.method, "args": call.args}));
     }
 
-    /// Characters → bytes around the cursor, as the protocol counts.
     fn edit(&mut self, before: usize, after: usize, text: &str) {
         let Some(im) = self.im.as_ref() else {
             return;
@@ -181,14 +213,10 @@ impl State {
         if !self.field.active {
             return;
         }
-        let t = &self.field.text;
-        let cur = self.field.cursor.min(t.len());
-        let head = &t[..cur];
-        let tail = &t[cur..];
-        let before_bytes: usize = head.chars().rev().take(before).map(char::len_utf8).sum();
-        let after_bytes: usize = tail.chars().take(after).map(char::len_utf8).sum();
+        let (before_bytes, after_bytes) =
+            surrounding_bytes(&self.field.text, self.field.cursor, before, after);
         if before_bytes > 0 || after_bytes > 0 {
-            im.delete_surrounding_text(before_bytes as u32, after_bytes as u32);
+            im.delete_surrounding_text(before_bytes, after_bytes);
         }
         if !text.is_empty() {
             im.commit_string(text.to_string());
@@ -206,8 +234,14 @@ impl State {
             .text
             .get(..f.anchor.min(f.text.len()))
             .map_or(0, |s| s.chars().count());
+        // Secrets never leave this process: the text of a password/PIN field is not emitted.
+        let (text, cursor, anchor) = if is_sensitive(f.purpose, f.hints) {
+            ("", 0, 0)
+        } else {
+            (f.text.as_str(), cursor, anchor)
+        };
         emit(json!({
-            "ev": "field", "active": f.active, "text": f.text, "cursor": cursor, "anchor": anchor,
+            "ev": "field", "active": f.active, "text": text, "cursor": cursor, "anchor": anchor,
             "purpose": f.purpose, "hints": f.hints,
         }));
     }
@@ -248,7 +282,11 @@ impl State {
         let (lay, data, stride) = if hidden {
             (badge::Layout::empty(), vec![0u8; 4], 4)
         } else {
-            badge::render(&self.look, self.hover, self.angle, self.scale)
+            let Some(rendered) = badge::render(&self.look, self.hover, self.angle, self.scale)
+            else {
+                return;
+            };
+            rendered
         };
         let scale = if hidden { 1 } else { self.scale };
         let (w, h) = (lay.width * scale, lay.height * scale);
@@ -466,7 +504,9 @@ impl PointerHandler for State {
                         self.draw();
                     }
                 }
-                PointerEventKind::Press { button: 0x110, .. } => {
+                PointerEventKind::Press {
+                    button: BTN_LEFT, ..
+                } => {
                     if let Some(part) = part {
                         emit(
                             json!({"ev": "badge", "part": if part == Part::Fix { "fix" } else { "label" }}),
@@ -492,3 +532,32 @@ delegate_output!(State);
 delegate_seat!(State);
 delegate_pointer!(State);
 delegate_registry!(State);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn password_and_pin_fields_are_sensitive() {
+        assert!(is_sensitive(PURPOSE_PASSWORD, 0));
+        assert!(is_sensitive(PURPOSE_PIN, 0));
+        assert!(is_sensitive(0, 0x40));
+        assert!(is_sensitive(0, 0x80 | 0x1));
+        assert!(!is_sensitive(0, 0x1));
+    }
+
+    #[test]
+    fn surrounding_bytes_counts_utf8() {
+        let text = "ação 😀";
+        let end = text.len();
+        assert_eq!(surrounding_bytes(text, end, 1, 0), (4, 0));
+        assert_eq!(surrounding_bytes(text, end, 3, 0), (4 + 1 + 1, 0));
+        assert_eq!(surrounding_bytes(text, 0, 0, 3), (0, 1 + 2 + 2));
+        assert_eq!(surrounding_bytes(text, 99, 0, 5), (0, 0));
+    }
+
+    #[test]
+    fn surrounding_bytes_survives_a_cursor_inside_a_char() {
+        assert_eq!(surrounding_bytes("é", 1, 1, 1), (0, 2));
+    }
+}

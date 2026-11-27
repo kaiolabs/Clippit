@@ -14,6 +14,7 @@ Fora o "apagar", o banco do histórico é aberto em modo somente leitura.
 
 import json
 import os
+import re
 import shutil
 import time
 import sqlite3
@@ -198,12 +199,15 @@ def arquivos(query, limit=8):
     sparql = ("SELECT DISTINCT ?url WHERE { ?f nie:url ?url ; nfo:fileName ?n . "
               f"FILTER(CONTAINS(LCASE(?n), '{q}')) }} ORDER BY DESC(nfo:fileLastModified(?f)) LIMIT {limit}")
     try:
-        res = subprocess.run(["tracker3", "sparql", "--dbus-service", "org.freedesktop.Tracker3.Miner.Files",
-                              "-q", sparql], capture_output=True, text=True, timeout=5).stdout
+        done = subprocess.run(["tracker3", "sparql", "--dbus-service", "org.freedesktop.Tracker3.Miner.Files",
+                               "-q", sparql], capture_output=True, text=True, timeout=5)
     except (OSError, subprocess.TimeoutExpired):
-        res = ""
-    if not res.strip():
+        done = None
+    # Só cai na busca sem índice quando o tracker3 não existe ou falhou: um índice que
+    # respondeu "nada" é uma resposta, e refazer a busca no disco custaria até 4 s.
+    if done is None or done.returncode != 0:
         return arquivos_sem_indice(query, limit)  # fora do GNOME não há o índice (tracker3)
+    res = done.stdout
     out = []
     for line in res.splitlines():
         line = line.strip()
@@ -221,9 +225,10 @@ def arquivos_sem_indice(query, limit):
     """Busca pelo nome sem índice: fd (rápido) ou find, na pasta pessoal, pulando as escondidas."""
     home = os.path.expanduser("~")
     if shutil.which("fd"):
-        argv = ["fd", "--ignore-case", "--fixed-strings", "--max-results", str(limit), "--max-depth", "6", query, home]
+        argv = ["fd", "--ignore-case", "--fixed-strings", "--max-results", str(limit), "--max-depth", "6", "--", query, home]
     else:
-        argv = ["find", home, "-maxdepth", "6", "-not", "-path", "*/.*", "-iname", f"*{query}*"]
+        pattern = re.sub(r"([*?\[\\])", r"\\\1", query)  # find lê * ? [ como curinga
+        argv = ["find", home, "-maxdepth", "6", "-not", "-path", "*/.*", "-iname", f"*{pattern}*"]
     try:
         res = subprocess.run(argv, capture_output=True, text=True, timeout=4).stdout
     except subprocess.TimeoutExpired as e:

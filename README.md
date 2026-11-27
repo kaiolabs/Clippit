@@ -69,7 +69,8 @@ itself when GNOME isn't running; with Nix, set `programs.clippit.quickshell = tr
 
 Differences from GNOME, because the compositor doesn't expose it: the suggestions panel opens at the mouse
 (Hyprland) or at the bottom of the window instead of right above the cursor; the reply assistant reads the
-whole window; scrolling outside the launcher doesn't release it (a click does, on Hyprland); no blur behind
+whole window as it appears on screen (a notification or another window on top of it ends up in the
+screenshot too); scrolling outside the launcher doesn't release it (a click does, on Hyprland); no blur behind
 the panels. On Sway 1.12 there is no badge next to the cursor (Sway crashes when it closes); Alt+O still
 opens the suggestions. Do Not Disturb needs swaync, mako or dunst; brightness needs brightnessctl.
 `clippit-shell estado` shows what it sees (compositor, input method, shortcuts, spell checker).

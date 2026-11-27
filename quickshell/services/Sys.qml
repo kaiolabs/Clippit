@@ -80,6 +80,7 @@ Singleton {
                         proc.done = true;
                         proc.reject(new Error("demorou demais"));
                     }
+                    proc.destroy();
                 }
             }
         }
@@ -148,7 +149,7 @@ Singleton {
     }
 
     function write(path, text) {
-        return run(["sh", "-c", "mkdir -p \"$(dirname \"$0\")\" && cat > \"$0\"", path], text, 5);
+        return run(["sh", "-c", "mkdir -p \"$(dirname \"$0\")\" && cat > \"$0.tmp\" && mv -f \"$0.tmp\" \"$0\"", path], text, 5);
     }
 
     function writeJson(path, value) {

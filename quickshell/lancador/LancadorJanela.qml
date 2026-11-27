@@ -158,7 +158,7 @@ Scope {
                     }
                     Btn {
                         visible: l.fixState === "fix"
-                        text: "Corrigir  Alt+S"
+                        text: "Corrigir  " + Conf.label("aplicar", "+")
                         primary: true
                         onClicked: l.applyFix()
                     }

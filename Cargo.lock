@@ -638,6 +638,7 @@ name = "clippit-wl"
 version = "1.12.1"
 dependencies = [
  "anyhow",
+ "async-io",
  "cairo-rs",
  "futures-channel",
  "pango",

@@ -156,7 +156,7 @@ PanelWindow {
             Layout.topMargin: 4
             where: "Corretor"
             icon: "spell-check"
-            actions: [{label: "Corrigir tudo", key: "Alt S"}, {label: "Fechar", key: "Esc"}]
+            actions: [{label: "Corrigir tudo", key: Conf.label("aplicar")}, {label: "Fechar", key: "Esc"}]
         }
     }
 }

@@ -97,6 +97,8 @@ in
         Sway, niri and other wlroots-style compositors: launcher, spell checker next to the cursor,
         reply assistant and AI chat. It registers its own shortcuts with Hyprland and Sway. The
         compositor must export WAYLAND_DISPLAY (and HYPRLAND_INSTANCE_SIGNATURE) to systemd.
+        On a GNOME-only install, set `package = pkgs.clippit.override { withQuickshell = false; }` to leave
+        Quickshell (and Qt) out of the closure.
       '';
     };
 
@@ -222,6 +224,10 @@ in
         Description = "Interface do Clippit (Quickshell, fora do GNOME)";
         PartOf = [ "graphical-session.target" ];
         After = [ "graphical-session.target" ];
+        # Without WAYLAND_DISPLAY in the user manager the shell can only fail: do not loop.
+        ConditionEnvironment = "WAYLAND_DISPLAY";
+        StartLimitIntervalSec = 60;
+        StartLimitBurst = 5;
       };
       Service = {
         ExecStart = lib.getExe' cfg.package "clippit-shell";

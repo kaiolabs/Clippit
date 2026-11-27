@@ -20,14 +20,14 @@ ShellRoot {
     }
 
     Assistente {
-        id: assistente
+        id: assistenteRoot
         corretor: corretor
     }
 
     Lancador {
-        id: lancador
+        id: lancadorRoot
         corretor: corretor
-        assistente: assistente
+        assistente: assistenteRoot
     }
 
     // clippit-shell <function> → here. The compositor's binds call `key`.
@@ -41,22 +41,22 @@ ShellRoot {
             Atalhos.fire(Conf.keyOf("lancador"));
         }
         function ia(): void {
-            lancador.toggleView("ia");
+            lancadorRoot.toggleView("ia");
         }
         function historico(): void {
-            lancador.toggleView("historico");
+            lancadorRoot.toggleView("historico");
         }
         function acoes(): void {
-            lancador.openTextActions(false);
+            lancadorRoot.openTextActions(false);
         }
         function assistente(): void {
-            assistente.safeOpen();
+            assistenteRoot.safeOpen();
         }
         function modo_jogo(): void {
-            assistente.toggleGameMode();
+            assistenteRoot.toggleGameMode();
         }
         function estado(): string {
-            return JSON.stringify({compositor: Compositor.kind, ime: Ime.available, aberto: lancador.open, tela: lancador.view,
+            return JSON.stringify({compositor: Compositor.kind, ime: Ime.available, aberto: lancadorRoot.open, tela: lancadorRoot.view,
                 corretor: corretor.state_, selo: corretor.badgeShown, trabalhando: corretor.working, fila: corretor.queue.length,
                 atalhos: Object.keys(Atalhos.handlers)});
         }

@@ -14,7 +14,9 @@ Scope {
     readonly property int minChars: 8
     readonly property int cacheSize: 30
     readonly property int chunkCacheSize: 500
-    readonly property int maxPasteChars: 4000
+    // text-input-v3 sends at most 4000 bytes of surrounding text: below this the field was not cut,
+    // so "the whole field" is really all of it.
+    readonly property int maxFieldBytes: 3900
     // Apps where Ctrl+S is "save": there the shortcut only works with the panel open.
     readonly property var saveApps: /^(cursor|code|code-oss|vscodium|codium|gnome-text-editor|org\.gnome\.TextEditor|gedit|org\.gnome\.gedit|sublime_text|jetbrains-.*|libreoffice.*|soffice|gimp.*|inkscape|org\.inkscape\.Inkscape|blender|kdenlive|org\.kde\.kdenlive|obs|com\.obsproject\.Studio|resolve|zed|dev\.zed\.Zed)$/i
 
@@ -431,10 +433,10 @@ Scope {
                     // Only the span [lo, hi), which touches the cursor.
                     const span = Texto.applyEdits(cps.slice(lo, hi), sugs.map(s => Object.assign({}, s, {s: s.s - lo, e: s.e - lo})));
                     Ime.edit(cursor - lo, hi - cursor, span);
-                } else if (cps.length <= c.maxPasteChars) {
+                } else if (Compat.utf8Length(text) < c.maxFieldBytes) {
                     yield Paste.replaceAll(newText);
                 } else {
-                    console.log("clippit: texto longo demais para colar (" + cps.length + ")");
+                    console.log("clippit: texto longo demais para trocar o campo inteiro (" + Compat.utf8Length(text) + " bytes)");
                     return;
                 }
             } finally {

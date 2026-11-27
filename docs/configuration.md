@@ -89,6 +89,8 @@ format; `desligado` disables a shortcut. Easier: **Settings → Atalhos → Troc
 | `atalho_sugestoes` | `<Alt>o` | Open the spell-check suggestions |
 | `atalho_aplicar` | `<Alt>s` | Apply all corrections |
 | `atalho_ajuste` | `<Alt>f` | Type an adjustment in the reply assistant |
+| `atalho_historico` | `<Alt>c` | Open the clipboard history (read by the Quickshell interface; GNOME uses its own custom shortcut) |
+| `atalhos_globais` | `true` | Quickshell interface only: `false` leaves the always-on shortcuts (launcher, AI, actions, history, assistant, game mode) to the compositor config, which calls `clippit-shell <function>` |
 
 Alt+C (history) is a GNOME custom shortcut; change it in **Settings → Atalhos** or in GNOME Settings →
 Keyboard.

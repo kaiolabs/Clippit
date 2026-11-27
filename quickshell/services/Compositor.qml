@@ -18,10 +18,41 @@ Singleton {
     property bool hyprLua: true
     property var binds: ({})
 
+    // `clippit-shell` exports its own path: the compositor runs the bind with its PATH, which
+    // may not include ~/.local/bin.
+    readonly property string shellCommand: Quickshell.env("CLIPPIT_SHELL") || "clippit-shell"
+
+    // Keys the panels bind only while open: if the shell died with one bound, the compositor
+    // keeps capturing it (Enter, Esc…) until its config is reloaded.
+    readonly property var transientKeys: ["Escape", "Return", "KP_Enter", "1", "2", "3", "<Control>s"]
+
+    function failed(what) {
+        return e => console.warn("clippit: " + what + ": " + (e && e.message ? e.message : e));
+    }
+
+    function setHyprLua(lua) {
+        if (lua === hyprLua)
+            return;
+        hyprLua = lua;
+        // Shortcuts registered before the probe answered used the other syntax.
+        rebind();
+    }
+
     Component.onCompleted: {
         if (kind === "hyprland")
-            Sys.run(["hyprctl", "eval", "return 1"], null, 3).then(out => comp.hyprLua = !/unknown request/i.test(out),
-                () => comp.hyprLua = false);
+            Sys.run(["hyprctl", "eval", "return 1"], null, 3)
+                .then(out => comp.setHyprLua(!/unknown request/i.test(out)), () => comp.setHyprLua(false))
+                .then(() => comp.releaseStaleKeys());
+        else
+            releaseStaleKeys();
+    }
+
+    function releaseStaleKeys() {
+        const keys = transientKeys.concat(["sugestoes", "aplicar", "ajuste"].map(id => Conf.keyOf(id)));
+        keys.forEach(k => {
+            if (!binds[k])
+                applyKey(k, false);
+        });
     }
 
     // Reloading the config (rebuild, edit, `hyprctl reload`) wipes the binds
@@ -71,36 +102,52 @@ Singleton {
     }
 
     function luaStr(s) {
-        return "\"" + String(s).replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"";
+        return "\"" + String(s).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n") + "\"";
+    }
+
+    // Modifiers in <>, then a key name: the only shape that reaches a compositor command.
+    function validAccel(accel) {
+        return /^(<\w+>)*[A-Za-z0-9_]+$/.test(accel);
     }
 
     // Binds `accel` to `clippit-shell key <accel>` (the shell calls the handler).
     function setKey(accel, on) {
         if (!accel || accel === "desligado" || !!binds[accel] === on || Quickshell.env("CLIPPIT_SEM_ATALHOS"))
             return;
+        if (!validAccel(accel)) {
+            console.warn("clippit: atalho inválido ignorado: " + accel);
+            return;
+        }
         const b = Object.assign({}, binds);
         if (on)
             b[accel] = true;
         else
             delete b[accel];
         binds = b;
-        const cmd = "clippit-shell key " + Sys.quote(accel);
+        applyKey(accel, on);
+    }
+
+    function applyKey(accel, on) {
+        if (!validAccel(accel))
+            return;
+        const cmd = Sys.quote(shellCommand) + " key " + Sys.quote(accel);
+        const what = (on ? "registrar " : "remover ") + accel;
         if (kind === "hyprland") {
             const h = hyprAccel(accel);
             if (hyprLua)
                 Sys.run(["hyprctl", "eval", on ? "hl.bind(" + luaStr(h) + ", hl.dsp.exec_cmd(" + luaStr(cmd) + "))"
-                    : "hl.unbind(" + luaStr(h) + ")"], null, 3).catch(() => {});
+                    : "hl.unbind(" + luaStr(h) + ")"], null, 3).catch(failed(what));
             else {
                 const legacy = h.replace(/ \+ /g, " ").split(" ");
                 const key = legacy.pop();
                 const mods = legacy.join(" ");
                 Sys.run(on ? ["hyprctl", "keyword", "bind", mods + "," + key + ",exec," + cmd]
-                    : ["hyprctl", "keyword", "unbind", mods + "," + key], null, 3).catch(() => {});
+                    : ["hyprctl", "keyword", "unbind", mods + "," + key], null, 3).catch(failed(what));
             }
         } else if (kind === "sway") {
             // One argument after "--": swaymsg would read --no-repeat as its own option.
             Sys.run(["swaymsg", "--", on ? "bindsym --no-repeat " + swayAccel(accel) + " exec \"" + cmd + "\""
-                : "unbindsym " + swayAccel(accel)], null, 3).catch(() => {});
+                : "unbindsym " + swayAccel(accel)], null, 3).catch(failed(what));
         }
     }
 

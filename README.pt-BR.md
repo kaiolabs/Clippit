@@ -64,7 +64,7 @@ quando o GNOME não está rodando; no Nix, use `programs.clippit.quickshell = tr
   systemd, por exemplo com `systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE` ao iniciar.
 
 Diferenças do GNOME, porque o compositor não expõe: o painel de sugestões abre no mouse (Hyprland) ou embaixo da
-janela, e não logo acima do cursor; o assistente lê a janela inteira; rolar fora do lançador não o solta (clicar
+janela, e não logo acima do cursor; o assistente lê a janela inteira como ela aparece na tela (uma notificação ou outra janela por cima entra no print); rolar fora do lançador não o solta (clicar
 fora solta, no Hyprland); sem desfoque atrás dos painéis. No Sway 1.12 não há selo ao lado do cursor (o Sway cai
 quando ele fecha); o Alt+O continua abrindo as sugestões. Não perturbe precisa de swaync, mako ou dunst; brilho
 precisa do brightnessctl. `clippit-shell estado` mostra o que ele está vendo (compositor, método de entrada,

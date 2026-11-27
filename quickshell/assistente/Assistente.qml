@@ -58,7 +58,11 @@ Scope {
         }
     }
 
-    Component.onCompleted: enable()
+    Component.onCompleted: {
+        // A screenshot is only deleted when the panel closes: clear the ones a crash left behind.
+        Sys.run(["sh", "-c", "rm -f \"$0\"/tela-*.png", Sys.workDir], null, 5).catch(() => {});
+        enable();
+    }
 
     function toggleGameMode() {
         if (gameBusy)
@@ -69,7 +73,7 @@ Scope {
             const gb = String(Math.round(out.liberado_mb / 102.4) / 10).replace(".", ",");
             if (out.modo_jogo)
                 Sys.notify("Clippit — modo jogo ligado", (out.liberado_mb > 100 ? gb + " GB liberados na placa de vídeo. "
-                    : "A placa de vídeo está livre. ") + "O corretor continua funcionando no processador. Ctrl+Shift+E para voltar ao normal.");
+                    : "A placa de vídeo está livre. ") + "O corretor continua funcionando no processador. " + Conf.label("modo_jogo", "+") + " para voltar ao normal.");
             else
                 Sys.notify("Clippit — modo jogo desligado", "O modelo volta a usar a placa de vídeo na próxima correção, se ela estiver livre.");
         }).catch(e => Sys.notify("Clippit", "Não consegui trocar o modo jogo: " + e.message))
@@ -133,7 +137,7 @@ Scope {
             a.close(false);
             a.win = w;
             a.app = (w.app || "").toLowerCase();
-            a.draft = Ime.active ? (Ime.text || "").trim() : "";
+            a.draft = Ime.active && !Ime.sensitive ? (Ime.text || "").trim() : "";
             a.history = [];
             a.conversation = "";
             a.options = [];
@@ -196,7 +200,7 @@ Scope {
         }).catch(e => {
             console.log("clippit: assistente falhou: " + e.message);
             if (g === a.gen)
-                a.setStatus("O modelo não respondeu. Tente de novo (Alt+K).", false);
+                a.setStatus("O modelo não respondeu. Tente de novo (" + Conf.label("assistente", "+") + ").", false);
         });
     }
 
@@ -321,6 +325,10 @@ Scope {
         const path = contextDir + "/" + name + ".md";
         const old = editing;
         Compat.co(function* () {
+            if ((!old || old.file !== path) && (yield Sys.exists(path))) {
+                Sys.notify("Clippit", "Já existe um contexto chamado \"" + name + "\". Escolha outro nome.");
+                return;
+            }
             yield Sys.write(path, (apps.length ? "apps: " + apps.join(", ") + "\n" : "") + body.replace(/\s+$/, "") + "\n");
             if (old && old.file && old.file !== path)
                 yield Sys.remove(old.file);
@@ -449,15 +457,21 @@ Scope {
                 yield Compositor.activate(w);
             for (let i = 0; i < 30 && !Ime.active; i++)
                 yield Compat.sleep(50);
-            if (!Ime.active) {
+            const front = w && Ime.active ? yield Compositor.focused() : null;
+            if (!Ime.active || (w && front && front.id !== w.id)) {
                 yield Sys.copy(text);
                 Sys.notify("Clippit", "Não achei o campo de texto. A resposta foi copiada: cole com Ctrl+V.");
                 return;
             }
-            if (!(Ime.text || "").trim() && text.indexOf("\n") < 0)
+            const draft = (Ime.text || "").trim();
+            // Ime.text is empty both for an empty field and for an app that does not report it:
+            // only swap the whole field when there is a draft to replace, never blindly.
+            if (draft && !Ime.sensitive && Compat.utf8Length(Ime.text) < 3900)
+                yield Paste.replaceAll(text); // replaces the draft, keeps the line breaks
+            else if (text.indexOf("\n") < 0)
                 Ime.commit(text);
             else
-                yield Paste.replaceAll(text); // replaces the draft, keeps the line breaks
+                yield Paste.viaClipboard(text, true); // at the cursor, keeps the line breaks
             a.restoreCorrector();
         });
     }

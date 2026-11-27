@@ -20,21 +20,27 @@ pub struct Call {
     pub args: Vec<String>,
 }
 
-type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<String>>>>;
+/// Calls waiting for Quickshell's answer, shared by the D-Bus side and the stdin side.
+#[derive(Clone, Default)]
+pub struct Replies(Arc<Mutex<HashMap<u64, oneshot::Sender<String>>>>);
 
-static PENDING: Mutex<Option<Pending>> = Mutex::new(None);
+impl Replies {
+    // A poisoned lock only means another thread panicked mid-insert; the map is still usable.
+    fn map(&self) -> std::sync::MutexGuard<'_, HashMap<u64, oneshot::Sender<String>>> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
 
-/// Delivers Quickshell's answer to the D-Bus call waiting for it.
-pub fn reply(id: u64, value: String) {
-    let pending = PENDING.lock().unwrap().clone();
-    if let Some(tx) = pending.and_then(|p| p.lock().unwrap().remove(&id)) {
-        let _ = tx.send(value);
+    /// Delivers Quickshell's answer to the D-Bus call waiting for it.
+    pub fn deliver(&self, id: u64, value: String) {
+        if let Some(tx) = self.map().remove(&id) {
+            let _ = tx.send(value);
+        }
     }
 }
 
 struct Lancador {
     tx: Mutex<Sender<Input>>,
-    pending: Pending,
+    replies: Replies,
     next: AtomicU64,
 }
 
@@ -42,41 +48,29 @@ impl Lancador {
     async fn ask(&self, method: &'static str, args: Vec<String>, timeout: Duration) -> String {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();
-        self.pending.lock().unwrap().insert(id, tx);
-        if self
+        self.replies.map().insert(id, tx);
+        let sent = self
             .tx
             .lock()
-            .unwrap()
-            .send(Input::Call(Call { id, method, args }))
-            .is_err()
-        {
+            .unwrap_or_else(|e| e.into_inner())
+            .send(Input::Call(Call { id, method, args }));
+        if sent.is_err() {
+            self.replies.map().remove(&id);
             return String::new();
         }
-        let timer = async {
-            // zbus runs on its own executor: a plain thread is enough for the timeout.
-            let (ttx, trx) = oneshot::channel::<()>();
-            std::thread::spawn(move || {
-                std::thread::sleep(timeout);
-                let _ = ttx.send(());
-            });
-            let _ = trx.await;
-        };
-        let answer = futures_or(rx, timer).await;
-        self.pending.lock().unwrap().remove(&id);
+        let answer = answer_or_timeout(rx, timeout).await;
+        self.replies.map().remove(&id);
         answer.unwrap_or_default()
     }
 }
 
-/// The first of the two to finish: the answer, or None on timeout.
-async fn futures_or(
-    rx: oneshot::Receiver<String>,
-    timer: impl std::future::Future<Output = ()>,
-) -> Option<String> {
+/// The answer, or None if the timeout comes first or the sender is gone.
+async fn answer_or_timeout(rx: oneshot::Receiver<String>, timeout: Duration) -> Option<String> {
     use std::future::Future;
     use std::pin::pin;
     use std::task::Poll;
     let mut rx = pin!(rx);
-    let mut timer = pin!(timer);
+    let mut timer = pin!(async_io::Timer::after(timeout));
     std::future::poll_fn(move |cx| {
         if let Poll::Ready(v) = rx.as_mut().poll(cx) {
             return Poll::Ready(v.ok());
@@ -119,12 +113,11 @@ impl Lancador {
     }
 }
 
-pub fn serve(tx: Sender<Input>) -> zbus::Result<zbus::blocking::Connection> {
-    let pending: Pending = Arc::default();
-    *PENDING.lock().unwrap() = Some(pending.clone());
+pub fn serve(tx: Sender<Input>) -> zbus::Result<(zbus::blocking::Connection, Replies)> {
+    let replies = Replies::default();
     let service = Lancador {
         tx: Mutex::new(tx),
-        pending,
+        replies: replies.clone(),
         next: AtomicU64::new(1),
     };
     let conn = zbus::blocking::connection::Builder::session()?
@@ -134,5 +127,5 @@ pub fn serve(tx: Sender<Input>) -> zbus::Result<zbus::blocking::Connection> {
         "com.clippit.Lancador",
         RequestNameFlags::ReplaceExisting | RequestNameFlags::AllowReplacement,
     )?;
-    Ok(conn)
+    Ok((conn, replies))
 }

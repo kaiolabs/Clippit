@@ -39,6 +39,9 @@
   # The local AI server. Pass `withAI = false` to leave it out, or a GPU build
   # with `llama-cpp = pkgs.llama-cpp.override { vulkanSupport = true; }`.
   withAI ? true,
+  # The Quickshell interface and what it needs (Qt included): `withQuickshell = false` keeps the
+  # closure small for a GNOME-only install.
+  withQuickshell ? true,
 }:
 
 let
@@ -78,13 +81,15 @@ let
     curl
     sqlite
     ocr
+    pipewire # pw-record, for dictation
+  ]
+  ++ lib.optional withAI llama-cpp
+  ++ lib.optionals withQuickshell [
     quickshell # clippit-shell (the interface outside GNOME)
     wtype
     grim
     fd # file search where there is no tracker3 index
-    pipewire # pw-record, for dictation
-  ]
-  ++ lib.optional withAI llama-cpp;
+  ];
 
   scripts = [
     "clippit-correct"

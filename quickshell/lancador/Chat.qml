@@ -29,7 +29,7 @@ Item {
         // Follows the end only if you were already there (scrolling up to read stays put).
         property bool follow: true
         onContentYChanged: follow = contentY + height >= contentHeight - 60
-        onContentHeightChanged: if (follow || l.busyChat)
+        onContentHeightChanged: if (follow)
             contentY = Math.max(0, contentHeight - height)
 
         ColumnLayout {
@@ -39,11 +39,14 @@ Item {
             width: flick.width - 2 * Theme.pad
             spacing: 14
 
+            // A count, not the array: reassigning `l.chat` on every streamed update would
+            // destroy and rebuild every bubble (and drop the text selection).
             Repeater {
-                model: l.chat
+                model: l.chat.length
                 delegate: Loader {
                     id: msg
-                    required property var modelData
+                    required property int index
+                    readonly property var modelData: l.chat[index]
                     Layout.fillWidth: true
                     sourceComponent: modelData.role === "user" ? userBubble : aiBlock
                 }
@@ -170,13 +173,16 @@ Item {
                 color: Theme.text
                 font.family: Theme.font
                 font.pointSize: Theme.body
-                onLinkActivated: link => Qt.openUrlExternally(link)
+                onLinkActivated: link => {
+                    if (Busca.isWebUrl(link))
+                        Qt.openUrlExternally(link);
+                }
                 text: {
                     if (block.m.pending)
                         return Busca.mdToHtml(block.live.texto || "");
                     const src = (block.m.sources || []).length ? "<br><br><font color=\"" + Theme.text2 + "\" size=\"2\">Fontes</font><br>"
-                        + block.m.sources.map(u => "<a href=\"" + Busca.esc(u) + "\"><font color=\"" + Theme.accent + "\" size=\"2\">"
-                            + Busca.esc(u) + "</font></a>").join("<br>") : "";
+                        + block.m.sources.map(u => Busca.isWebUrl(u) ? "<a href=\"" + Busca.esc(u) + "\"><font color=\"" + Theme.accent + "\" size=\"2\">"
+                            + Busca.esc(u) + "</font></a>" : Busca.esc(u)).join("<br>") : "";
                     return Busca.mdToHtml(block.m.text || "") + src;
                 }
             }
@@ -280,6 +286,7 @@ Item {
             Text {
                 Layout.fillWidth: true
                 text: "$ " + (parent.parent.out.comando || "")
+                textFormat: Text.PlainText
                 font.family: "monospace"
                 font.pointSize: Theme.small
                 color: Theme.accent
@@ -287,6 +294,7 @@ Item {
             }
             Text {
                 visible: !parent.parent.out.hideOutput
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 font.family: "monospace"
                 font.pointSize: Theme.small

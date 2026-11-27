@@ -10,7 +10,12 @@ function fold(s) {
 }
 
 function esc(s) {
-    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// Links that come from the web or from the model: only http(s) is followed.
+function isWebUrl(u) {
+    return /^https?:\/\//i.test(String(u ?? ""));
 }
 
 function editDistance(a, b) {

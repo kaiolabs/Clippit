@@ -14,10 +14,15 @@ if [ -z "$dir" ]; then
         fi
     done
 fi
+if [ -z "$dir" ]; then
+    echo "clippit-shell: não achei a pasta quickshell/ (defina CLIPPIT_QUICKSHELL)" >&2
+    exit 1
+fi
 qs="$(command -v quickshell || command -v qs)"
 if [ -z "$qs" ]; then
     echo "clippit-shell: Quickshell não está instalado" >&2
     exit 1
 fi
-[ $# -eq 0 ] && exec "$qs" -p "$dir"
+# The compositor runs the shortcut binds with its own PATH: hand it an absolute path.
+[ $# -eq 0 ] && CLIPPIT_SHELL="$(readlink -f "$0")" exec "$qs" -p "$dir"
 exec "$qs" ipc -p "$dir" call clippit "$@"

@@ -47,13 +47,18 @@ Singleton {
         });
     }
 
-    // Back to the window behind the launcher, then paste.
+    // Back to the window behind the launcher, then insert. Through the input method when the
+    // field is known (no clipboard, no sleeps); otherwise Ctrl+V, giving the clipboard back.
     function into(win, text) {
         return Compat.co(function* () {
             if (win)
                 yield Compositor.activate(win);
-            yield Compat.sleep(250);
-            yield viaClipboard(text, false);
+            for (let i = 0; i < 10 && !Ime.active; i++)
+                yield Compat.sleep(50);
+            if (Ime.active)
+                Ime.commit(text);
+            else
+                yield viaClipboard(text, true);
         });
     }
 }

@@ -210,12 +210,14 @@ PanelWindow {
                     size: "small"
                 }
             }
+            // A count: editing a reply reassigns `as_.options`, which would rebuild the
+            // delegates and drop the focus of the field being typed in.
             Repeater {
-                model: as_.options
+                model: as_.options.length
                 delegate: Rectangle {
                     id: opt
-                    required property var modelData
                     required property int index
+                    readonly property string modelData: as_.options[index]
                     Layout.fillWidth: true
                     implicitHeight: optLay.implicitHeight + 16
                     radius: Theme.r3
@@ -361,6 +363,7 @@ PanelWindow {
                             id: srcText
                             width: parent.width
                             text: (as_.conversation || "").trim() || "(nada)"
+                            textFormat: Text.PlainText
                             font.family: "monospace"
                             font.pointSize: Theme.small
                             color: "#c8c8cc"
@@ -415,7 +418,7 @@ PanelWindow {
             Layout.fillWidth: true
             where: "Assistente"
             icon: "sparkles"
-            actions: [{label: "Inserir", key: "↵"}, {label: "Ajustar", key: "Alt F"}, {label: "Outra", key: "Alt K"}, {label: "Fechar", key: "Esc"}]
+            actions: [{label: "Inserir", key: "↵"}, {label: "Ajustar", key: Conf.label("ajuste")}, {label: "Outra", key: Conf.label("assistente")}, {label: "Fechar", key: "Esc"}]
         }
 
         // Context editor

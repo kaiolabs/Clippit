@@ -22,6 +22,8 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
   Hugging Face repository (Settings → Modelos de IA).
 - Quickshell interface for Hyprland, Sway and niri: launcher, spell-checker panel and assistant, plus the
   `clippit-wl` bridge (input method, badge). `atalhos_globais = false` leaves the shortcuts to the compositor.
+  Password/PIN fields never leave `clippit-wl`; the AI cannot type into other windows or open anything but
+  web, mail and home-folder links on its own; the doctor only touches the interface if it is in use.
 
 ### Changed
 - GPUs are detected by name; threads, CPU mask, llama.cpp folder and the vision model are configurable.
