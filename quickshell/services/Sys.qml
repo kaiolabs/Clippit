@@ -111,9 +111,22 @@ Singleton {
     }
 
     // Apps get their own systemd scope, so restarting clippit-shell.service does not kill them.
+    // systemd-run moves itself into the scope before it execs the app, so nothing stays in the
+    // service cgroup. If the user manager refuses scopes, launch without one rather than not at all.
+    property bool scopes: true
+
     function launch(argv) {
-        detach(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--slice=app.slice", "--"].concat(argv));
+        if (scopes)
+            detach(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--slice=app.slice", "--"].concat(argv));
+        else
+            detach(argv);
     }
+
+    Component.onCompleted: run(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--", "true"], null, 5)
+        .catch(e => {
+            console.warn("clippit: systemd scopes unavailable, apps start in the shell's cgroup:", e.message);
+            sys.scopes = false;
+        })
 
     function launchApp(entry) {
         launch(["gtk-launch", entry.id.replace(/\.desktop$/, "")]);
