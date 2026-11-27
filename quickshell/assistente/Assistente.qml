@@ -45,8 +45,8 @@ Scope {
     signal focusEntry
 
     function enable() {
-        Atalhos.set(a, Conf.keyOf("assistente"), true, () => a.open ? a.regenerate(0.8) : a.safeOpen());
-        Atalhos.set(a, Conf.keyOf("modo_jogo"), true, () => a.toggleGameMode());
+        Atalhos.set(a, Conf.keyOf("assistente"), true, () => a.open ? a.regenerate(0.8) : a.safeOpen(), true);
+        Atalhos.set(a, Conf.keyOf("modo_jogo"), true, () => a.toggleGameMode(), true);
     }
 
     Connections {

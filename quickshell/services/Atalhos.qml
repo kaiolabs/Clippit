@@ -12,7 +12,10 @@ Singleton {
     // accel → [{owner, fn}] (the last one registered wins)
     property var handlers: ({})
 
-    function set(owner, accel, on, fn) {
+    // global: Alt+Space and the other always-on shortcuts. With
+    // "atalhos_globais = false" the compositor config binds them to
+    // `clippit-shell <função>` instead, and they are not bound here.
+    function set(owner, accel, on, fn, global) {
         if (!accel || accel === "desligado")
             return;
         const list = (handlers[accel] || []).filter(h => h.owner !== owner);
@@ -24,7 +27,7 @@ Singleton {
         else
             delete map[accel];
         handlers = map;
-        Compositor.setKey(accel, list.length > 0);
+        Compositor.setKey(accel, list.length > 0 && !(global && !Conf.on("atalhos_globais")));
     }
 
     function clear(owner) {

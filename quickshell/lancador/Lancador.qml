@@ -113,10 +113,10 @@ Scope {
                 l.close();
             else
                 l.openLauncher("root");
-        });
-        Atalhos.set(l, Conf.keyOf("ia"), true, () => l.toggleView("ia"));
-        Atalhos.set(l, Conf.keyOf("acoes"), true, () => l.openTextActions(false));
-        Atalhos.set(l, Conf.value("atalho_historico", "<Alt>c"), true, () => l.toggleView("historico"));
+        }, true);
+        Atalhos.set(l, Conf.keyOf("ia"), true, () => l.toggleView("ia"), true);
+        Atalhos.set(l, Conf.keyOf("acoes"), true, () => l.openTextActions(false), true);
+        Atalhos.set(l, Conf.value("atalho_historico", "<Alt>c"), true, () => l.toggleView("historico"), true);
     }
 
     // Keys that only exist while the launcher is open come from the window
