@@ -25,7 +25,7 @@ import time
 
 HOME = os.path.expanduser("~")
 DATA = os.path.join(HOME, ".local/share/clippit")
-CONF = os.path.join(HOME, ".config/clippit")
+CONF = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config"), "clippit")
 DOC = os.path.join(DATA, "doutor")
 STATE = os.path.join(DOC, "estado.json")
 LOG = os.path.join(DOC, "doutor.log")

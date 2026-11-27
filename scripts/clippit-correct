@@ -227,7 +227,7 @@ SHOTS = [
 
 def load_config():
     cfg = dict(DEFAULTS)
-    path = os.path.join(HOME, ".config/clippit/corretor.conf")
+    path = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config"), "clippit/corretor.conf")
     try:
         with open(path, encoding="utf-8") as f:
             for line in f:

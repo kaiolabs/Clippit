@@ -48,6 +48,9 @@ let
   servicePath = lib.concatStringsSep ":" [
     "${config.home.profileDirectory}/bin"
     "/run/current-system/sw/bin"
+    "/usr/local/bin"
+    "/usr/bin"
+    "/bin"
   ];
 in
 {
@@ -138,6 +141,10 @@ in
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      {
+        assertion = lib.all (v: !(lib.isString v) || !(lib.hasInfix "#" v)) (lib.attrValues cfg.settings);
+        message = "programs.clippit.settings: values cannot contain `#`, corretor.conf reads it as a comment.";
+      }
       {
         assertion = !(cfg.settings ? brave_api_key);
         message = ''

@@ -44,12 +44,38 @@ def conf_value(value):
     return str(value)
 
 
-def apply_corretor(path, settings):
+def leaf_paths(tree, prefix=()):
+    for key, value in tree.items():
+        if isinstance(value, dict):
+            yield from leaf_paths(value, prefix + (key,))
+        else:
+            yield list(prefix + (key,))
+
+
+def remove_path(tree, keys):
+    node = tree
+    parents = []
+    for key in keys[:-1]:
+        if not isinstance(node.get(key), dict):
+            return
+        parents.append((node, key))
+        node = node[key]
+    node.pop(keys[-1], None)
+    for parent, key in reversed(parents):
+        if parent[key]:
+            break
+        del parent[key]
+
+
+def apply_corretor(path, settings, stale=()):
     try:
         with open(path, encoding="utf-8") as f:
             lines = f.read().splitlines()
     except FileNotFoundError:
         lines = []
+    for key in stale:
+        pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
+        lines = [current for current in lines if not pattern.match(current)]
     for key, value in settings.items():
         line = f"{key} = {conf_value(value)}"
         pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
@@ -72,7 +98,7 @@ def deep_merge(base, over):
     return base
 
 
-def apply_history(path, settings):
+def apply_history(path, settings, stale=()):
     try:
         with open(path, "rb") as f:
             current = tomllib.load(f)
@@ -81,6 +107,8 @@ def apply_history(path, settings):
     except tomllib.TOMLDecodeError:
         print(f"clippit: {path} is not valid TOML, leaving it as is", file=sys.stderr)
         return False
+    for keys in stale:
+        remove_path(current, keys)
     return write_if_changed(path, tomli_w.dumps(deep_merge(current, settings)))
 
 
@@ -89,13 +117,13 @@ class Dconf:
         self.exe = exe
 
     def read(self, key):
-        p = subprocess.run([self.exe, "read", key], capture_output=True, text=True)
+        p = subprocess.run([self.exe, "read", key], capture_output=True, text=True)  # nosemgrep: argv list without a shell; values come from the Nix plan
         if p.returncode != 0:
             raise RuntimeError(f"dconf read {key} failed: {p.stderr.strip()}")
         return p.stdout.strip()
 
     def write(self, key, value):
-        subprocess.run([self.exe, "write", key, value], check=True)
+        subprocess.run([self.exe, "write", key, value], check=True)  # nosemgrep: argv list without a shell; values come from the Nix plan
 
     def read_list(self, key):
         raw = self.read(key).removeprefix("@as").strip()
@@ -109,41 +137,91 @@ class Dconf:
         if item not in items:
             self.write(key, str(items + [item]))
 
+    def remove_from_list(self, key, item):
+        items = self.read_list(key)
+        if item in items:
+            self.write(key, str([i for i in items if i != item]) if len(items) > 1 else "@as []")
+
 
 def gvariant_string(text):
     return "'" + text.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
-def apply_gnome(plan):
+WINDOW_MENU = "/org/gnome/desktop/wm/keybindings/activate-window-menu"
+EXTENSIONS = "/org/gnome/shell/enabled-extensions"
+
+
+def apply_gnome(plan, previous):
+    """Returns what this run manages, to be undone when the options go away."""
     dconf = Dconf(plan["dconf"])
-    if plan["extension"]:
-        dconf.add_to_list("/org/gnome/shell/enabled-extensions", plan["extension"])
+    managed = {}
+
+    extension = plan["extension"]
+    if previous.get("extension") and previous["extension"] != extension:
+        dconf.remove_from_list(EXTENSIONS, previous["extension"])
+    if extension:
+        dconf.add_to_list(EXTENSIONS, extension)
+        managed["extension"] = extension
+
     shortcut = plan["historyShortcut"]
     if shortcut:
-        dconf.add_to_list(f"{KEYBINDINGS}", CLIPPIT_KEYBINDING)
+        dconf.add_to_list(KEYBINDINGS, CLIPPIT_KEYBINDING)
         dconf.write(f"{CLIPPIT_KEYBINDING}name", "'Clippit'")
         dconf.write(f"{CLIPPIT_KEYBINDING}command", gvariant_string(shortcut["command"]))
         dconf.write(f"{CLIPPIT_KEYBINDING}binding", gvariant_string(shortcut["binding"]))
+        managed["shortcut"] = True
+    elif previous.get("shortcut"):
+        dconf.remove_from_list(KEYBINDINGS, CLIPPIT_KEYBINDING)
+
+    freed = previous.get("freedAltSpace", False)
     if plan["freeAltSpace"]:
-        key = "/org/gnome/desktop/wm/keybindings/activate-window-menu"
-        bindings = dconf.read_list(key)
+        bindings = dconf.read_list(WINDOW_MENU)
         if "<Alt>space" in bindings:
             remaining = [b for b in bindings if b != "<Alt>space"]
-            dconf.write(key, str(remaining) if remaining else "@as []")
+            dconf.write(WINDOW_MENU, str(remaining) if remaining else "@as []")
+            freed = True
+        managed["freedAltSpace"] = freed
+    elif freed:
+        dconf.add_to_list(WINDOW_MENU, "<Alt>space")
+    return managed
+
+
+def state_path():
+    base = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
+    return os.path.join(base, "clippit", "nix-managed.json")
+
+
+def load_state():
+    try:
+        with open(state_path(), encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
 
 
 def main():
     with open(sys.argv[1], encoding="utf-8") as f:
         plan = json.load(f)
     config_dir = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "clippit")
+    previous = load_state()
 
-    if plan["settings"]:
-        apply_corretor(os.path.join(config_dir, "corretor.conf"), plan["settings"])
-    if plan["historySettings"]:
-        if apply_history(os.path.join(config_dir, "config.toml"), plan["historySettings"]):
+    stale_conf = [k for k in previous.get("settings", []) if k not in plan["settings"]]
+    if plan["settings"] or stale_conf:
+        apply_corretor(os.path.join(config_dir, "corretor.conf"), plan["settings"], stale_conf)
+
+    current_history = list(leaf_paths(plan["historySettings"]))
+    stale_history = [k for k in previous.get("historySettings", []) if k not in current_history]
+    if plan["historySettings"] or stale_history:
+        changed = apply_history(os.path.join(config_dir, "config.toml"), plan["historySettings"], stale_history)
+        if changed:
             # The daemon only reads config.toml when it starts.
-            subprocess.run([plan["systemctl"], "--user", "try-restart", "clippit.service"], check=True)
-    apply_gnome(plan)
+            subprocess.run([plan["systemctl"], "--user", "try-restart", "clippit.service"], check=True)  # nosemgrep: argv list without a shell; paths come from the Nix plan
+
+    managed = apply_gnome(plan, previous.get("gnome", {}))
+    write_if_changed(
+        state_path(),
+        json.dumps({"settings": list(plan["settings"]), "historySettings": current_history, "gnome": managed}),
+    )
 
 
 if __name__ == "__main__":

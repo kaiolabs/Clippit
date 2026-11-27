@@ -39,7 +39,7 @@ const CONTEXT_WORDS = 6;        // palavras do trecho anterior mandadas como con
 // Opções do painel do Clippit (seção Corretor), em ~/.config/clippit/corretor.conf:
 //   ativo = true|false              mostra o selo nos campos
 //   verificar_sozinho = true|false  false = só verifica ao clicar no selo
-const CONF_PATH = GLib.build_filenamev([GLib.get_home_dir(), '.config', 'clippit', 'corretor.conf']);
+const CONF_PATH = GLib.build_filenamev([GLib.get_user_config_dir(), 'clippit', 'corretor.conf']);
 let _confCache = {stamp: null, values: {}};
 
 function confValue(key, fallback) {
