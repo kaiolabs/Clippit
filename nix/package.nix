@@ -5,7 +5,6 @@
   makeWrapper,
   wrapGAppsHook4,
   gtk4,
-  gtk3, # gtk-launch, used by the Quickshell launcher
   libadwaita,
   glib,
   gobject-introspection,
@@ -89,7 +88,6 @@ let
     quickshell # clippit-shell (the interface outside GNOME)
     wtype
     grim
-    gtk3
     fd # file search where there is no tracker3 index
   ];
 

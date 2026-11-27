@@ -63,7 +63,7 @@ itself when GNOME isn't running; with Nix, set `programs.clippit.quickshell = tr
   and `modo_jogo`.
 - `clippit-wl` reads and edits the focused text field (input-method-v2) and draws the badge next to the
   cursor. Only one input method can run at a time: it doesn't work together with fcitx5 or ibus.
-- Needs `quickshell`, `wtype`, `grim`, `wl-clipboard` and `gtk-launch` (from GTK 3) (the Nix package brings them).
+- Needs `quickshell`, `wtype`, `grim`, `wl-clipboard` (the Nix package brings them).
 - The compositor must export `WAYLAND_DISPLAY` (and, on Hyprland, `HYPRLAND_INSTANCE_SIGNATURE`) to systemd,
   e.g. `systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE` at startup.
 

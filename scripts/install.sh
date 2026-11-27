@@ -119,7 +119,7 @@ if ((GNOME)); then
     fi
 else
     say "Installing the Quickshell interface (${XDG_CURRENT_DESKTOP:-not GNOME})"
-    for c in quickshell wtype grim wl-copy gtk-launch systemd-run; do
+    for c in quickshell wtype grim wl-copy systemd-run; do
         command -v "$c" >/dev/null || warn "Missing: $c (the launcher, the spell checker or the screenshots need it)"
     done
     mkdir -p "$HOME/.config/systemd/user"

@@ -59,7 +59,7 @@ quando o GNOME não está rodando; no Nix, use `programs.clippit.quickshell = tr
   `acoes`, `assistente` e `modo_jogo`.
 - O `clippit-wl` lê e edita o campo de texto em foco (input-method-v2) e desenha o selo ao lado do cursor. Só um
   método de entrada roda por vez: não funciona junto com fcitx5 ou ibus.
-- Precisa de `quickshell`, `wtype`, `grim`, `wl-clipboard` e `gtk-launch` (do GTK 3) (o pacote do Nix já traz).
+- Precisa de `quickshell`, `wtype`, `grim`, `wl-clipboard` (o pacote do Nix já traz).
 - O compositor precisa exportar `WAYLAND_DISPLAY` (e, no Hyprland, `HYPRLAND_INSTANCE_SIGNATURE`) para o
   systemd, por exemplo com `systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE` ao iniciar.
 

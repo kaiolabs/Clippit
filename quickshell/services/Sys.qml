@@ -129,7 +129,10 @@ Singleton {
         })
 
     function launchApp(entry) {
-        launch(["gtk-launch", entry.id.replace(/\.desktop$/, "")]);
+        if (entry.runInTerminal || entry.workingDirectory)
+            entry.execute();
+        else
+            launch(entry.command);
     }
 
     function quote(s) {
@@ -156,7 +159,8 @@ Singleton {
 
     function openUri(uri, appId) {
         if (appId)
-            launch(["gtk-launch", appId.replace(/\.desktop$/, ""), uri]);
+            launch(["sh", "-c", "command -v gtk-launch >/dev/null && exec gtk-launch \"$0\" \"$1\"; exec xdg-open \"$1\"",
+                appId.replace(/\.desktop$/, ""), uri]);
         else
             launch(["xdg-open", uri]);
     }
