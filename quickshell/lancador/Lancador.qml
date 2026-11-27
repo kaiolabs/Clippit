@@ -509,7 +509,7 @@ Scope {
     function appItem(a, score, section) {
         return {id: "app:" + a.id, key: "app:" + a.id, section, appIcon: a.icon ? Quickshell.iconPath(a.icon, true) : "",
             icon: "application-x-executable-symbolic", score, title: a.name, subtitle: a.comment || "", hint: "Abrir",
-            run: () => a.execute(), alt: () => a.execute()};
+            run: () => Sys.launchApp(a), alt: () => Sys.launchApp(a)};
     }
 
     function historyItem(h, score) {
@@ -698,7 +698,7 @@ Scope {
                 hint: "Executar", run: () => l.assistente.toggleGameMode()},
             {id: "cmd:clippit", key: "cmd:clippit", icon: "preferences-system-symbolic", title: "Configurações do Clippit",
                 subtitle: "Corretor, assistente, aprendizado", words: ["clippit", "painel", "dashboard"], hint: "Abrir",
-                run: spawn(Sys.tool("clippit-dashboard"))},
+                run: () => Sys.launch(Sys.tool("clippit-dashboard"))},
             {id: "cmd:corretor", key: "cmd:corretor", icon: "tools-check-spelling-symbolic", title: "Rodar a prova do corretor",
                 subtitle: "Mede a qualidade (uns 50 s)", words: ["prova", "teste corretor", "qualidade"], hint: "Executar",
                 run: () => {
@@ -1604,7 +1604,7 @@ Scope {
                 if (a.tipo === "app") {
                     const e = DesktopEntries.byId(a.id) || DesktopEntries.heuristicLookup(a.id);
                     if (e) {
-                        e.execute();
+                        Sys.launchApp(e);
                         opened = true;
                     }
                 } else if (a.tipo === "janela" && a.id) {

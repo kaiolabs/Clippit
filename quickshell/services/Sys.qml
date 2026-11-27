@@ -110,6 +110,15 @@ Singleton {
         Quickshell.execDetached(argv);
     }
 
+    // Apps get their own systemd scope, so restarting clippit-shell.service does not kill them.
+    function launch(argv) {
+        detach(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--slice=app.slice", "--"].concat(argv));
+    }
+
+    function launchApp(entry) {
+        launch(["gtk-launch", entry.id.replace(/\.desktop$/, "")]);
+    }
+
     function quote(s) {
         return "'" + String(s).replace(/'/g, "'\\''") + "'";
     }
@@ -134,9 +143,9 @@ Singleton {
 
     function openUri(uri, appId) {
         if (appId)
-            detach(["gtk-launch", appId.replace(/\.desktop$/, ""), uri]);
+            launch(["gtk-launch", appId.replace(/\.desktop$/, ""), uri]);
         else
-            detach(["xdg-open", uri]);
+            launch(["xdg-open", uri]);
     }
 
     // Files.
