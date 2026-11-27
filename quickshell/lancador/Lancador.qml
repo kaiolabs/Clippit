@@ -506,10 +506,40 @@ Scope {
         return e && e.icon ? Quickshell.iconPath(e.icon, true) : "";
     }
 
+    function isInstanceOf(entry, winApp) {
+        const app = (winApp || "").toLowerCase();
+        if (!app)
+            return false;
+        const id = entry.id.replace(/\.desktop$/, "").toLowerCase();
+        return app === id || app === (entry.startupClass || "").toLowerCase() || DesktopEntries.heuristicLookup(winApp) === entry;
+    }
+
+    property var launching: ({})
+
+    // Enter on an app that is already running focuses its window instead of opening a second one.
+    // If the window list can't be read, or focusing fails, the app is launched anyway: doing nothing is worse.
+    function openApp(entry) {
+        const launch = () => {
+            if (Date.now() - (launching[entry.id] || 0) < 5000)
+                return;
+            launching[entry.id] = Date.now();
+            Sys.launchApp(entry);
+        };
+        Compositor.windows().then(all => all.find(w => isInstanceOf(entry, w.app)), e => {
+            console.warn("clippit: window list failed:", e.message);
+            return null;
+        }).then(w => {
+            if (!w)
+                return launch();
+            return (w.minimized ? Compositor.unminimize(w) : Promise.resolve())
+                .then(() => Compositor.activate(w)).catch(launch);
+        });
+    }
+
     function appItem(a, score, section) {
         return {id: "app:" + a.id, key: "app:" + a.id, section, appIcon: a.icon ? Quickshell.iconPath(a.icon, true) : "",
             icon: "application-x-executable-symbolic", score, title: a.name, subtitle: a.comment || "", hint: "Abrir",
-            run: () => Sys.launchApp(a), alt: () => Sys.launchApp(a)};
+            run: () => l.openApp(a), alt: () => Sys.launchApp(a)};
     }
 
     function historyItem(h, score) {

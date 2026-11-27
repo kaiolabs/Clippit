@@ -264,6 +264,18 @@ Singleton {
         return Promise.resolve();
     }
 
+    // Brings a window minimized by winOp back to the current workspace.
+    function unminimize(w) {
+        if (kind === "hyprland")
+            return hypr("hl.dsp.window.move({window=" + luaStr("address:" + w.id) + ", workspace=\"e+0\"})", ["movetoworkspace", "e+0,address:" + w.id]);
+        if (kind === "sway")
+            return sway(w, "move container to workspace current");
+        const t = toplevelFor(w);
+        if (t)
+            t.minimized = false;
+        return Promise.resolve();
+    }
+
     // op: left right max restore center monitor full min close focus area_N
     function winOp(w, op) {
         if (!w)
